@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Seller Analytics · WB",
+  "version": "0.2.8",
+  "minimum_chrome_version": "106",
+  "description": "Данные сервиса platform.example.org прямо на Wildberries: полки, наши товары, отчёты из кабинета продавца.",
+  "permissions": [
+    "storage",
+    "webRequest",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://platform.example.org/*",
+    "https://*.wildberries.ru/*"
+  ],
+  "background": {
+    "service_worker": "bg.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "seller-analytics"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://seller.wildberries.ru/*"
+      ],
+      "js": [
+        "seller.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

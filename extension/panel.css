@@ -1,0 +1,19 @@
+#mc100-panel { position: fixed; right: 16px; bottom: 16px; z-index: 2147483000; width: 340px; max-height: 70vh; overflow: auto;
+  background: #fff; color: #1f2937; border: 1px solid #c4b5fd; border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.18);
+  font: 13px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
+#mc100-panel .mc-h { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #7c3aed; color: #fff;
+  border-radius: 11px 11px 0 0; cursor: pointer; position: sticky; top: 0; }
+#mc100-panel .mc-b { padding: 8px 12px; }
+#mc100-panel.mc-min { width: auto; }
+#mc100-panel.mc-min .mc-b { display: none; }
+#mc100-panel .mc-sec { margin: 8px 0 4px; font-weight: 600; }
+#mc100-panel .mc-hint { color: #6b7280; font-size: 12px; }
+#mc100-panel .mc-row { display: flex; gap: 6px; align-items: center; padding: 3px 0; border-bottom: 1px solid #f3f4f6; }
+#mc100-panel .mc-row img { width: 28px; height: 37px; object-fit: cover; border-radius: 4px; flex: none; }
+#mc100-panel .mc-row a { color: #1f2937; text-decoration: none; }
+#mc100-panel .mc-pos { width: 28px; text-align: right; font-weight: 600; flex: none; }
+#mc100-panel .mc-ours { background: #ecfdf5; }
+#mc100-panel .mc-up { color: #16a34a; } #mc100-panel .mc-down { color: #dc2626; }
+#mc100-panel .mc-big { font-size: 18px; font-weight: 700; }
+#mc100-panel .mc-bars { display: flex; align-items: flex-end; gap: 2px; height: 36px; margin-top: 4px; }
+#mc100-panel .mc-bars div { width: 8px; background: #a78bfa; border-radius: 2px; min-height: 2px; }

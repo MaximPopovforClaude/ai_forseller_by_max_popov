@@ -1,0 +1,3 @@
+
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tabbar jsonb NOT NULL DEFAULT '{}';

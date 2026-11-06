@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<style>
+  body { font: 13px/1.4 system-ui, sans-serif; width: 320px; margin: 0; padding: 12px; color: #1f2937; }
+  h1 { font-size: 15px; margin: 0 0 8px; color: #7c3aed; }
+  input { width: 100%; box-sizing: border-box; padding: 6px; margin: 4px 0; }
+  button { padding: 6px 10px; margin: 4px 4px 0 0; cursor: pointer; border: 1px solid #c4b5fd; background: #f5f3ff; border-radius: 6px; }
+  button.pri { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+  .hint { color: #6b7280; font-size: 12px; }
+  .ok { color: #16a34a; } .err { color: #dc2626; }
+  section { border-top: 1px solid #e5e7eb; margin-top: 10px; padding-top: 8px; }
+</style></head>
+<body>
+  <h1>seller-analytics — аналитика WB</h1>
+  <div id="who" class="hint">Проверяю…</div>
+  <section id="login">
+    <div class="hint">Код плагина: platform.example.org → «Аккаунт» → «Плагин Chrome» → «Получить код».</div>
+    <input id="tok" type="password" placeholder="Код плагина" autocomplete="off">
+    <button id="save" class="pri">Подключить</button> <button id="out">Отключить</button>
+  </section>
+  <section>
+    <b>Точки входа — автоскачивание</b>
+    <div class="hint">Когда открыт кабинет продавца WB, плагин раз в час проверяет и скачивает отчёт «Точки входа» за каждый день
+      (вчера и до 30 дней назад, по 7 дней за раз) и загружает в seller-analytics → «Точки входа». Качает из того кабинета, который сейчас выбран в WB.</div>
+    <label class="hint"><input type="checkbox" id="auto"> скачивать автоматически</label><br>
+    <button id="now" class="pri">Скачать сейчас</button>
+    <div id="nowst" class="hint"></div>
+  </section>
+  <section>
+    <b>Запись запросов кабинета (для настройки)</b>
+    <div class="hint">Откройте кабинет продавца → «Аналитика» → «Точки входа». Нажмите «Начать запись», скачайте отчёт как обычно
+      (за любой период), затем «Готово». Плагин запишет только адреса запросов кабинета — без паролей, cookie и заголовков — и отправит
+      в seller-analytics, чтобы мы настроили автоскачивание. Запись сама остановится через 10 минут.</div>
+    <button id="rec" class="pri">Начать запись</button> <button id="stop">Готово</button>
+    <div id="recst" class="hint"></div>
+  </section>
+  <script src="popup.js"></script>
+</body></html>

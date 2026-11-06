@@ -1,0 +1,39 @@
+.calendar-page {max-width: 1500px; margin: 0 auto; padding: 8px 0 24px;}
+.cal-toolbar {display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0;}
+.cal-toolbar h2, .cal-toolbar h3 {margin: 0 auto 0 0;}
+.cal-toolbar label {display: flex; align-items: center; gap: 6px;}
+.cal-grid {display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 5px;}
+.cal-weekday {padding: 7px; text-align: center; opacity: .7;}
+.cal-day {display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-height: 115px; text-align: left; padding: 8px; border: 1px solid #8885; border-radius: 8px; color: inherit; background: transparent; overflow: hidden;}
+.cal-day b {align-self: flex-start;}
+.cal-day.selected {outline: 2px solid #a17af5; outline-offset: -2px; background: #9470e51a;}
+.cal-day.today > b {background: #8057ce; color: white; border-radius: 50%; padding: 2px 6px;}
+.cal-day.outside {opacity: .5;}
+.cal-mini {display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; border-radius: 4px; padding: 3px; background: #a17af52a;}
+.cal-mini.note {background: #3ca4a52a;}
+.cal-mini.closed {text-decoration: line-through; opacity: .6;}
+.cal-actions-count {color: #b1853e;}
+.cal-entry {border: 1px solid #8884; border-left: 3px solid #a17af5; padding: 12px; border-radius: 8px; margin: 8px 0; overflow-wrap: anywhere;}
+.cal-entry.note {border-left-color: #3ca4a5;}
+.cal-entry.action {border-left-color: #b1853e;}
+.cal-entry.closed {opacity: .65;}
+.cal-entry-head {display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px;}
+.cal-overdue {color: #e66565; font-weight: 600;}
+.cal-description {white-space: pre-wrap; margin: 8px 0;}
+.cal-editor {padding: 16px; border: 1px solid #a17af5; border-radius: 10px; margin-bottom: 16px;}
+.cal-editor fieldset {border: 0; margin: 0; padding: 0; min-width: 0;}
+.cal-editor > h3 {margin-top: 0;}
+.cal-editor fieldset > label {display: grid; gap: 5px; margin-bottom: 12px;}
+.cal-editor input, .cal-editor textarea, .cal-editor select {max-width: 100%; box-sizing: border-box;}
+.cal-editor textarea {resize: vertical; width: 100%;}
+.cal-source {margin-top: 20px; border-top: 1px solid #8884;}
+.cal-home {padding: 12px; margin: 12px 0; border: 1px solid #a17af566; border-radius: 10px;}
+.cal-home .cal-entry {margin-bottom: 0;}
+@media (max-width: 700px) {
+  .cal-grid {gap: 3px;}
+  .cal-day {min-height: 90px; padding: 4px;}
+  .cal-mini {font-size: 10px; padding: 2px;}
+  .cal-toolbar {gap: 8px;}
+  .cal-toolbar label {flex-wrap: wrap;}
+  .cal-actions-count {font-size: 9px;}
+}

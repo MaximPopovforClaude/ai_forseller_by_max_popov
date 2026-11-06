@@ -1,0 +1,15 @@
+# Replace analytics.example.org and certificate paths for your own domain.
+server {
+    listen 443 ssl;
+    server_name analytics.example.org;
+    ssl_certificate /etc/letsencrypt/live/analytics.example.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/analytics.example.org/privkey.pem;
+    client_max_body_size 32m;
+    location / {
+        proxy_pass http://127.0.0.1:8100;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_read_timeout 90s;
+    }
+}

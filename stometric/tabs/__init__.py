@@ -1,0 +1,133 @@
+"""Вкладки сервиса = листы таблицы STOMETRIC. Каждая вкладка: функция (c, shop_id, f) → {"columns": [...], "rows": [...], "chart": ...}.
+
+f — фильтры из запроса: date_from, date_to (date), nm_ids (list[int]).
+columns: [{"field","title","type": "text|int|money|pct|date"}]. Цифры считает SQL/Python, фронт только показывает.
+"""
+
+from . import basic, jam, manage, ozads, ozon, wbads, ym
+
+TABS = [
+    
+    ("home", "Главная", "Магазин", basic.home),
+    ("news", "📰 Лента новостей", "Магазин", manage.news),
+    ("dash5", "5#Дашборд", "Дашборды", basic.dash5),
+    ("dash_nm", "6#ДашбордПоАртикулу", "Дашборды", basic.dash_nm),
+    ("dash_nm_days", "6#ДашбордПоАртикулуДни", "Дашборды", basic.dash_nm_days),
+    ("dash_group", "2#ДашбордПоГруппеАртикулов", "Дашборды", basic.dash_group),
+    ("by_days", "4#ДашбордПоДням", "Дашборды", basic.by_days),
+    ("svodwb", "2#СводнаяПоАртикуламWB", "Сводные", basic.svodwb),
+    ("svod", "СводнаяПоАртикулам", "Сводные", basic.svod),
+    ("abc", "Сводная#ABC#ОперативныеДанные", "Сводные", basic.abc),
+    ("pnl_real_w", "5#PnL#РеализацияПонедельно", "PnL", basic.pnl_real_week),
+    ("pnl_real_m", "5#PnL#РеализацияПомесячно", "PnL", basic.pnl_real_month),
+    ("pnl_month", "PnL#РасчетОперативноПомесячно", "PnL", basic.pnl_month),
+    ("no_cost", "PnL#ТоварыБезСебестоимости", "PnL", basic.no_cost),
+    ("pnl_week", "PnL#РасчетОперативноПонедельно", "PnL", basic.pnl_week),
+    ("pnl_nm", "PnL#ПоАртикулам", "PnL", basic.pnl_nm),     
+    ("fin_sku", "Финотчёт по SKU", "PnL", basic.fin_sku),   
+    ("opiu_wb", "ОПиУ", "PnL", basic.opiu_wb),   
+    ("pnl_alt_m", "АльтPnL#ПоМесяцам", "Альтернативный PNL", basic.pnl_alt_month),   
+    ("pnl_alt_nm", "АльтPnL#ПоАртикулам", "Альтернативный PNL", basic.pnl_alt_nm),
+    ("pnl_alt_nm_m", "АльтPnL#ПоАртикуламПоМесяцам", "Альтернативный PNL", basic.pnl_alt_nm_month),
+    ("ads_kw", "Реклама: кампании и ключи", "Реклама", wbads.ads_campaigns),
+    ("ads_keys", "Ключи РК", "Реклама", wbads.ads_keys),
+    ("ads_assoc", "Ассоциированные конверсии РК", "Реклама", wbads.ads_assoc),
+    ("ads", "1#СводнаяПоРекламе", "Реклама", basic.ads_summary),
+    ("ads_conv", "РекламаКонверсииПонедельно", "Реклама", basic.ads_conv_week),
+    ("jam", "Джем", "Джем", jam.jam_tab),
+    ("seo", "SEO за 5 минут", "Джем", manage.seo),   
+    ("orders_daily", "ЗаказыПоДням", "Заказы", basic.orders_daily),
+    ("orders_hours", "ДашбордЗаказыПоЧасамПоАртикулу", "Заказы", basic.orders_hours),
+    ("spp", "Дашборд#СППпоПредмету", "Заказы", basic.spp_subject),
+    ("logistics_week", "ЛогистикаПонедельно", "Склады", basic.logistics_week),
+    ("stock_plan", "3#ОстаткиРегионСклады", "Склады", basic.stock_plan),
+    ("stocks_wh", "2#ОстаткиПоСкладам", "Склады", basic.stocks_by_wh),
+    ("fbs", "1#FBS#ОборачиваемостьПоОкругам", "Склады", basic.fbs_turnover),
+    ("stocks", "БД#ОстаткиТекущиеПоСкладам", "Склады", basic.stocks_current),
+    ("mgr_actions", "ДействияПоАртикулам", "Управление", manage.actions),
+    ("mgr_prices", "ОнлайнЦена", "Управление", manage.prices),
+    ("item_rating", "Оценки товаров", "Управление", manage.item_rating),   
+    ("changes", "ЖурналИзмененийКарточек", "Управление", manage.changes),
+    ("competitors", "Конкуренты", "Управление", manage.competitors),
+    ("comp_monitor", "МониторингКонкурентов", "Управление", manage.comp_monitor),
+    ("insights", "ИИ-разбор", "Управление", manage.insights),
+    ("photo_funnel", "Фотоворонка", "Управление", manage.photo_funnel),
+    ("entry_points", "Точки входа", "Управление", manage.entry_points),   
+    ("planning", "Планирование", "Планирование", manage.planning),
+    ("unit_wb", "UNIT-экономика", "Version2", basic.unit_wb),   
+    ("rnp", "РНП", "Version2", manage.rnp),
+    ("checklist", "Чек-лист", "Version2", manage.checklist),   
+    ("checklist_svod", "Сводный чек-лист (ABC)", "Version2", manage.checklist_summary),   
+    ("hypotheses", "Гипотезы", "Version2", manage.hypotheses),   
+    ("ext_costs", "Внешние расходы и раздачи", "Version2", manage.ext_costs),
+    ("promo", "Расчёт акций", "Version2", manage.promo),   
+    ("mrc", "Контроль МРЦ", "Version2", manage.mrc),
+    ("shelves", "Полки", "Version2", manage.shelves),   
+    ("settings", "Настройки магазина (СНО)", "Настройки", basic.settings),
+    ("exclusions", "Артикулы в работе", "Настройки", manage.exclusions),
+    ("staff", "Менеджеры", "Настройки", manage.staff),
+    ("cost", "Себестоимость", "Настройки", basic.cost_tab),
+    ("status", "СтатусОбновления", "Служебные", basic.update_status),
+    
+    ("nomenclature", "БД#Номенклатура", "Данные", basic.nomenclature),
+    ("prices_now", "Сайт#ТекущиеЦеныОстатки", "Данные", basic.prices_now),
+    
+    ("real_week", "БД#РеализацияПонедельно", "Данные", basic.real_week_tab),
+]
+
+OZ_TABS = [
+    ("home", "Главная", "Магазин", basic.home),     
+    ("news", "📰 Лента новостей", "Магазин", manage.news),
+    ("oz_dash", "3#Дашборд", "Дашборды", ozon.dash),
+    ("rnp", "РНП", "Дашборды", manage.rnp),       
+    ("oz_svod", "2#СводнаяПоАртикулам", "Сводные", ozon.svod),
+    ("oz_stocks", "FBO#ТекущиеОстаткиПоКластерам", "Склады", ozon.stocks),
+    ("oz_ads_kw", "Реклама: кампании и фразы", "Реклама", ozads.oz_campaigns),
+    ("oz_ad_items", "Товары РК", "Реклама", ozads.oz_ad_items),
+    ("oz_ad_phrases", "Фразы РК с расходом", "Реклама", ozads.oz_ad_phrases),
+    ("oz_ads", "Реклама#Кампании", "Реклама", ozon.ads),
+    ("oz_accruals", "БД#Начисления", "Финансы", ozon.accruals),
+    
+    ("mgr_actions", "ДействияПоАртикулам", "Управление", manage.actions),
+    ("mgr_prices", "ОнлайнЦена", "Управление", manage.prices),
+    ("changes", "ЖурналИзмененийКарточек", "Управление", manage.changes),
+    ("settings", "Настройки магазина (СНО)", "Настройки", basic.settings),
+    ("oz_cost", "Себестоимость", "Настройки", ozon.cost_tab),
+    ("staff", "Менеджеры", "Настройки", manage.staff),
+    ("status", "СтатусОбновления", "Служебные", basic.update_status),
+    ("oz_products", "БД#Номенклатура", "Данные", ozon.products),
+    
+    ("v2_day", "По дням", "Version2", ozon.v2_day),
+    ("v2_week", "По неделям", "Version2", ozon.v2_week),
+    ("v2_month", "По месяцам", "Version2", ozon.v2_month),
+    ("v2_unit", "Юнитка", "Version2", ozon.v2_unit),
+    ("v2_opiu", "ОПИУ", "Version2", ozon.v2_opiu),
+    ("v2_turnover", "Оборачиваемость", "Version2", ozon.v2_turnover),
+    ("v2_stocks", "Остатки", "Version2", ozon.v2_stocks_days),
+    ("v2_campaigns", "РК", "Version2", ozon.v2_campaigns),
+    ("v2_phrases", "Фразы РК", "Version2", ozon.v2_phrases),
+    ("v2_queries", "Продажи по запросам", "Version2", ozon.v2_queries),
+    ("v2_check", "Чек-лист", "Version2", ozon.v2_check),
+]
+YM_TABS = [   
+    ("home", "Главная", "Магазин", basic.home),     
+    ("ym_dash5", "5#Дашборд", "Дашборды", ym.dash5),
+    ("ym_dash", "Дашборд по дням", "Дашборды", ym.dash),
+    ("ym_dash_nm", "Дашборд по артикулу", "Дашборды", ym.dash_nm),
+    ("rnp", "РНП", "Дашборды", manage.rnp),       
+    ("ym_svod", "2#СводнаяПоАртикулам", "Сводные", ym.svod),
+    ("ym_abc", "Сводная#ABC#ОперативныеДанные", "Сводные", ym.abc),
+    ("ym_fin_sku", "Финотчёт по SKU", "PnL", ym.fin_sku),
+    ("ym_ads", "Реклама (буст продаж)", "Реклама", ym.ads),
+    ("ym_stocks", "Остатки по складам", "Склады", ym.stocks),
+    ("settings", "Настройки магазина (СНО)", "Настройки", basic.settings),
+    ("ym_cost", "Себестоимость", "Настройки", ym.cost_tab),
+    ("status", "СтатусОбновления", "Служебные", basic.update_status),
+    ("ym_products", "БД#Номенклатура", "Данные", ym.products),
+    ("ym_orders", "БД#Заказы", "Данные", ym.orders),
+]
+BY_KEY = {t[0]: t for t in TABS + OZ_TABS + YM_TABS}
+
+
+def tabs_for(mp: str) -> list:
+    return OZ_TABS if mp == "ozon" else YM_TABS if mp == "ym" else TABS
