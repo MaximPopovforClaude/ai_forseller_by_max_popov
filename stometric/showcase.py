@@ -8,15 +8,13 @@ from datetime import datetime
 
 from . import db
 
-HOST = ""
-KEY = ""
-REMOTE = "cd /opt/egress && flock -w 600 /opt/egress/.wb.lock xvfb-run -a .venv/bin/python wbshow.py"   
 STEP = 1.0           
 FRESH = "2 hours"    
 
 
 def fetch(nms):
-    raise RuntimeError('Внешний браузер витрин не настроен в самостоятельной версии.')
+    from .egress import fetch_prices
+    return fetch_prices(nms)
 
 
 def targets(c) -> dict[int, dict]:

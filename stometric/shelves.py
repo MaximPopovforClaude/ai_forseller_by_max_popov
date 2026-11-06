@@ -6,17 +6,17 @@ import sys
 import time
 
 from . import db
+from .egress import EgressError
 from .config import today_msk
-from .showcase import HOST, KEY
 
-REMOTE = "cd /opt/egress && flock -w 1500 /opt/egress/.wb.lock xvfb-run -a .venv/bin/python wbshelf.py"
 CHUNK = 300          
 NEIGH = 20           
 MAX_TOTAL = 12000    
 
 
-def fetch(*args, **kwargs):
-    raise RuntimeError('Внешний браузер полок не настроен в самостоятельной версии.')
+def fetch(nms):
+    from .egress import fetch_shelves
+    return fetch_shelves(nms)
 
 
 def save(c, day, j: dict) -> int:
@@ -51,6 +51,8 @@ def crawl(c, day, nms: list[int], log) -> dict:
         t = time.time()
         try:
             j = fetch(part)
+        except EgressError:
+            raise
         except Exception as e:                       
             log(f"заход {i // CHUNK + 1}: {e}")
             n["errors"] += 1
