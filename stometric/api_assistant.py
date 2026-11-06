@@ -28,7 +28,7 @@ def _chat(c, u, chat_id: int) -> dict:
 @router.get("/api/assistant/status")
 def status(shop: int, u=Depends(current_user), c=Depends(conn)):
     _shop_ok(c, u, shop)
-    a = assistant.access(c, shop)
+    a = assistant.access(c, shop, u["id"])
     return {k: a.get(k) for k in ("ok", "plan", "reason", "limit", "used")} | {"name": assistant.NAME}
 
 

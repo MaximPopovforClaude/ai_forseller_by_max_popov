@@ -200,9 +200,9 @@ function Settings({ data, onSaved, onErr }: { data: R; onSaved: () => void; onEr
       <div className="acc-box">
         <b>Подключения</b>
         <div className="acc-row"><span>Wildbox (конкуренты)</span>{`ключ у каждого кабинета свой; подключили: ${integ.wildbox ?? 0}`}</div>
-        <div className="acc-row"><span>ИИ владельца</span>{integ.codex_private ? "Codex · личная подписка владельца" : "не подключён"}</div>
+        <div className="acc-row"><span>ИИ Стометрика</span>Свой API-ключ нейросети в настройках каждого аккаунта</div>
+        <div className="hint">Создайте своего бота в @BotFather. После сохранения токена перезапустите ai-stometric-bots. Плановые уведомления и платные ИИ-разборы включаются отдельно в настройках выше.</div>
         <BotToken title="Бот Стометрика (Telegram)" path="assistant_bot" name={integ.assistant_bot as string | null} onSaved={onSaved} onErr={onErr} />
-        <BotToken title="Бот-спасатель Кита (перезапуск бота разработки)" path="rescue_bot" name={integ.rescue_bot as string | null} onSaved={onSaved} onErr={onErr} />
         <GoogleDrive g={integ.google as GStatus | undefined} onSaved={onSaved} onErr={onErr} />
         <Offsite o={integ.offsite as OStatus | undefined} onSaved={onSaved} onErr={onErr} />
         <div className="acc-row"><span>ЮKassa (оплата картой)</span>{integ.yookassa ? "✓ подключена" : "нет YOOKASSA_SHOP_ID / YOOKASSA_SECRET в .env"}</div>

@@ -597,7 +597,7 @@ def answer(msg_id: int) -> None:
             return _for_model(res)
         try:
             if shop not in shops:
-                raise RuntimeError("Доступ к магазину изменился. Выберите доступный VIP-магазин.")
+                raise RuntimeError("Доступ к магазину изменился. Выберите магазин с действующим доступом и API-ключом.")
             acc = access(c, shop, uid)
             if not acc.get("key"):
                 raise RuntimeError(acc.get("reason") or "нейросеть недоступна")

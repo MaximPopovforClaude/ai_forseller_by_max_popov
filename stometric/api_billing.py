@@ -344,7 +344,9 @@ def admin_plan_set(key: str, body: PlanEdit, u=Depends(current_user), c=Depends(
     return {"ok": True}
 
 
-SETTINGS = {"ref_percent": "Бонус пригласившему, % от оплат", "trial_days": "Пробный период новым кабинетам, дней",
+from .bot_runtime import JOB_SETTINGS
+
+SETTINGS = {**JOB_SETTINGS, "ref_percent": "Бонус пригласившему, % от оплат", "trial_days": "Пробный период новым кабинетам, дней",
             "enforce_billing": "Ограничивать доступ после окончания оплаты",
             "assistant_daily_limit": "Стометрик: сообщений в день на кабинет («Наша нейросеть»), по умолчанию"}
 
@@ -355,8 +357,8 @@ def admin_settings(u=Depends(current_user), c=Depends(conn)):
     vals = {r["key"]: r["value"] for r in c.execute("SELECT key, value FROM app_settings WHERE key = ANY(%s)", (list(SETTINGS),))}
     from . import insights, market
     from .config import env
-    return {"settings": [{"key": k, "title": t, "value": vals.get(k)} for k, t in SETTINGS.items()],
-            "integrations": {"wildbox": c.execute("SELECT count(*) n FROM workspace_secrets WHERE kind='wildbox'").fetchone()["n"], "claude": bool(env().get("ANTHROPIC_API_KEY")), "claude_model": insights.MODEL, "codex_private": True,
+    return {"settings": [{"key": k, "title": t, "value": vals.get(k, False) if k in JOB_SETTINGS else vals.get(k)} for k, t in SETTINGS.items()],
+            "integrations": {"wildbox": c.execute("SELECT count(*) n FROM workspace_secrets WHERE kind='wildbox'").fetchone()["n"], "claude": bool(env().get("ANTHROPIC_API_KEY")), "claude_model": insights.MODEL, "codex_private": False,
                              "yookassa": billing.yookassa_ready(), "assistant_bot": assistant_username(c), "rescue_bot": assistant_username(c, RESCUE_KEY),
                              "google": gdrive.status(c), "offsite": offsite.status(c)}}
 
@@ -486,6 +488,8 @@ def admin_setting_set(key: str, body: SettingIn, u=Depends(current_user), c=Depe
     _sa(u)
     if key not in SETTINGS:
         raise HTTPException(400, "Нет такой настройки")
+    if key in JOB_SETTINGS and type(body.value) is not bool:
+        raise HTTPException(400, "Для этой настройки выберите включено или выключено")
     c.execute("INSERT INTO app_settings(key,value) VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (key, json.dumps(body.value)))
     _audit(c, u, None, "admin/setting", {"key": key, "value": body.value})
     c.commit()

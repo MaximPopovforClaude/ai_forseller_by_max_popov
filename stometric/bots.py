@@ -31,83 +31,8 @@ MSK = timezone(timedelta(hours=3))
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-class Bot:
-    def __init__(self, token_env: str, token: str | None = None):
-        self.token = token or config.env().get(token_env)
-        self.http = httpx.Client(timeout=40)
-        self.username = None
-        if self.token:
-            try:
-                self.username = (self.api("getMe") or {}).get("username")
-            except Exception as e:  
-                print(f"{token_env}: {e}", flush=True)
-                self.token = None
-
-    def api(self, method: str, **params):
-        r = self.http.post(f"https://api.telegram.org/bot{self.token}/{method}", json=params)
-        d = r.json()
-        if not d.get("ok"):
-            raise RuntimeError(f"{method}: {d.get('description')}")
-        return d.get("result")
-
-    def send(self, chat_id: int, text: str, **kw) -> bool:
-        try:
-            self.api("sendMessage", chat_id=chat_id, text=text, parse_mode="HTML", disable_web_page_preview=True, **kw)
-            return True
-        except Exception as e:  
-            print("send failed", chat_id, str(e)[:200], flush=True)
-            return False
-
-    def send_id(self, chat_id: int, text: str, **kw) -> int | None:
-        try:
-            return self.api("sendMessage", chat_id=chat_id, text=text, parse_mode="HTML", disable_web_page_preview=True, **kw)["message_id"]
-        except Exception as e:  
-            print("send failed", chat_id, str(e)[:200], flush=True)
-            return None
-
-    def edit(self, chat_id: int, msg_id: int, text: str, **kw):
-        try:
-            self.api("editMessageText", chat_id=chat_id, message_id=msg_id, text=text, parse_mode="HTML", disable_web_page_preview=True, **kw)
-        except Exception:  
-            pass
-
-    def doc(self, chat_id: int, name: str, raw: bytes, caption: str = "") -> bool:
-        try:
-            r = self.http.post(f"https://api.telegram.org/bot{self.token}/sendDocument", data={"chat_id": chat_id, "caption": caption[:1000]},
-                               files={"document": (name, raw)})
-            return bool(r.json().get("ok"))
-        except Exception as e:  
-            print("doc failed", chat_id, str(e)[:200], flush=True)
-            return False
-
-    def download(self, file_id: str) -> bytes:
-        f = self.api("getFile", file_id=file_id)
-        return self.http.get(f"https://api.telegram.org/file/bot{self.token}/{f['file_path']}").content
-
-    def poll(self, handle, media: bool = False, on_cb=None):
-        """media — пропускать сообщения с фото/файлами (не только текст); on_cb — обработчик нажатий инлайн-кнопок."""
-        offset = 0
-        while True:
-            try:
-                ups = self.api("getUpdates", offset=offset, timeout=25, allowed_updates=["message"] + (["callback_query"] if on_cb else []))
-                for u in ups:
-                    offset = u["update_id"] + 1
-                    if u.get("callback_query") and on_cb:
-                        try:
-                            on_cb(self, u["callback_query"])
-                        except Exception:  
-                            traceback.print_exc()
-                        continue
-                    m = u.get("message")
-                    if m and m.get("chat", {}).get("type") == "private" and (m.get("text") or media and (m.get("photo") or m.get("document"))):
-                        try:
-                            handle(self, m)
-                        except Exception:  
-                            traceback.print_exc()
-                            self.send(m["chat"]["id"], "Что-то пошло не так 🙈 Попробуйте ещё раз чуть позже.")
-            except Exception as e:  
-                print("poll error:", str(e)[:200], flush=True)
-                time.sleep(5)
+from .bot_transport import Bot
+from .bot_runtime import settings as bot_job_settings
 
 
 def new_token(c, user_id: int, purpose: str, hours: int) -> str:
@@ -640,57 +565,9 @@ def _calendar_jobs():
 
 
 def scheduler():
-    """Раз в минуту: утренние сводки (в своё время МСК, раз в день) и предупреждения (раз в день на каждое)."""
-    calendar_thread = None
-    while True:
-        try:
-            now = datetime.now(MSK)
-            with db.connect() as c:
-                if now.hour >= 7:
-                    r = c.execute("""INSERT INTO app_settings(key,value) VALUES ('morning_jobs', %s) ON CONFLICT (key) DO UPDATE
-                                     SET value=EXCLUDED.value WHERE app_settings.value <> EXCLUDED.value RETURNING key""",
-                                  (json.dumps(now.date().isoformat()),)).fetchone()
-                    c.commit()
-                    if r:
-                        threading.Thread(target=_morning_jobs, daemon=True).start()
-                if now.hour in ADS_HOURS and now.minute >= 30:      
-                    slot = f"{now.date()}:{now.hour}"
-                    r = c.execute("""INSERT INTO app_settings(key,value) VALUES ('ads_slot', %s) ON CONFLICT (key) DO UPDATE
-                                     SET value=EXCLUDED.value WHERE app_settings.value <> EXCLUDED.value RETURNING key""",
-                                  (json.dumps(slot),)).fetchone()
-                    c.commit()
-                    if r:
-                        threading.Thread(target=_ads_jobs, args=(now.hour == ADS_HOURS[0],), daemon=True).start()
-                try:   
-                    from . import news
-                    news.sync_changes(c)
-                    if now.minute % 5 == 0:     
-                        news.sync_spp(c)
-                    news.send_pending(c)
-                except Exception:  
-                    c.rollback()
-                    traceback.print_exc()
-                for r in c.execute("""SELECT s.*, u.email FROM notify_settings s JOIN users u ON u.id=s.user_id
-                                      WHERE s.chat_id IS NOT NULL AND u.is_active""").fetchall():
-                    
-                    if r["daily"] and now.time() >= r["daily_time"] and in_window(r, now) and _once(c, r["user_id"], "daily", now.date().isoformat()):
-                        send_daily(c, r["user_id"], r["chat_id"])
-                    if r["alerts"] and now.minute % 30 == 0:
-                        u = c.execute("SELECT * FROM users WHERE id=%s", (r["user_id"],)).fetchone()
-                        for code, ref, text in alerts_for(c, u):
-                            if _once(c, r["user_id"], "alert:" + code, ref):
-                                notify(c, r["user_id"], r["chat_id"], text)
-                try:
-                    flush_queue(c)
-                except Exception:  
-                    c.rollback()
-                    traceback.print_exc()
-                if calendar_thread is None or not calendar_thread.is_alive():
-                    calendar_thread = threading.Thread(target=_calendar_jobs, daemon=True)
-                    calendar_thread.start()
-        except Exception:  
-            traceback.print_exc()
-        time.sleep(60 - datetime.now().second + 1)
+    import sys
+    from .bot_runtime import scheduler as run
+    return run(sys.modules[__name__])
 
 
 AS_HELP = ("🧙 Я Стометрик, помощник по твоим магазинам Wildberries и Ozon. Спрашивай обычным текстом, например:\n"
@@ -840,7 +717,7 @@ def _as_ask(bot: Bot, tg: int, uid: int, text: str, file_ids: list[tuple[str, st
                     return
                 except Exception:  
                     c.rollback()
-                    bot.send(tg, f"📎 Не получилось скачать файл {html.escape(name)} (Telegram отдаёт ботам файлы до 20 МБ).")
+                    bot.send(tg, f"📎 Не получилось скачать файл {html.escape(name)} (лимит вложения в этой установке — 10 МБ).")
                     return
             try:
                 pid, _ = assistant.ask(c, uid, ch, text, files, source="telegram")
@@ -882,7 +759,7 @@ def _as_ask(bot: Bot, tg: int, uid: int, text: str, file_ids: list[tuple[str, st
                 bot.send(tg, html.escape(re.sub(r"<[^>]+>", "", html.unescape(ch_text))))
         for tb in ((r["data"] or {}).get("tables") or [])[-1:]:     
             name = re.sub(r"[^\w\-. ]+", "", (tb.get("title") or "таблица").replace("·", "-"))[:80].strip() or "таблица"
-            note = "\nЗаписать черновик — кнопкой «Применить» в этом чате на сайте platform.example.org (Стометрик)." if tb.get("draft") else ""
+            note = f"\nЗаписать черновик — кнопкой «Применить» в этом чате на сайте {SITE} (Стометрик)." if tb.get("draft") else ""
             bot.doc(tg, f"{name}.xlsx", _xlsx(tb), caption=f"📊 {tb.get('title') or ''} · {len(tb['rows'])} строк{note}")
     except Exception:  
         traceback.print_exc()
@@ -911,7 +788,7 @@ def handle_assistant(bot: Bot, m: dict):
                      (f"\n\nСейчас магазин: <b>{html.escape(shop['title'] or shop['name'])}</b>" if shop else "") +
                      "\n\n🔔 Уведомления подключены: утренняя сводка " +
                      (f"в {s['daily_time'].strftime('%H:%M')} МСК" if s["daily"] else "выключена") +
-                     (", ИИ-сводка" if s["ai"] else "") + (", предупреждения" if s["alerts"] else "") + ".")
+                     (", ИИ-сводка" if s["ai"] else "") + (", предупреждения" if s["alerts"] else "") + "." + ("" if bot_job_settings(c)["stometric_notifications"] else "\nПлановые уведомления выключены администратором; на вопросы я отвечаю."))
             return
         if text in ("/help", "помощь"):
             bot.send(tg, html.escape(AS_HELP))
@@ -1027,22 +904,9 @@ def assistant_loop():
 
 
 def main():
-    global NOTIFY
-    NOTIFY = Bot("TG_BOT_NOTIFY_TOKEN")
-    reg = Bot("TG_BOT_REGISTER_TOKEN")
-    print("бот уведомлений:", NOTIFY.username, "| бот регистрации:", reg.username, flush=True)
-    th = []
-    if NOTIFY.token:
-        th.append(threading.Thread(target=NOTIFY.poll, args=(handle_notify,), daemon=True))
-        th.append(threading.Thread(target=scheduler, daemon=True))
-    if reg.token:
-        th.append(threading.Thread(target=reg.poll, args=(handle_register,), daemon=True))
-    th.append(threading.Thread(target=assistant_loop, daemon=True))
-    for t in th:
-        t.start()
-    while all(t.is_alive() for t in th):
-        time.sleep(10)
-    raise SystemExit("поток бота остановился — перезапуск через systemd")
+    import sys
+    from .bot_runtime import main as run
+    return run(sys.modules[__name__])
 
 
 if __name__ == "__main__":
