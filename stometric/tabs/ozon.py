@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 from ..config import today_msk
+from .. import ozon_order_prices as order_prices
 
 
 def _skus(f):
@@ -27,7 +28,7 @@ def _v2(c, shop, f, kind: str):
             {"field": "avg", "title": "Среднее", "type": "rowfmt"}]
     cols += [{"field": f"p{i}", "title": t, "type": "rowfmt"} for i, t in enumerate(res["periods"])]
     src = res["sources"]
-    note = []
+    note = [res["order_prices_note"]]
     if not src["realization"]:
         note.append("финансы Ozon ещё загружаются")
     if not src["ads_by_sku"]:
@@ -107,7 +108,7 @@ def dash(c, shop, f):
     res = ozdash.compute(c, shop, max(f["date_from"], y - timedelta(days=89)), y, _skus(f))
     cols = [{"field": "label", "title": f"ПОКАЗАТЕЛИ (СНО: {res['tax']})", "type": "label"}]
     cols += [{"field": f"d{i}", "title": f"{d[8:10]}.{d[5:7]}", "type": "rowfmt"} for i, d in enumerate(res["days"])]
-    return {"columns": cols, "rows": res["rows"], "layout": "sheet"}
+    return {"columns": cols, "rows": res["rows"], "layout": "sheet", "note": res["note"]}
 
 
 def svod(c, shop, f):
@@ -432,7 +433,10 @@ def v2_check(c, shop, f):
     return {"columns": cols, "rows": rows, "plain": True}
 
 
-OZ_HOME_ROWS = [("Заказы, ₽", "ordered_sum", "money"), ("Заказы, шт", "ordered", "int"), ("Расход на рекламу, ₽", "ads", "money"),
+OZ_HOME_ROWS = [("Заказы, ₽ (аналитика Ozon)", "ordered_sum", "money"),
+                (order_prices.SELLER_LABEL, "order_seller_sum", "money"),
+                (order_prices.CUSTOMER_LABEL, "order_customer_sum", "money"),
+                (order_prices.COVERAGE_LABEL, "order_price_coverage", "pct"), ("Заказы, шт", "ordered", "int"), ("Расход на рекламу, ₽", "ads", "money"),
                 ("ДРР от заказов, %", "drr", "pct"), ("Продажи минус возвраты, ₽", "sold_amt", "money"), ("Продажи, шт", "sold_qty", "int"),
                 ("Себестоимость продаж, ₽", "cost", "money"),     
                 ("Прибыль (после рекламы, себестоимости и налога), ₽", "profit", "money")]
@@ -448,13 +452,15 @@ def home(c, shop, f):
     V = {}
     for (k, _, _), v in zip(per, r["cols"]):
         ads = float(v.get("ad.spent") or 0) + float(v.get("ozz.spent") or 0)
-        V[k] = {"ordered_sum": v.get("ordered_sum"), "ordered": v.get("ordered"), "ads": ads, "sold_amt": v.get("sold_amt"),
+        V[k] = {**{key: v.get(key) for key in order_prices.KEYS}, "ordered_sum": v.get("ordered_sum"), "ordered": v.get("ordered"), "ads": ads, "sold_amt": v.get("sold_amt"),
                 "sold_qty": v.get("sold_qty"), "profit": v.get("profit"), "cost": -float(v.get("cost") or 0),
                 "drr": ads / float(v["ordered_sum"]) if v.get("ordered_sum") else 0}
-    rows = [{"label": lab, "fmt": fmt, "C": V["today"][k] or 0, "D": V["y"][k] or 0, "F": V["y2"][k] or 0} for lab, k, fmt in OZ_HOME_ROWS]
+    rows = [{"label": lab, "fmt": fmt, "C": V["today"][k] if k in order_prices.KEYS else V["today"][k] or 0,
+             "D": V["y"][k] if k in order_prices.KEYS else V["y"][k] or 0,
+             "F": V["y2"][k] if k in order_prices.KEYS else V["y2"][k] or 0} for lab, k, fmt in OZ_HOME_ROWS]
     fmtd = lambda d: d.strftime("%d.%m")  
     cols = [{"field": "label", "title": "Ключевые показатели Ozon", "type": "label"},
             {"field": "C", "title": f"Сегодня {fmtd(t)} (неполный)", "type": "rowfmt"},
             {"field": "D", "title": f"Вчера {fmtd(t - timedelta(days=1))}", "type": "rowfmt"},
             {"field": "F", "title": f"Позавчера {fmtd(t - timedelta(days=2))}", "type": "rowfmt"}]
-    return {"columns": cols, "rows": rows, "layout": "sheet", "home": True, "ozon": True}
+    return {"columns": cols, "rows": rows, "layout": "sheet", "home": True, "ozon": True, "hint": "Расчёт — как в Version2 «По дням». Продажи и прибыль дополняются по начислениям с задержкой. " + order_prices.NOTE}

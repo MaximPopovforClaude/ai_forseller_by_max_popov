@@ -5,7 +5,8 @@ const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const nf1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
 function fmt(v: unknown, f: string) {
-  const n = Number(v ?? 0);
+  if (v == null) return "Нет данных";
+  const n = Number(v);
   return f === "pct" ? nf1.format(n * 100) + " %" : nf.format(n) + (f === "money" ? " ₽" : "");
 }
 
@@ -25,7 +26,7 @@ export function Home({ data, hideChg = false }: { data: TabData; hideChg?: boole
               <span>{c1.title}: <b>{fmt(r.C, String(r.fmt))}</b></span>
               <span>{c3.title}: <b>{fmt(r.F, String(r.fmt))}</b></span>
             </div>
-            {!hideChg && y2 !== 0 && <div className={ch * (rowDir(String(r.label)) || 1) >= 0 ? "up" : "down"}>{ch >= 0 ? "▲" : "▼"} {nf1.format(Math.abs(ch))}{r.fmt === "pct" ? " п.п." : " %"} к позавчера</div>}
+            {!hideChg && r.D != null && r.F != null && y2 !== 0 && <div className={ch * (rowDir(String(r.label)) || 1) >= 0 ? "up" : "down"}>{ch >= 0 ? "▲" : "▼"} {nf1.format(Math.abs(ch))}{r.fmt === "pct" ? " п.п." : " %"} к позавчера</div>}
           </div>
         );
       })}

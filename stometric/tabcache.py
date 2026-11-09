@@ -30,6 +30,8 @@ DASHBOARD_TABS = {"dash5", "dash_nm", "dash_nm_days", "dash_group", "home"}
 
 def calculation_version(tab: str, data_version: str) -> str:
     version = f"{data_version}|formula:{CALC_REVISION}" if tab in CALC_TABS else data_version
+    if tab in {"oz_dash", "v2_day", "v2_week", "v2_month", "home"}:
+        version += "|ozon-order-prices:20261109-1"
     
     
     return version + "|dashboard:stream-20261101-2" if tab in DASHBOARD_TABS else version

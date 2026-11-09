@@ -9,6 +9,7 @@
 import re
 from collections import defaultdict
 from datetime import date, timedelta
+from .. import ozon_order_prices as order_prices
 
 BUYOUT_LAG = (15, 60)       
 
@@ -119,6 +120,8 @@ def _commission(c, shop: int) -> dict:
 ROWS = [
     ("h", "ЗАКАЗЫ И ПОТЕНЦИАЛЬНАЯ ПРИБЫЛЬ ПО ЗАКАЗАМ", "h"),
     ("o_sum", "Сумма заказов с учетом скидки продавца, руб", "money"),
+    ("order_customer_sum", order_prices.CUSTOMER_LABEL, "money"),
+    ("order_price_coverage", order_prices.COVERAGE_LABEL, "pct"),
     ("o_qty", "Количество заказов, шт", "int"),
     ("o_avg", "Средняя цена заказа с учетом скидки продавца, руб", "money"),
     ("a_rev", "Заказано на сумму (аналитика Ozon), руб", "money"),
@@ -189,8 +192,10 @@ def compute(c, shop: int, d_from: date, d_to: date, skus: list[int] | None = Non
     V = defaultdict(lambda: defaultdict(float))
 
     
-    post = c.execute("""SELECT order_day, sku, scheme, qty, price, status FROM oz_postings
+    post = c.execute("""SELECT order_day, sku, scheme, qty, price, status,
+                               raw#>'{financial_data,products}' AS financial_products FROM oz_postings
                         WHERE account_id=%s AND order_day BETWEEN %s AND %s""", (shop, lo, d_to)).fetchall()
+    order_days = order_prices.daily(post, skus)
     fin_q = defaultdict(lambda: [0.0, 0.0])          
     for p in post:
         if not flt(p["sku"]):
@@ -320,6 +325,7 @@ def compute(c, shop: int, d_from: date, d_to: date, skus: list[int] | None = Non
             for i, d in enumerate(days):
                 if key.startswith("st_") and i:
                     continue
-                row[f"d{i}"] = round(V[d][key], 4 if fmt == "pct" else 2)
+                value = order_prices.period(order_days, d, d).get(key) if key in order_prices.KEYS else V[d][key]
+                row[f"d{i}"] = round(value, 4 if fmt == "pct" else 2) if value is not None else None
         rows.append(row)
-    return {"days": [str(d) for d in days], "rows": rows, "tax": regime}
+    return {"days": [str(d) for d in days], "rows": rows, "tax": regime, "note": order_prices.NOTE}

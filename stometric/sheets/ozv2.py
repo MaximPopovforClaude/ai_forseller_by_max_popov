@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from .ozdash import _costs, transaction_parts
+from .. import ozon_order_prices as order_prices
 
 AD_KINDS = ["Вывод в топ", "Поиск", "Поиск и рекомендации", "Баннерная"]
 AD_RX = re.compile(r"продвиж|оплата за клик|оплата за заказ|реклам|трафарет|promotion|costperclick|cpc", re.I)
@@ -90,6 +91,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
     cost = _costs(c, shop, hi)
     D = defaultdict(lambda: defaultdict(float))          
     names = {"svc": set(), "item": set(), "non": set()}
+    order_days = order_prices.load_daily(c, shop, lo, hi, skus)
 
     
     for r in c.execute("SELECT day, sku, m FROM oz_analytics WHERE account_id=%s AND day BETWEEN %s AND %s", (shop, lo, hi)):
@@ -323,6 +325,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
                        + v["ads_filter"])
         v["margin"] = v["profit"] / v["sales_total"] if v["sales_total"] else 0
         v["payout_all"] = v["payout"] + v["non_total"]
+        v.update(order_prices.period(order_days, a, b))
         return v
 
     cols = [agg(a, b) for _, a, b in per]
@@ -350,7 +353,10 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
         ("views_search", "Показы в поиске и каталоге", "int"), ("clicks", "Клики (показы на карточке)", "int"),
         ("uclicks", "Уникальные клики", "int"), ("cart", "В корзину, всего", "int"), ("ordered", "Заказано товаров", "int"),
         ("sold_qty", "Продано товаров", "int"), ("sale_qty", "- Продажи шт", "int"), ("ret_qty", "- Возвраты шт", "int"),
-        ("ordered_sum", "Заказано на сумму", "money"), ("sold_amt", "Продано на сумму", "money"), ("sale_amt", "- Продажи ₽", "money"),
+        ("ordered_sum", "Заказано на сумму (аналитика Ozon), руб", "money"),
+        ("order_seller_sum", order_prices.SELLER_LABEL, "money"),
+        ("order_customer_sum", order_prices.CUSTOMER_LABEL, "money"),
+        ("order_price_coverage", order_prices.COVERAGE_LABEL, "pct"), ("sold_amt", "Продано на сумму", "money"), ("sale_amt", "- Продажи ₽", "money"),
         ("ret_amt", "- Возвраты ₽", "money"), ("buyout_pct", "% выкупа", "pct"), ("bonus", "Баллы за скидки", "money"),
         ("soinv", "Соинвест финансовый", "pct"), ("avg_order", "Средняя сумма заказа", "money"), ("paid", "Оплачено покупателем", "money"),
         ("avg_paid", "Средняя цена для покупателя", "money"), ("cancel", "Отменено товаров", "int"), ("returned", "Возвращено товаров", "int"),
@@ -388,6 +394,15 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
         row = {"key": key, "label": lab, "fmt": fmt}
         if fmt != "h":
             vals = [cv[key] for cv in cols]
+            if key in order_prices.KEYS:
+                precision = 4 if fmt == "pct" else 2
+                row["total"] = round(tot[key], precision) if tot[key] is not None else None
+                row["avg"] = (round(tot[key] if fmt == "pct" else tot[key] / len(cols), precision)
+                              if tot[key] is not None and cols else None)
+                for i, x in enumerate(vals):
+                    row[f"p{i}"] = round(x, precision) if x is not None else None
+                out.append(row)
+                continue
             if key.startswith("st_"):
                 row["total"] = round(cols[0][key], 2) if cols else None
                 row["avg"] = round(sum(vals) / len(vals), 2) if vals else None
@@ -413,7 +428,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
         res.append(r)
         i += 1
     return {"periods": [p[0] for p in per], "rows": res, "sources": {"realization": real, "ads_by_sku": by_sku}, "cols": cols, "tot": tot,
-            "row_defs": ROWS}
+            "row_defs": ROWS, "order_prices_note": order_prices.NOTE}
 
 
 
