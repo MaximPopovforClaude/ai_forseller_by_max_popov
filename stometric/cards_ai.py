@@ -124,7 +124,7 @@ def _complete(key: str, prompt: str, images: list[str] | None, system: str | Non
     from . import aireport
     system = system or SYSTEM
     if key == aireport.SUBSCRIPTION:
-        return aireport._cli(system, prompt, timeout=600, files=images or None)
+        return aireport._cli(system, prompt, timeout=600, files=images or None, key=key)
     content: list | str = prompt
     if images:
         import base64

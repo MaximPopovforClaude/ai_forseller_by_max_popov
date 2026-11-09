@@ -44,7 +44,7 @@ def _ask(key, prompt: str, files: list[str] | None = None, max_tokens: int = 120
     from . import aireport, llm
     from .cards_ai import _parse
     if key == aireport.SUBSCRIPTION:
-        out = aireport._cli(SYSTEM, prompt, timeout=1200, files=files or None)
+        out = aireport._cli(SYSTEM, prompt, timeout=1200, files=files or None, key=key)
     else:
         import base64
         content: list | str = prompt

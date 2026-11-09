@@ -102,18 +102,24 @@ SUBSCRIPTION = "subscription"
 def shop_key(c, shop: int, actor_id: int | None = None):
     from .ai_routing import shop_route
     route = shop_route(c, shop, actor_id)
-    return ws_key(c, route['workspace_id']) if route['ai_ready'] else None
+    if not route['ai_ready']:
+        return None
+    if route['ai_route'] == 'codex_subscription':
+        from .owner_ai import key_for
+        return key_for(c, shop, actor_id)
+    return ws_key(c, route['workspace_id'])
 
 
-def _cli(*args, **kwargs):
-    raise RuntimeError('Private subscription integration is not distributed. Configure a workspace API key.')
+def _cli(system, content, timeout=300, files=None, *, key=None):
+    from .owner_runtime import generate_scoped
+    return generate_scoped(key, system, content, timeout=timeout, files=files)['text']
 
 
 def complete(key: str, system: str, content: str, max_tokens: int = 1200) -> str:
     """Текст от нейросети кабинета (Claude / ChatGPT / Gemini / DeepSeek — llm) или (тариф «Личный») через подписку владельца."""
     from . import llm
     if key == SUBSCRIPTION:
-        text = _cli(system, content)
+        text = _cli(system, content, key=key)
     else:
         text = llm.text(llm.messages(key, {"max_tokens": max_tokens, "system": system, "messages": [{"role": "user", "content": content}]}))
     return text.replace("—", "-").replace("–", "-")

@@ -21,4 +21,4 @@ def require_owner_shop(c, shop_id, actor_id=None, *, trusted_scheduled=False):
     else:
         ready = shop_route(c, shop_id, actor_id)['ai_ready']
     if not ready:
-        raise HTTPException(403, 'Нужен API-ключ аккаунта и действующее право на магазин.')
+        raise HTTPException(403, 'Проверьте выбранный маршрут VIP/API и доступ к магазину.')

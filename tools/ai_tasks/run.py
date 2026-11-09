@@ -73,7 +73,7 @@ def build(c, shop: int, run_id: int, day) -> dict:
     with __import__('stometric.private_ai', fromlist=['scheduled_ai']).scheduled_ai(c):
         api_key = aireport.shop_key(c, shop, request['requested_by'] if request else None)
     if not api_key:
-        raise ValueError('Workspace API key unavailable')
+        raise ValueError('Нет доступа к выбранному маршруту ИИ кабинета')
     t0 = time.time()
     from tools.ai_tasks.codex_run import analyze
     res = analyze(brief, f"Разбор {platform}. Кабинет: {acc} (shop {shop}). Досье: {path}. Задачи на {day:%d.%m.%Y} (разбор дня {y:%d.%m.%Y}). "
@@ -87,7 +87,7 @@ def build(c, shop: int, run_id: int, day) -> dict:
     except Exception as error:
         raise RuntimeError('uncertain task persistence: ' + type(error).__name__) from error
     try:
-        model = f"API {res['model']}, этапов: {int(res.get('num_turns', 4))}"
+        model = f"ИИ {res['model']}, этапов: {int(res.get('num_turns', 4))}"
         note = f"задач {out['saved']}" + (f", отброшено {len(out['dropped'])} (числа не из досье): " + json.dumps(out["dropped"], ensure_ascii=False)[:1500]
                                           if out["dropped"] else "")
         c.execute("""UPDATE ai_task_runs SET status='ok', finished_at=now(), summary=%s, model=%s, error=%s WHERE id=%s""",

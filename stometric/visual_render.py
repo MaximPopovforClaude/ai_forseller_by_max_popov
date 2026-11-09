@@ -8,10 +8,11 @@ from pathlib import Path
 
 import httpx
 
-from . import db, higgsfield as hf, openai_images as oi, visual
+from . import auth, db, higgsfield as hf, openai_images as oi, private_image_actor, vip_image as vip, visual
 
 MODELS = {**{k: {**v, "title": v["title"] + " · Higgsfield", "provider": "higgsfield"} for k, v in hf.MODELS.items()},
-          oi.MODEL_ID: {"title": oi.TITLE, "provider": "openai", "model": oi.MODEL}}
+          oi.MODEL_ID: {"title": oi.TITLE, "provider": "openai", "model": oi.MODEL},
+          vip.MODEL_ID: {"title": vip.TITLE, "provider": "chatgpt"}}
 
 KEEP = ("Use the attached product photos as the exact reference of the product. Do NOT change the product: its shape, color, proportions, "
         "materials, logos, labels, packaging/box and included parts must stay exactly as in the reference photos. You may change background, "
@@ -41,17 +42,46 @@ class RenderError(RuntimeError):
 NO_HF = "Аккаунт Higgsfield не подключён — Настройки аккаунта → «Higgsfield»"
 
 
-def models(c, shop: int) -> list[dict]:
-    ok = hf.connected(c, shop)
-    direct = oi.connected(c, shop)
-    return [{"id": k, "title": m["title"], "provider": m["provider"], "ready": ready, "why": None if ready else why}
-            for k, m in MODELS.items() for ready, why in [(direct, oi.NO_KEY) if k == oi.MODEL_ID else (ok, NO_HF)]]
+def _vip_editor(c, shop: int, uid: int | None) -> bool:
+    return private_image_actor.allowed(c, shop, uid) and auth.can(auth.shop_role(c, {"id": uid}, shop), "editor")
 
 
-def selected(c, shop: int, mods: list[str]) -> list[str]:
+PAID_GPT_MODELS = frozenset((oi.MODEL_ID, "gpt", "sunburst"))
+VIP_GPT_ONLY = "Для этого VIP-магазина выберите GPT Image по личной подписке ChatGPT."
+VIP_DENIED = "Личная подписка ChatGPT доступна владельцу в выбранных личных магазинах."
+VIP_UNAVAILABLE = "Источник отрисовки по личной подписке ChatGPT сейчас недоступен."
+
+
+def models(c, shop: int, uid: int | None = None) -> list[dict]:
+    personal = _vip_editor(c, shop, uid)
+    hf_ok = hf.connected(c, shop)
+    api_ok = False if personal else oi.connected(c, shop)
+    options = []
+    if personal:
+        ready = vip.available(c, shop)
+        options.append({"id": vip.MODEL_ID, **MODELS[vip.MODEL_ID], "ready": ready,
+                        "why": None if ready else VIP_UNAVAILABLE, "default": ready})
+    for model_id, model in MODELS.items():
+        if model_id == vip.MODEL_ID or (personal and model_id in PAID_GPT_MODELS):
+            continue
+        ready, why = (api_ok, oi.NO_KEY) if model_id == oi.MODEL_ID else (hf_ok, NO_HF)
+        options.append({"id": model_id, "title": model["title"], "provider": model["provider"],
+                        "ready": ready, "why": None if ready else why})
+    return options
+
+
+def selected(c, shop: int, mods: list[str], uid: int | None = None) -> list[str]:
     if not mods or any(m not in MODELS for m in mods):
         raise RenderError("Выберите доступную нейросеть")
     mods = list(dict.fromkeys(mods))
+    personal = _vip_editor(c, shop, uid)
+    if personal and PAID_GPT_MODELS.intersection(mods):
+        raise RenderError(VIP_GPT_ONLY)
+    if vip.MODEL_ID in mods:
+        if not personal:
+            raise RenderError(VIP_DENIED)
+        if not vip.available(c, shop):
+            raise RenderError(VIP_UNAVAILABLE)
     if oi.MODEL_ID in mods and not oi.connected(c, shop):
         raise RenderError(oi.NO_KEY)
     if any(m in hf.MODELS for m in mods) and not hf.connected(c, shop):
@@ -78,18 +108,22 @@ def _refs(c, pid: int, wanted: list) -> list[int]:
     return (ids or own[:3])[:6]
 
 
-def estimate(c, shop: int, n_by_model: dict[str, int]) -> dict:
+def estimate(c, shop: int, n_by_model: dict[str, int], uid: int | None = None) -> dict:
     """Separate billing units; unknown OpenAI cost must never look like zero credits."""
-    selected(c, shop, list(n_by_model))
+    selected(c, shop, list(n_by_model), uid)
     cl = hf.Client(c, shop) if any(m in hf.MODELS for m in n_by_model) else None
     out, total, unknown = {}, 0.0, False
     for m, n in n_by_model.items():
         if not 1 <= n <= 60:
             raise RenderError("За один раз — от 1 до 60 картинок")
-        direct = m == oi.MODEL_ID
-        one = None if direct else hf.cost(cl, m)
+        if m == vip.MODEL_ID:
+            unit, note, one = "subscription", vip.BILLING, None
+        elif m == oi.MODEL_ID:
+            unit, note, one = "USD", oi.BILLING, None
+        else:
+            unit, note, one = "credits", "Кредиты Higgsfield", hf.cost(cl, m)
         out[m] = {"title": MODELS[m]["title"], "one": one, "n": n, "sum": round(one * n, 2) if one is not None else None,
-                  "unit": "USD" if direct else "credits", "note": oi.BILLING if direct else "Кредиты Higgsfield"}
+                  "unit": unit, "note": note}
         unknown = unknown or one is None
         total += (one or 0) * n
     return {"by_model": out, "total": None if unknown else round(total, 2)}
@@ -111,7 +145,7 @@ def own_sources(c, shop: int, pid: int) -> int:
 def start(c, shop: int, pid: int, uid: int, picks: list[dict], mods: list[str], per: int) -> str:
     """Нарисовать выбранные слоты ТЗ выбранными моделями, per вариантов на слот. Только по согласованному ТЗ и только с фото нашего товара."""
     visual.project(c, shop, pid)
-    mods = selected(c, shop, mods)
+    mods = selected(c, shop, mods, uid)
     if not own_sources(c, shop, pid):
         raise RenderError(NO_SRC)
     pl = plan(c, shop, pid)
@@ -150,6 +184,8 @@ def approve_brief(c, pid: int, uid: int, note: str) -> dict:
 
 def auto(c, shop: int, pid: int, uid: int, mods: list[str], scope: str) -> int:
     """Согласовать последнее ТЗ и поставить в очередь все слайды (scope=all) или только варианты первого (first), по 1 на модель."""
+    visual.project(c, shop, pid)
+    selected(c, shop, mods, uid)
     approve_brief(c, pid, uid, "согласовано автоматически: «Все шаги + отрисовка»")
     items = plan(c, shop, pid)["items"]
     slots = [x["slot"] for x in items if scope != "first" or x["slot"].startswith("first:")]
@@ -174,8 +210,10 @@ def edit(c, shop: int, pid: int, uid: int, file_ids: list[int], task: str, mods:
     if not task:
         raise RenderError("Напишите, что сделать с фото")
     visual.project(c, shop, pid)
-    mods = selected(c, shop, mods)
+    mods = selected(c, shop, mods, uid)
     ok = [r["id"] for r in c.execute("SELECT id FROM vis_files WHERE account_id=%s AND id = ANY(%s) AND kind IN ('source','render')", (shop, file_ids))]
+    if vip.MODEL_ID in mods and set(ok) != set(file_ids):
+        raise RenderError("Исходное фото недоступно в этом магазине")
     if not ok:
         raise RenderError("Выберите фото")
     if len(ok) * len(mods) > 40:
@@ -222,11 +260,13 @@ def _loop():
 
 
 def _expire_direct(c, pid: int | None = None):
-    c.execute("""UPDATE vis_renders SET state='error', error=%s, finished_at=now()
-                 WHERE model=%s AND state='running'
+    c.execute("""UPDATE vis_renders SET state='error',
+                 error=CASE WHEN model=%s THEN %s ELSE %s END, finished_at=now()
+                 WHERE model IN (%s,%s) AND state='running'
                    AND coalesce(started_at,created_at) < now() - interval '25 minutes'"""
               + (" AND project_id=%s" if pid is not None else ""),
-              (oi.UNCERTAIN, oi.MODEL_ID, pid) if pid is not None else (oi.UNCERTAIN, oi.MODEL_ID))
+              (vip.MODEL_ID, vip.UNCERTAIN, oi.UNCERTAIN, vip.MODEL_ID, oi.MODEL_ID)
+              + ((pid,) if pid is not None else ()))
 
 
 def _claim(c):
@@ -236,9 +276,9 @@ def _claim(c):
     _expire_direct(c)
     return c.execute("""UPDATE vis_renders SET state='running', started_at=now() WHERE id IN (
         SELECT id FROM vis_renders WHERE state='queued' AND (
-            model<>%(model)s OR (id=(SELECT min(id) FROM vis_renders WHERE state='queued' AND model=%(model)s)
-                AND NOT EXISTS (SELECT 1 FROM vis_renders WHERE state='running' AND model=%(model)s)))
-        ORDER BY id LIMIT %(n)s FOR UPDATE SKIP LOCKED) RETURNING id""", {"model":oi.MODEL_ID, "n":PARALLEL}).fetchall()
+            model NOT IN (%(api)s,%(vip)s) OR (id=(SELECT min(id) FROM vis_renders WHERE state='queued' AND model IN (%(api)s,%(vip)s))
+                AND NOT EXISTS (SELECT 1 FROM vis_renders WHERE state='running' AND model IN (%(api)s,%(vip)s))))
+        ORDER BY id LIMIT %(n)s FOR UPDATE SKIP LOCKED) RETURNING id""", {"api":oi.MODEL_ID, "vip":vip.MODEL_ID, "n":PARALLEL}).fetchall()
 
 
 def _direct_refs(c, r: dict) -> list[bytes]:
@@ -267,10 +307,11 @@ def _direct_refs(c, r: dict) -> list[bytes]:
 
 
 def _direct_authorize(c, r: dict):
-    from . import auth
     u = c.execute("SELECT id, is_active, is_superadmin FROM users WHERE id=%s", (r["created_by"],)).fetchone()
     if not u or not auth.can(auth.shop_role(c, u, r["account_id"]), "editor"):
         raise RenderError("Доступ автора к отрисовке этого магазина отозван")
+    if r.get("model") == vip.MODEL_ID and not private_image_actor.allowed(c, r["account_id"], r["created_by"]):
+        raise RenderError(VIP_DENIED)
     p = visual.project(c, r["account_id"], r["project_id"])
     if p.get("archived"):
         raise RenderError("Проект архивирован")
@@ -278,18 +319,25 @@ def _direct_authorize(c, r: dict):
 
 def _direct_one(c, r: dict):
     rid = r["id"]
+    subscription = r["model"] == vip.MODEL_ID
+    provider = vip if subscription else oi
     try:
         _direct_authorize(c, r)
-        token = oi.key(c, r["account_id"])
+        if subscription and not vip.available(c, r["account_id"]):
+            raise RenderError(VIP_UNAVAILABLE)
+        token = None if subscription else oi.key(c, r["account_id"])
         refs = _direct_refs(c, r)
         
         
         claimed = c.execute("""UPDATE vis_renders SET request_id=%s WHERE id=%s AND state='running'
-                               AND request_id IS NULL RETURNING id""", ("openai:started", rid)).fetchone()
+                               AND request_id IS NULL RETURNING id""", ("chatgpt:started" if subscription else "openai:started", rid)).fetchone()
         c.commit()
         if not claimed:
             return
-        raw = oi.generate(token, r["prompt"], refs, r["created_by"])
+        if subscription:
+            raw = vip.generate(r["prompt"], refs, r["created_by"], shop=r["account_id"])
+        else:
+            raw = oi.generate(token, r["prompt"], refs, r["created_by"])
         token = None
         _direct_authorize(c, r)
         state = c.execute("SELECT state FROM vis_renders WHERE id=%s FOR UPDATE", (rid,)).fetchone()
@@ -298,14 +346,15 @@ def _direct_one(c, r: dict):
             return
         if r.get("zone"):
             raw = _paste_exact(refs[0], raw, r["zone"])
-        f = visual.save(c, r["account_id"], r["project_id"], "render", f"{r['title'][:80]} · {oi.TITLE}.png",
-                        raw, r["created_by"], oi.MODEL)
+        ext = ".jpg" if subscription and oi.validate_image(raw) == "image/jpeg" else ".png"
+        f = visual.save(c, r["account_id"], r["project_id"], "render", f"{r['title'][:80]} · {provider.TITLE}{ext}",
+                        raw, r["created_by"], vip.MODEL_ID if subscription else oi.MODEL)
         c.execute("UPDATE vis_renders SET state='done', file_id=%s, finished_at=now() WHERE id=%s", (f["id"], rid))
         c.commit()
         del refs, raw, token  
     except Exception as exc:
         c.rollback()
-        msg = str(exc) if isinstance(exc, (RenderError, oi.ImageError)) else oi.UNCERTAIN
+        msg = str(exc) if isinstance(exc, (RenderError, oi.ImageError)) else provider.UNCERTAIN
         c.execute("""UPDATE vis_renders SET state='error', error=%s, finished_at=now()
                      WHERE id=%s AND state='running'""", (msg[:400], rid))
         c.commit()
@@ -326,7 +375,7 @@ def _one(rid: int):
         r = c.execute("SELECT * FROM vis_renders WHERE id=%s", (rid,)).fetchone()
         if not r or r["state"] != "running":
             return
-        if r["model"] == oi.MODEL_ID:
+        if r["model"] in (oi.MODEL_ID, vip.MODEL_ID):
             c.commit()
             _direct_one(c, r)
             return
@@ -472,6 +521,9 @@ def check(rid: int):
         r = c.execute("SELECT * FROM vis_renders WHERE id=%s", (rid,)).fetchone()
         if not r or not r["file_id"]:
             return
+        if r["model"] == vip.MODEL_ID:
+            _direct_authorize(c, r)
+            c._ai_actor_id = r["created_by"]
         key = visual_ai._key(c, r["account_id"])
         files = [visual_ai.TMP / f"chk_{r['file_id']}.jpg"]
         visual_ai.TMP.mkdir(parents=True, exist_ok=True)
@@ -491,8 +543,9 @@ def check(rid: int):
 
 
 def renders(c, pid: int) -> list[dict]:
-    return c.execute("""SELECT id, batch, slot, title, model, state, error, file_id, check_res, parent_id, task, zone, created_at, finished_at
+    rows = c.execute("""SELECT id, batch, slot, title, model, state, error, file_id, check_res, parent_id, task, zone, created_at, finished_at
                         FROM vis_renders WHERE project_id=%s ORDER BY id DESC LIMIT 400""", (pid,)).fetchall()
+    return [{**row, "model_title": MODELS.get(row["model"], {}).get("title", row["model"])} for row in rows]
 
 
 def ensure_running(c, pid: int):
@@ -502,7 +555,7 @@ def ensure_running(c, pid: int):
     c.commit()
     if c.execute("SELECT 1 FROM vis_renders WHERE project_id=%s AND state IN ('queued','running') LIMIT 1", (pid,)).fetchone():
         stale = c.execute("""UPDATE vis_renders SET state='queued' WHERE project_id=%s AND state='running'
-                             AND model<>%s AND coalesce(started_at,created_at) < now() - interval '25 minutes' RETURNING id""", (pid, oi.MODEL_ID)).fetchall() if not (_WORKER and _WORKER[0].is_alive()) else []
+                             AND model NOT IN (%s,%s) AND coalesce(started_at,created_at) < now() - interval '25 minutes' RETURNING id""", (pid, oi.MODEL_ID, vip.MODEL_ID)).fetchall() if not (_WORKER and _WORKER[0].is_alive()) else []
         if stale:
             c.commit()
         kick()

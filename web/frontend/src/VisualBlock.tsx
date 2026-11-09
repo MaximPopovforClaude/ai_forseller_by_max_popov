@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, http, type Article } from "./api";
 import { copyCell } from "./copy";
-import { RenderModels, modelsReady, estimateText, confirmRetouch, type RenderModel, type RenderEstimate } from "./visualBilling";
+import { RenderModels, useRenderSelection, modelsReady, estimateText, confirmRetouch, type RenderModel, type RenderEstimate } from "./visualBilling";
 
 /** Модуль «Визуал» : по регламенту инфографики — исходники и паспорт → конкуренты → товар и ЦА → цели и воронки → ТЗ
  * (правка, согласование, «База ТЗ»). Отрисовка (Higgsfield) — следующим этапом. */
@@ -68,7 +68,7 @@ export function VisualBlock({ shop }: { shop: number }) {
         <button className="link" onClick={() => setView("base")}>📚 База ТЗ{pend ? ` (на согласовании: ${pend})` : ""}</button>
         <button className="link" onClick={() => setView("brand")}>🎨 Стиль бренда и паспорта</button></div>
       <div className="hint">Слайды карточки по регламенту инфографики: исходники и паспорт → разбор слайдов конкурентов → ответы на вопросы о товаре и ЦА →
-        цели слайдов и воронки → ТЗ (менеджер правит и согласует). Дальше — отрисовка в нейросетях (Higgsfield), доработка и «База фото».</div>
+        цели слайдов и воронки → ТЗ (менеджер правит и согласует). Дальше — отрисовка слайдов, доработка и «База фото».</div>
       {err && <div className="err">{err}</div>}
       {!rows.length && <div className="hint">Пока нет товаров в работе — нажмите «＋ Новый товар».</div>}
       <div className="cd-list">{rows.map((r) => (
@@ -124,7 +124,7 @@ function Project({ shop, pid, onBack }: { shop: number; pid: number; onBack: () 
   const [link, setLink] = useState("");
   const [plink, setPlink] = useState("");
   const [firstN, setFirstN] = useState(3);
-  const [autoMods, setAutoMods] = useState<string[]>([]);
+  const [autoMods, setAutoMods] = useRenderSelection(`${shop}/${pid}`, s?.render_models);
   const [autoScope, setAutoScope] = useState<"all" | "first">("all");
   const [tab, setTab] = useState<"src" | "comp" | "qa" | "goals" | "brief" | "render" | "photos" | "retouch">("src");
   const url = `/api/shops/${shop}/visual/${pid}`;
@@ -530,7 +530,7 @@ function Brand({ shop, onBack }: { shop: number; onBack: () => void }) {
 
 type RItem = { slot: string; title: string; prompt: string; sources: number[] };
 type RModel = RenderModel;
-type Rend = { id: number; batch: string; slot: string; title: string; model: string; state: "queued" | "running" | "done" | "error" | "canceled"; error: string | null;
+type Rend = { id: number; batch: string; slot: string; title: string; model: string; model_title?: string; state: "queued" | "running" | "done" | "error" | "canceled"; error: string | null;
   file_id: number | null; parent_id: number | null; task: string | null; zone?: number[] | null; created_at: string;
   check_res: { skipped?: boolean; product_ok?: boolean; product_diff?: string[]; text_ok?: boolean; text_errors?: string[]; corners_ok?: boolean } | null };
 type Ph = { id: number; file_id: number; title: string; project_id: number | null; created_at: string; name: string };
@@ -540,10 +540,10 @@ type RSt = { plan: { brief: { id: number; version: number; state: string } | nul
 function Render({ shop, url }: { shop: number; url: string }) {
   const paymentPending = useRef(false);
   const [r, setR] = useState<RSt | null>(null);
+  const [mods, setMods] = useRenderSelection(url, r?.models);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [slots, setSlots] = useState<string[] | null>(null);
-  const [mods, setMods] = useState<string[]>([]);
   const [per, setPer] = useState(1);
   const [est, setEst] = useState<{ key: string; quote: RenderEstimate } | null>(null);
   const [sel, setSel] = useState<number[]>([]);
@@ -558,7 +558,6 @@ function Render({ shop, url }: { shop: number; url: string }) {
   const items = r.plan.items;
   const picked = slots ?? items.map((x) => x.slot);
   const fail = (e: Error) => { setErr(e.message); paymentPending.current = false; setBusy(false); };
-  const noKey = r.models.every((m) => !m.ready);
   const approved = r.plan.brief?.state === "approved";
   const quoteKey = JSON.stringify({ url, slots: picked, models: mods, per });
   const estimate = async () => { if (paymentPending.current) return; paymentPending.current = true; setBusy(true); setErr(""); setEst(null);
@@ -588,7 +587,6 @@ function Render({ shop, url }: { shop: number; url: string }) {
     {err && <div className="err" style={{ whiteSpace: "pre-wrap" }}>{err}</div>}
     {msg && <div className="ok">{msg}</div>}
     <div className="acc-box"><b>5. Отрисовка по ТЗ</b>
-      {noKey && <div className="err">Подключите GPT Image или Higgsfield в «Настройках аккаунта».</div>}
       {!r.plan.brief && <div className="hint">Сначала соберите ТЗ (вкладка «4. ТЗ»).</div>}
       {r.plan.brief && !approved && <div className="t-bad">ТЗ v{r.plan.brief.version} ещё не согласовано — рисуем только по согласованному ТЗ.</div>}
       {r.can_edit && <RenderModels models={r.models} value={mods} disabled={busy} onChange={v => { setEst(null); setMods(v); }} />}
@@ -621,7 +619,7 @@ function Render({ shop, url }: { shop: number; url: string }) {
         {x.file_id ? <img src={`/api/shops/${shop}/visual_file/${x.file_id}?thumb=1`} alt="" onClick={() => setBig(x.file_id)} style={{ cursor: "zoom-in" }} />
           : <div className="vis-wait">{x.state === "error" ? "❌" : x.state === "canceled" ? "⏹" : "⏳"}</div>}
         {x.file_id && r.can_edit && <label className="vis-pick"><input type="checkbox" checked={sel.includes(x.file_id)} onChange={() => tog(x.file_id!)} /> выбрать</label>}
-        <span className="hint">{MT[x.model] || x.model}{x.task ? ` · ✏️ ${x.task.slice(0, 40)}` : ""}</span>
+        <span className="hint">{x.model_title || MT[x.model] || x.model}{x.task ? ` · ✏️ ${x.task.slice(0, 40)}` : ""}</span>
         {x.file_id && (inBase.has(x.file_id) ? <span className="t-good">✅ в базе</span>
           : r.can_edit && x.state === "done" && <button className="link vis-in" onClick={() => http.post(`${url}/photos`, { file_ids: [x.file_id], shared: false })
             .then(() => { setMsg("Добавлено в «Базу фото» товара"); load(); }).catch(fail)}>✅ в базу фото</button>)}
@@ -643,9 +641,9 @@ function Render({ shop, url }: { shop: number; url: string }) {
 
 function Photos({ shop, s, url }: { shop: number; s: St; url: string }) {
   const paymentPending = useRef(false);
-  const [mods, setMods] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [r, setR] = useState<RSt | null>(null);
+  const [mods, setMods] = useRenderSelection(url, r?.models);
   const [sel, setSel] = useState<number[]>([]);
   const [task, setTask] = useState("");
   const [msg, setMsg] = useState("");
@@ -698,9 +696,9 @@ function Photos({ shop, s, url }: { shop: number; s: St; url: string }) {
 function Retouch({ shop, s, url }: { shop: number; s: St; url: string }) {
   const paymentPending = useRef(false);
   const [r, setR] = useState<RSt | null>(null);
+  const [mods, setMods] = useRenderSelection(url, r?.models);
   const [sel, setSel] = useState<number[]>([]);
   const [task, setTask] = useState("");
-  const [mods, setMods] = useState<string[]>([]);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -736,7 +734,7 @@ function Retouch({ shop, s, url }: { shop: number; s: St; url: string }) {
         {zoneUi(x.fid)}</div>
       {r.can_edit && <label className="vis-pick"><input type="checkbox" checked={sel.includes(x.fid)} onChange={() => tog(x.fid)} /> выбрать</label>}
       <span className="hint">{x.label}</span></div>)}</div></div>;
-  const drawn = r.renders.filter((x) => x.file_id && x.state === "done" && !x.task).map((x) => ({ fid: x.file_id!, label: `${x.title.slice(0, 40)} · ${MT[x.model] || x.model}` }));
+  const drawn = r.renders.filter((x) => x.file_id && x.state === "done" && !x.task).map((x) => ({ fid: x.file_id!, label: `${x.title.slice(0, 40)} · ${x.model_title || MT[x.model] || x.model}` }));
   return (<>
     {err && <div className="err" style={{ whiteSpace: "pre-wrap" }}>{err}</div>}
     {msg && <div className="ok">{msg}</div>}
@@ -755,7 +753,7 @@ function Retouch({ shop, s, url }: { shop: number; s: St; url: string }) {
         {x.file_id ? <div className="vis-zbox"><img src={`/api/shops/${shop}/visual_file/${x.file_id}?thumb=1`} alt="" onClick={() => setBig(x.file_id)} style={{ cursor: "zoom-in" }} />
           {zoneUi(x.file_id)}</div>
           : <div className="vis-wait">{x.state === "error" ? "❌" : x.state === "canceled" ? "⏹" : "⏳"}</div>}
-        <span className="hint">✏️ {x.zone ? "🔲 " : ""}{(x.task || "").slice(0, 60)} · {MT[x.model] || x.model}</span>
+        <span className="hint">✏️ {x.zone ? "🔲 " : ""}{(x.task || "").slice(0, 60)} · {x.model_title || MT[x.model] || x.model}</span>
         {x.state === "error" && <span className="t-bad">{x.error}</span>}
         {x.check_res?.skipped && <span className="hint">Автопроверка недоступна — проверьте фото вручную</span>}
         {x.check_res && !x.check_res.skipped && <span className={x.check_res.product_ok && x.check_res.text_ok ? "t-good" : "t-bad"}

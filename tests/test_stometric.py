@@ -141,6 +141,41 @@ class SQLAcceptance(unittest.TestCase):
         self.assertEqual(sources,[{'source':'site'},{'source':'telegram'}])
         self.assertEqual(len(api_assistant.chats(self.shop,self.user,self.c)),2)
         with self.assertRaises(Exception):api_assistant.get_chat(ch['id'],{'id':self.other},self.c)
+    def test_site_and_telegram_use_personal_subscription_without_api(self):
+        from stometric import owner_ai, owner_runtime
+        owner_ai.save(self.c,self.uid,self.ws,[self.shop],True,{'text_ready':True,'image_ready':True})
+        self.c.execute('DELETE FROM workspace_secrets')
+        reply={'text':'{"answer":"Synthetic personal response"}','model':'synthetic-personal'}
+        with patch.object(owner_runtime,'generate_scoped',return_value=reply) as personal,patch.object(llm,'messages') as api:
+            ch=api_assistant.new_chat(api_assistant.NewChat(shop_id=self.shop),self.user,self.c)
+            chat=self.c.execute('SELECT * FROM assistant_chats WHERE id=%s',(ch['id'],)).fetchone()
+            pid,_=assistant.ask(self.c,self.uid,chat,'Personal site question',[])
+            assistant.answer(pid)
+            self.link()
+            bots.handle_assistant(self.bot,{'from':{'id':70001},'text':'/start'})
+            def synchronous(mid):
+                assistant.answer(mid)
+                return types.SimpleNamespace(is_alive=lambda:False)
+            with patch.object(assistant,'start',side_effect=synchronous):
+                bots._as_ask(self.bot,70001,self.uid,'Personal Telegram question',[])
+        api.assert_not_called()
+        self.assertEqual(personal.call_count,2)
+        self.assertTrue(all(isinstance(call.args[0],owner_ai.OwnerKey) and call.args[0].actor_id==self.uid for call in personal.call_args_list))
+        rows=self.c.execute("SELECT status FROM assistant_messages WHERE role='assistant' ORDER BY id").fetchall()
+        self.assertEqual(rows,[{'status':'done'}]*2)
+        self.assertTrue(any('Synthetic personal response' in x for x in self.bot.sent))
+
+    def test_personal_chat_cannot_reuse_history_from_previous_api_scope(self):
+        from stometric import owner_ai, owner_runtime
+        ch=api_assistant.new_chat(api_assistant.NewChat(shop_id=self.shop),self.user,self.c)
+        owner_ai.save(self.c,self.uid,self.ws,[self.shop],True,{'text_ready':True,'image_ready':True})
+        chat=self.c.execute('SELECT * FROM assistant_chats WHERE id=%s',(ch['id'],)).fetchone()
+        pid,_=assistant.ask(self.c,self.uid,chat,'New route question',[])
+        with patch.object(owner_runtime,'generate_scoped') as personal,patch.object(llm,'messages') as api,patch.object(assistant.traceback,'print_exc'):
+            assistant.answer(pid)
+        personal.assert_not_called();api.assert_not_called()
+        self.assertEqual(self.c.execute('SELECT status FROM assistant_messages WHERE id=%s',(pid,)).fetchone()['status'],'error')
+
     def test_ai_tool_cannot_read_an_ungranted_shop(self):
         foreign=self.c.execute("INSERT INTO accounts(name,workspace_id) VALUES ('ungranted',%s) RETURNING id",(self.ws,)).fetchone()['id']
         self.c.execute('UPDATE memberships SET shop_ids=%s WHERE user_id=%s',([self.shop],self.uid))

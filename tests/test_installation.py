@@ -70,7 +70,7 @@ class Installation(unittest.TestCase):
 
     def test_no_subscription_route(self):
         from stometric import aireport
-        with self.assertRaisesRegex(RuntimeError, 'not distributed'):
+        with self.assertRaisesRegex(RuntimeError, 'подтверждённый магазин'):
             aireport._cli('test', 'test')
 
     def test_api_key_input_is_available_before_first_key(self):

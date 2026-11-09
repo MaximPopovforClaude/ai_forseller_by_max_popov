@@ -244,8 +244,8 @@ def accept_terms(u=Depends(current_user), c=Depends(conn)):
 PLANS = {
     "basic": {"title": "Обычный", "about": "Все таблицы и графики по данным WB; позже — доп. модули.", "ready": True},
     "ai": {"title": "Наша нейросеть (API)", "about": "Будущий тариф: Гномик и аналитика через API сервиса. Пока не подключён.", "ready": False},
-    "owner": {"title": "VIP (подписка владельца)", "about": "Codex для разрешённых магазинов владельца и их тестовых пользователей, с сохранением прав доступа.", "ready": True, "hidden": True},
-    "mcp": {"title": "Ваша нейросеть (API)", "about": "Будущий тариф: Гномик и аналитика через API-ключ клиента. Пока не подключён. MCP-доступ настраивается отдельно.", "ready": False},
+    "owner": {"title": "VIP (подписка владельца)", "about": "Личный ChatGPT владельца: аналитика, Стометрик и GPT Image для явно выбранных своих магазинов. Настройка в админке.", "ready": True, "hidden": True},
+    "mcp": {"title": "Ваша нейросеть (API)", "about": "Гномик и аналитика через API-ключ кабинета. Оплата провайдеру отдельно; MCP-доступ настраивается отдельно.", "ready": False},
 }
 ROLE_TITLE = {"owner": "Владелец", "admin": "Админ", "editor": "Редактор", "viewer": "Просмотр"}
 
@@ -1220,6 +1220,8 @@ app.include_router(api_rnp.router)
 app.include_router(api_compare.router)
 app.include_router(api_assistant.router)
 app.include_router(api_billing.router)
+from . import api_owner_ai
+app.include_router(api_owner_ai.router)
 app.include_router(api_actions.router)
 app.include_router(api_questions.router)
 app.include_router(api_ads.router)

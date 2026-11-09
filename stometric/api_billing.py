@@ -195,6 +195,12 @@ class AdminWsIn(BaseModel):
 @router.put("/api/admin/workspaces/{ws_id}")
 def admin_ws_set(ws_id: int, body: AdminWsIn, u=Depends(current_user), c=Depends(conn)):
     _sa(u)
+    if body.plan == 'owner':
+        from . import owner_ai
+        cfg = owner_ai.settings(c)
+        if (cfg.get('owner_user_id') != u['id'] or cfg.get('workspace_id') != ws_id
+                or not cfg.get('enabled') or not owner_ai.owns(c, ws_id, u['id'])):
+            raise HTTPException(409, 'Сначала настройте личную подписку в блоке VIP под списком кабинетов.')
     if not c.execute("SELECT 1 FROM plans WHERE key=%s", (body.plan,)).fetchone():
         raise HTTPException(400, "Нет такого тарифа")
     c.execute("UPDATE workspaces SET plan=%s, plan_until=%s, plan_changed_at=now() WHERE id=%s", (body.plan, body.plan_until, ws_id))

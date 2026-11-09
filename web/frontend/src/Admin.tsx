@@ -1,3 +1,4 @@
+import { PersonalAI } from "./PersonalAI";
 import { useEffect, useRef, useState } from "react";
 import { http } from "./api";
 import { copyCell } from "./copy";
@@ -70,6 +71,7 @@ export function Admin({ onShopsChanged }: { onShopsChanged: () => void }) {
         ["paid", "Оплачено, ₽", (r) => nf.format(Number(r.paid))],
         ["plan", "Тариф и срок", (r) => <WsPlan r={r} plans={plans} onSaved={() => done("Тариф сохранён")} onErr={fail} />],
         ["assistant_limit", "Стометрик, сообщ./день", (r) => <AsLimit r={r} onSaved={() => done("Лимит сохранён")} onErr={fail} />]]} />}
+      {sec === "workspaces" && <PersonalAI onSaved={() => done("Настройки VIP сохранены")} />}
       {sec === "shops" && <>
         <label><input type="checkbox" checked={showArchived} onChange={e => { setShowArchived(e.target.checked); setArchiveShop(null); }} /> Показать удалённые магазины</label>
         {archiveShop && <ShopArchive key={`${archiveShop.id}:${archiveShop.archived_at || "active"}`} shop={archiveShop}

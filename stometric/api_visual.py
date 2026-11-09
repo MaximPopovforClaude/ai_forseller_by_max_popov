@@ -104,7 +104,7 @@ def _state(c, u, shop_id: int, pid: int) -> dict:
         "can_edit": auth.can(auth.shop_role(c, u, shop_id), "editor"), "ai": bool(assistant.access(c, shop_id).get("ok")),
         "will_review": [seo_review._name(c, x) for x in seo_review.reviewers(c, shop_id, p["nm_id"] or 0)],
         "hf": hf.connected(c, shop_id), "hf_models": [{"id": k, "title": m["title"]} for k, m in hf.MODELS.items()],
-        "render_models": vr.models(c, shop_id)})
+        "render_models": vr.models(c, shop_id, u["id"])})
 
 
 @router.get("/api/shops/{shop_id}/visual/{pid}")
@@ -284,7 +284,7 @@ def vis_run(shop_id: int, pid: int, body: RunIn, u=Depends(current_user), c=Depe
     render = None
     if body.render_models:
         from . import visual_render as vr
-        mods = _rerr(vr.selected, c, shop_id, body.render_models)
+        mods = _rerr(vr.selected, c, shop_id, body.render_models, u["id"])
         render = {"models": mods, "scope": "first" if body.render_scope == "first" else "all"}
     visual.ensure_sources(c, shop_id, pid, u["id"])              
     _audit(c, u, s["workspace_id"], "visual/run", {"shop": shop_id, "project": pid, "steps": steps, "render": render})
@@ -561,7 +561,7 @@ def vis_render_state(shop_id: int, pid: int, u=Depends(current_user), c=Depends(
     _shop(c, u, shop_id, "viewer")
     _err(visual.project, c, shop_id, pid)
     vr.ensure_running(c, pid)
-    return jsonable_encoder({"plan": vr.plan(c, shop_id, pid), "models": vr.models(c, shop_id), "renders": vr.renders(c, pid),
+    return jsonable_encoder({"plan": vr.plan(c, shop_id, pid), "models": vr.models(c, shop_id, u["id"]), "renders": vr.renders(c, pid),
                              "photos": vr.photos(c, shop_id, pid), "shared": vr.photos(c, shop_id, None),
                              "can_edit": auth.can(auth.shop_role(c, u, shop_id), "editor")})
 
@@ -579,7 +579,7 @@ def vis_render_estimate(shop_id: int, pid: int, body: EstIn, u=Depends(current_u
     _shop(c, u, shop_id, "editor")
     _err(visual.project, c, shop_id, pid)
     n = body.edit_n or len(body.slots) * max(1, min(3, body.per))
-    return _rerr(vr.estimate, c, shop_id, {m: n for m in body.models})
+    return _rerr(vr.estimate, c, shop_id, {m: n for m in body.models}, u["id"])
 
 
 class DrawIn(BaseModel):

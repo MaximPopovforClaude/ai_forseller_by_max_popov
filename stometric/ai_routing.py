@@ -1,4 +1,6 @@
-"""Self-hosted AI uses the current workspace's own encrypted API key only."""
+"""Personal owner scope or the current workspace API; never a fallback."""
+
+FUTURE_ROUTES = {}
 
 
 def shop_route(c, shop_id, actor_id=None):
@@ -10,6 +12,13 @@ def shop_route(c, shop_id, actor_id=None):
             AND (m.shop_ids IS NULL OR a.id=ANY(m.shop_ids))) member,
         EXISTS(SELECT 1 FROM workspace_secrets s WHERE s.workspace_id=a.workspace_id AND s.kind='claude') has_key
         FROM accounts a JOIN workspaces w ON w.id=a.workspace_id WHERE a.id=%s''', (actor_id, shop_id)).fetchone()
+    if row and row['plan'] == 'owner':
+        from . import owner_ai
+        cfg = owner_ai.settings(c)
+        ready = owner_ai.allowed(c, shop_id, actor_id, scheduled=actor_id is None and scheduled) and cfg.get('text_ready') is True
+        return {'plan': 'owner', 'workspace_id': row['workspace_id'], 'ai_route': 'codex_subscription',
+                'ai_ready': ready, 'ai_reason': None if ready else
+                'Личная подписка доступна только владельцу в выбранных магазинах. Проверьте настройку VIP в админке.'}
     ready = bool(row and row['is_active'] and row['has_key'] and (row['member'] or (actor_id is None and scheduled)))
     return {'plan': row['plan'] if row else None, 'workspace_id': row['workspace_id'] if row else None,
             'ai_route': 'workspace_api', 'ai_ready': ready,
@@ -21,5 +30,9 @@ def workspace_route(c, workspace_id, actor_id=None):
         route = shop_route(c, row['id'], actor_id)
         if route['ai_ready']:
             return route
+    ws = c.execute('SELECT plan FROM workspaces WHERE id=%s', (workspace_id,)).fetchone()
+    if ws and ws['plan'] == 'owner':
+        return {'workspace_id':workspace_id, 'ai_route':'codex_subscription', 'ai_ready':False,
+                'ai_reason':'Настройте VIP и выберите свои магазины в админке сервиса.'}
     return {'workspace_id': workspace_id, 'ai_route': 'workspace_api', 'ai_ready': False,
             'ai_reason': 'Подключите API-ключ в настройках аккаунта и добавьте магазин.'}
