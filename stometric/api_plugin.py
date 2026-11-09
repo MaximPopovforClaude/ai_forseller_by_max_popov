@@ -164,10 +164,12 @@ def entry_days(u=Depends(current_user), c=Depends(conn)):
 
 @router.get("/api/plugin/download")
 def download():
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in sorted(EXT_DIR.rglob("*")):
-            if f.is_file():
-                z.write(f, "seller-analytics-plugin/" + str(f.relative_to(EXT_DIR)))
-    return Response(buf.getvalue(), media_type="application/zip",
-                    headers={"Content-Disposition": 'attachment; filename="seller-analytics-plugin.zip"'})
+    from .config import site_url
+    from .extension_package import archive, ExtensionConfigError
+    try:
+        data = archive(EXT_DIR, site_url())
+    except ExtensionConfigError as error:
+        raise HTTPException(409, str(error)) from None
+    return Response(data, media_type="application/zip", headers={
+        "Content-Disposition": 'attachment; filename="seller-analytics-plugin.zip"',
+        "Cache-Control": "no-store"})

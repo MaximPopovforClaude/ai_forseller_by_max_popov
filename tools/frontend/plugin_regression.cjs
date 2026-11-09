@@ -10,9 +10,9 @@ const match = (pattern, url) => new RegExp('^' + pattern.replace(/[.+?^${}()|[\]
 const search = 'https://www.wildberries.ru/catalog/0/search.aspx?search=tea';
 const product = 'https://www.wildberries.ru/catalog/123/detail.aspx';
 
-function background() {
+function background(options = {}) {
   const events = {}, registrations = [], calls = [], writes = [], gets = [], stored = {
-    rec: {start: Date.now(), items: [], byId: {}, page: 'fixture'}, auth: {}, token: 'fixture-plugin-token'
+    rec: {start: Date.now(), items: [], byId: {}, page: 'fixture'}, auth: {}, token: 'fixture-plugin-token', token_origin: 'https://plugin.test'
   };
   const listeners = {};
   const event = name => ({addListener(callback, filter, extra = []) {
@@ -28,7 +28,7 @@ function background() {
       insertCSS: async spec => { calls.push(spec); }
     },
     storage: Object.fromEntries(['session', 'local'].map(name => [name, {
-      get: async key => ({[key]: stored[key]}),
+      get: async key => Object.fromEntries((Array.isArray(key) ? key : [key]).map(k => [k, stored[k]])),
       set: async data => { writes.push(data); Object.assign(stored, data); },
       remove: async key => { delete stored[key]; }
     }])),
@@ -39,14 +39,14 @@ function background() {
     setTimeout: () => 1, clearTimeout() {},
     fetch: async (url, options) => {fetches.push({url, options}); return {ok: true, status: 200, json: async () => ({ok: true})};}
   });
-  vm.runInContext(read('bg.js'), context);
+  vm.runInContext(read('bg.js').replace(/^const API = .*?;/m, 'const API = ' + JSON.stringify(options.origin || 'https://plugin.test') + ';'), context);
   const request = async (name, d) => {
     for (const r of registrations.filter(r => r.name === name)) {
       if (r.filter.urls.some(p => match(p, d.url)) && (!r.filter.types || r.filter.types.includes(d.type))) await r.callback(d);
     }
   };
   const message = (body, sender = {}) => new Promise(resolve => events.message(body, sender, resolve));
-  return {chrome, events, registrations, calls, writes, gets, stored, request, message, fetches};
+  return {chrome, events, registrations, calls, writes, gets, stored, request, message, fetches, context};
 }
 
 function storefront(initialPath) {
@@ -108,7 +108,7 @@ if (require.main === module) (async () => {
   }
   assert.equal(b.writes.length, before); assert.equal(b.stored.rec.items.length, 1);
   const upload = await b.message({type: 'upload', path: '/api/plugin/entry/0', b64: btoa('fixture-xlsx')});
-  assert.equal(upload.ok, true); assert.equal(b.fetches.at(-1).url, 'https://platform.example.org/api/plugin/entry/0');
+  assert.equal(upload.ok, true); assert.equal(b.fetches.at(-1).url, 'https://plugin.test/api/plugin/entry/0');
   // Searching never injects code or styles; a product opened via SPA does.
   b.chrome.currentUrl = search;
   b.events.tab(1, {url: search}, {url: search}); await flush();

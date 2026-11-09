@@ -38,18 +38,44 @@ chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
   })();
 });
 
-async function token() { return (await chrome.storage.local.get("token")).token || ""; }
+async function token() {
+  const saved = await chrome.storage.local.get(["token", "token_origin"]);
+  return saved.token_origin === API && typeof saved.token === "string" ? saved.token : "";
+}
 
-async function api(path, { method = "GET", body } = {}) {
+function serviceOrigin() {
+  try {
+    const u = new URL(API);
+    if (u.protocol !== "https:" || u.username || u.password || u.origin !== API ||
+        /(^|\.)(example\.(org|com|net)|localhost)$/.test(u.hostname)) return null;
+    return u.origin;
+  } catch { return null; }
+}
+async function serviceRequest(path, options = {}, timeout = 15000) {
+  const site = serviceOrigin();
+  if (!site) return {ok: false, status: 0, error: "platform_not_configured", data: {detail:
+    "Плагин не настроен на ваш сайт. Скачайте новый архив в разделе «Плагин Chrome» своей платформы и обновите расширение."}};
+  if (typeof path !== "string" || !path.startsWith("/api/plugin/") || /[\\\x00-\x20]/.test(path) || new URL(path, site).origin !== site || !new URL(path, site).pathname.startsWith("/api/plugin/"))
+    return {ok: false, status: 0, data: {detail: "Недопустимый запрос плагина."}};
   const t = await token();
-  if (!t) return { ok: false, status: 0, data: { detail: "Плагин не подключён: введите код в окне плагина" } };
-  const r = await fetch(API + path, {
-    method, headers: { Authorization: "Bearer " + t, ...(body ? { "Content-Type": "application/json" } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  let data = null;
-  try { data = await r.json(); } catch { data = null; }
-  return { ok: r.ok, status: r.status, data };
+  if (!t) return {ok: false, status: 0, data: {detail: "Введите код заново для " + site + ". Код из другой установки не подходит."}};
+  try {
+    const r = await fetch(site + path, {...options, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(timeout),
+      headers: {...(options.headers || {}), Authorization: "Bearer " + t}});
+    let data = null;
+    try { data = await r.json(); } catch {}
+    if (r.status === 401) return {ok: false, status: 401, data: {detail: "Код плагина не принят. Получите новый код на " + site + " в нужном кабинете."}};
+    if (!data || typeof data !== "object") return {ok: false, status: r.status, error: "service_response", data: {detail:
+      "Сайт " + site + " ответил не как платформа (HTTP " + r.status + "). Проверьте адрес и настройку HTTPS-прокси."}};
+    return {ok: r.ok, status: r.status, data};
+  } catch {
+    return {ok: false, status: 0, error: "service_network", data: {detail:
+      "Нет соединения с " + site + ". Проверьте, открывается ли этот сайт, HTTPS и доступ расширения к нему. После обновления файлов перезагрузите плагин."}};
+  }
+}
+async function api(path, { method = "GET", body } = {}) {
+  return serviceRequest(path, {method, headers: body ? {"Content-Type": "application/json"} : {},
+    body: body ? JSON.stringify(body) : undefined});
 }
 
 // ── запись запросов кабинета продавца (включает пользователь; заголовки и cookie не берём) ──
@@ -176,13 +202,8 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     await ready;
     if (m.type === "api") return reply(await api(m.path, m));
     if (m.type === "upload") {            // файл из кабинета (base64) → seller-analytics
-      const t = await token();
-      if (!t) return reply({ ok: false, status: 0, data: { detail: "Плагин не подключён" } });
       const bin = Uint8Array.from(atob(m.b64), (ch) => ch.charCodeAt(0));
-      const r = await fetch(API + m.path, { method: "POST", headers: { Authorization: "Bearer " + t, "Content-Type": "application/octet-stream" }, body: bin });
-      let data = null;
-      try { data = await r.json(); } catch { data = null; }
-      return reply({ ok: r.ok, status: r.status, data });
+      return reply(await serviceRequest(m.path, {method: "POST", headers: {"Content-Type": "application/octet-stream"}, body: bin}, 120000));
     }
     if (m.type === "rec_start") {
       rec = { start: Date.now(), page: m.page || "", items: [], byId: {} };
