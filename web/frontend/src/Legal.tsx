@@ -43,7 +43,7 @@ export function LegalPage() {
   const doc = window.location.pathname.match(/^\/legal\/(offer|privacy)/)?.[1] || "offer";
   const [d, setD] = useState<Doc | null>(null);
   const [err, setErr] = useState("");
-  useEffect(() => { http.get<Doc>(`/api/public/legal/${doc}`).then((x) => { setD(x); document.title = `${x.title} · Seller Analytics`; }).catch((e) => setErr(e.message)); }, [doc]);
+  useEffect(() => { http.get<Doc>(`/api/public/legal/${doc}`).then((x) => { setD(x); document.title = `${x.title} · AI-100metric`; }).catch((e) => setErr(e.message)); }, [doc]);
   return (
     <div className="legal">
       <a href="/"><Logo kind="horizontal" height={30} /></a>

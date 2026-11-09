@@ -22,7 +22,7 @@ from .tabs import BY_KEY, OZ_TABS, TABS, YM_TABS, tabs_for
 DIST = Path(__file__).resolve().parents[1] / "web" / "frontend" / "dist"
 COOKIE = "ais_session"
 
-app = FastAPI(title="Seller Analytics", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title="AI-100metric", docs_url=None, redoc_url=None, openapi_url=None)
 
 from fastapi.middleware.gzip import GZipMiddleware  
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)

@@ -1,5 +1,12 @@
 # AI for Seller by Max Popov
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="web/frontend/public/brand/ai-100metric-horizontal-dark.svg">
+  <img src="web/frontend/public/brand/ai-100metric-horizontal-light.svg" alt="AI-100metric by Max Popov" width="448">
+</picture>
+
+Публичная версия сохраняет оригинальные логотипы **AI-100metric by Max Popov** во всех существующих местах интерфейса. При установке и обновлении сохраняйте их и подпись автора; подробности — [айдентика платформы](docs/BRANDING.md).
+
 Исходники платформы аналитики: Python/FastAPI, PostgreSQL, React/TypeScript. Данные поступают из ваших API маркетплейсов. Установка начинается с пустой базы; пользователь, магазины, ключи и история создаются на вашем сервере.
 
 **Автор проекта — Максим Попов. Подписывайтесь на [Telegram-канал «Максим Попов. Система и масштабирование на МП»](https://t.me/maxim_popov_wb).** В канале — опыт работы на Wildberries и Ozon, управление командой и развитие бизнеса на маркетплейсах.

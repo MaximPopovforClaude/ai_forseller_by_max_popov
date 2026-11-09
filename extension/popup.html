@@ -11,7 +11,7 @@
   section { border-top: 1px solid #e5e7eb; margin-top: 10px; padding-top: 8px; }
 </style></head>
 <body>
-  <h1>seller-analytics — аналитика WB</h1>
+  <h1><img src="brand.svg" width="280" alt="AI-100metric by Max Popov" /></h1>
   <div id="who" class="hint">Проверяю…</div>
   <section id="login">
     <div class="hint">Код плагина: platform.example.org → «Аккаунт» → «Плагин Chrome» → «Получить код».</div>
@@ -21,7 +21,7 @@
   <section>
     <b>Точки входа — автоскачивание</b>
     <div class="hint">Когда открыт кабинет продавца WB, плагин раз в час проверяет и скачивает отчёт «Точки входа» за каждый день
-      (вчера и до 30 дней назад, по 7 дней за раз) и загружает в seller-analytics → «Точки входа». Качает из того кабинета, который сейчас выбран в WB.</div>
+      (вчера и до 30 дней назад, по 7 дней за раз) и загружает в AI-100metric → «Точки входа». Качает из того кабинета, который сейчас выбран в WB.</div>
     <label class="hint"><input type="checkbox" id="auto"> скачивать автоматически</label><br>
     <button id="now" class="pri">Скачать сейчас</button>
     <div id="nowst" class="hint"></div>
@@ -30,7 +30,7 @@
     <b>Запись запросов кабинета (для настройки)</b>
     <div class="hint">Откройте кабинет продавца → «Аналитика» → «Точки входа». Нажмите «Начать запись», скачайте отчёт как обычно
       (за любой период), затем «Готово». Плагин запишет только адреса запросов кабинета — без паролей, cookie и заголовков — и отправит
-      в seller-analytics, чтобы мы настроили автоскачивание. Запись сама остановится через 10 минут.</div>
+      в AI-100metric, чтобы мы настроили автоскачивание. Запись сама остановится через 10 минут.</div>
     <button id="rec" class="pri">Начать запись</button> <button id="stop">Готово</button>
     <div id="recst" class="hint"></div>
   </section>

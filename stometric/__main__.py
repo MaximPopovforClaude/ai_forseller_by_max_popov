@@ -1,4 +1,4 @@
-"""Командная строка Seller Analytics.
+"""Командная строка AI-100metric.
 
   python -m stometric migrate
   python -m stometric account-add <name> <TOKEN_ENV> [заголовок]

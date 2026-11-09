@@ -42,7 +42,7 @@ function Landing() {
         <li>📊 Наглядно: лучшее и худшее значение в каждой строке, динамика к прошлому периоду.</li>
         <li>🔎 Поисковые запросы: где конкуренты выше вас и по каким запросам забирают переходы.</li>
         <li>🤝 Обмен: откройте свои сравнения — и смотрите чужие по любому артикулу (2 чужих за каждое своё).</li>
-        <li>🤖 Клиентам Seller Analytics — ИИ-разбор сравнения.</li>
+        <li>🤖 Клиентам AI-100metric — ИИ-разбор сравнения.</li>
       </ul>
       <form className="cmp-login" onSubmit={async (e) => { e.preventDefault(); setErr("");
         try { await api.login(email, pw); window.location.reload(); } catch (x) { setErr((x as Error).message === "401" ? "Неверный логин или пароль" : (x as Error).message); } }}>
@@ -185,7 +185,7 @@ function Viewer({ id, onBack }: { id: number; onBack: () => void }) {
         {ai ? <pre className="cmp-ai">{ai}</pre> : c.client
           ? <button disabled={aiBusy} onClick={() => { setAiBusy(true); http.post<{ ai_text: string }>(`/api/compare/${id}/ai`).then((x) => setAi(x.ai_text))
             .catch((e) => setAiErr(e.message)).finally(() => setAiBusy(false)); }}>{aiBusy ? "Разбираю… (до минуты)" : "Сделать ИИ-разбор"}</button>
-          : <div className="hint">Доступно клиентам Seller Analytics: подключите магазин WB — и нейросеть разберёт, где вы проигрываете и что сделать.</div>}
+          : <div className="hint">Доступно клиентам AI-100metric: подключите магазин WB — и нейросеть разберёт, где вы проигрываете и что сделать.</div>}
         {aiErr && <div className="err">{aiErr}</div>}
       </div>
       <div className="board-bar">

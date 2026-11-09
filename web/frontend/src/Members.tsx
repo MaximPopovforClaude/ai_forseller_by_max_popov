@@ -130,13 +130,13 @@ export function InvitePage({ tok, onDone }: { tok: string; onDone: () => void })
         if (!info?.has_account && pw !== pw2) { setErr("Пароли не совпадают"); return; }
         try { await api.acceptInvite(tok, pw, name); go(); } catch (x) { setErr((x as Error).message === "401" ? "Неверный пароль" : (x as Error).message); }
       }}>
-        <h1>Seller Analytics</h1>
+        <h1>AI-100metric</h1>
         {!info && !err && <div className="hint">Проверяю приглашение…</div>}
         {info && <>
           <div>Вас пригласили в кабинет <b>«{info.workspace}»</b> с ролью <b>{info.role}</b>.</div>
           <div className="hint">Логин: {info.email}</div>
           {info.has_account ? (
-            <input type="password" placeholder="Ваш пароль от Seller Analytics" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus />
+            <input type="password" placeholder="Ваш пароль от AI-100metric" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus />
           ) : <>
             <input placeholder="Как вас зовут" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
             <input type="password" placeholder="Придумайте пароль (от 10 символов)" value={pw} onChange={(e) => setPw(e.target.value)} />

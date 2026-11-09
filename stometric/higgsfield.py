@@ -38,7 +38,7 @@ def _client_id(c) -> str:
     r = c.execute("SELECT value FROM app_settings WHERE key='hf_oauth_client'").fetchone()
     if r:
         return _j(r["value"])["client_id"]
-    d = httpx.post(f"{AUTH}/register", json={"client_name": "platform.example.org Seller Analytics", "redirect_uris": [REDIRECT],
+    d = httpx.post(f"{AUTH}/register", json={"client_name": "platform.example.org AI-100metric", "redirect_uris": [REDIRECT],
                                                "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"],
                                                "token_endpoint_auth_method": "none", "scope": SCOPE}, timeout=30).json()
     c.execute("INSERT INTO app_settings(key,value) VALUES ('hf_oauth_client',%s)", (json.dumps({"client_id": d["client_id"]}),))

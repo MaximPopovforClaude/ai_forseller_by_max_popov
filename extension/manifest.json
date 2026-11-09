@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Seller Analytics · WB",
+  "name": "AI-100metric by Max Popov · WB",
   "version": "0.2.8",
   "minimum_chrome_version": "106",
   "description": "Данные сервиса platform.example.org прямо на Wildberries: полки, наши товары, отчёты из кабинета продавца.",
@@ -18,7 +18,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "seller-analytics"
+    "default_title": "AI-100metric by Max Popov"
   },
   "content_scripts": [
     {

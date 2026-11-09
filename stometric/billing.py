@@ -115,7 +115,7 @@ def checkout(c, user: dict, ws_id: int, plan_key: str, months: int, promo: str |
             res = _yk("POST", "/payments", {
                 "amount": {"value": f"{q['amount']:.2f}", "currency": "RUB"}, "capture": True,
                 "confirmation": {"type": "redirect", "return_url": f"{SITE}/?paid={pay['id']}"},
-                "description": f"Seller Analytics: тариф «{q['title']}», {q['months']} мес. (кабинет {ws_id})",
+                "description": f"AI-100metric: тариф «{q['title']}», {q['months']} мес. (кабинет {ws_id})",
                 "metadata": {"payment_id": pay["id"]}}, idem=str(uuid.uuid4()))
         except (urllib.error.URLError, KeyError) as e:
             c.execute("UPDATE payments SET status='canceled' WHERE id=%s", (pay["id"],))

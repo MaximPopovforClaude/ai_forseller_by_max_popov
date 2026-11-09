@@ -1,4 +1,4 @@
-"""Telegram-боты Seller Analytics (один процесс, systemd ai-stometric-bots.service).
+"""Telegram-боты AI-100metric (один процесс, systemd ai-stometric-bots.service).
 
 - Бот регистрации (TG_BOT_REGISTER_TOKEN): /start → e-mail → аккаунт + личный кабинет + Telegram привязан → одноразовая ссылка
   на сайт «задать пароль»; уже зарегистрированному — ссылка для входа. Чужой e-mail к Telegram не привязываем (только через сайт).
@@ -67,7 +67,7 @@ def handle_register(bot: Bot, m: dict):
                 return
             link = new_token(c, u["id"], "login" if u["password_hash"] else "set_password", 1 if u["password_hash"] else 24)
             what = "войти" if u["password_hash"] else "задать пароль и войти"
-            bot.send(tg, f"Вы уже зарегистрированы: <b>{html.escape(u['email'])}</b>.\n\nСсылка, чтобы {what} в Seller Analytics "
+            bot.send(tg, f"Вы уже зарегистрированы: <b>{html.escape(u['email'])}</b>.\n\nСсылка, чтобы {what} в AI-100metric "
                          f"(одноразовая, {'1 час' if u['password_hash'] else '24 часа'}):\n{link}")
             return
         if text.startswith("/start") or text.startswith("/"):
@@ -81,10 +81,10 @@ def handle_register(bot: Bot, m: dict):
             if legal.get(c)["ready"]:
                 c.execute("UPDATE reg_dialog SET step='terms' WHERE telegram_id=%s", (tg,))
                 c.commit()
-                bot.send(tg, "👋 Это <b>Seller Analytics</b> — аналитика магазина Wildberries и Ozon: все таблицы и графики по API.")
+                bot.send(tg, "👋 Это <b>AI-100metric</b> — аналитика магазина Wildberries и Ozon: все таблицы и графики по API.")
                 _terms_prompt(bot, tg)
                 return
-            bot.send(tg, "👋 Это <b>Seller Analytics</b> — аналитика магазина Wildberries: все таблицы и графики по API WB.\n\n"
+            bot.send(tg, "👋 Это <b>AI-100metric</b> — аналитика магазина Wildberries: все таблицы и графики по API WB.\n\n"
                          "Для регистрации напишите ваш <b>e-mail</b> — он будет логином на сайте.")
             return
         lg = legal.get(c)
@@ -127,7 +127,7 @@ def handle_register(bot: Bot, m: dict):
                      "2) В «Настройках аккаунта» → «+ Добавить магазин» вставьте ключ API WB — данные начнут загружаться сами."
                      + (f"\n\n3) Помощник Стометрик, утренняя сводка и предупреждения: откройте @{bn} и нажмите «Start»."
                         if (bn := assistant_username(c) or notifier().username) else ""))
-        notify_admins(c, f"🆕 Регистрация в Seller Analytics: {html.escape(email)} ({html.escape(name or '—')})"
+        notify_admins(c, f"🆕 Регистрация в AI-100metric: {html.escape(email)} ({html.escape(name or '—')})"
                          + (" — по реферальной ссылке" if ref_by else ""))
 
 
@@ -283,7 +283,7 @@ def handle_notify(bot: Bot, m: dict):
         if text.startswith("/summary") or text == "сводка":
             send_daily(c, uid, tg, force=True)
             return
-        bot.send(tg, "🔔 Уведомления Seller Analytics подключены.\n\n"
+        bot.send(tg, "🔔 Уведомления AI-100metric подключены.\n\n"
                      f"• Утренняя сводка: {'в ' + s['daily_time'].strftime('%H:%M') + ' МСК' if s['daily'] else 'выключена'}\n"
                      f"• Предупреждения: {'включены' if s['alerts'] else 'выключены'}\n\n"
                      "Команды: /summary — сводка сейчас, /stop — выключить. Настройки — на сайте в «Настройках аккаунта».")
@@ -614,7 +614,7 @@ def _link_user(bot: Bot, c, tg: int, text: str) -> int | None:
         return r["user_id"]
     u = c.execute("SELECT id FROM users WHERE telegram_id=%s AND is_active", (tg,)).fetchone()
     if not u:
-        bot.send(tg, "Этот Telegram пока не привязан к аккаунту Seller Analytics. Откройте " + SITE +
+        bot.send(tg, "Этот Telegram пока не привязан к аккаунту AI-100metric. Откройте " + SITE +
                      " → «Настройки аккаунта» → «Подключить Telegram».")
         return None
     return u["id"]

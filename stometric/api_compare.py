@@ -261,7 +261,7 @@ def delete(cid: int, u=Depends(current_user), c=Depends(conn)):
     return {"ok": True}
 
 
-AI_RULES = """Ты аналитик Wildberries в сервисе Seller Analytics. Ниже — отчёт WB «Сравнение карточек» (JSON): метрики 2–5 карточек за период
+AI_RULES = """Ты аналитик Wildberries в сервисе AI-100metric. Ниже — отчёт WB «Сравнение карточек» (JSON): метрики 2–5 карточек за период
 и прошлый период, и поисковые запросы (частотность, позиция, переходы, корзины, заказы по каждой карточке). {ours}
 Напиши по-русски, коротко, без markdown и длинного тире: 1) кто сильнее и почему (воронка: показы → CTR → корзина → заказ → выкуп, цена,
 рейтинг, отзывы, позиция); 2) {weak}; 3) поисковые запросы: где конкуренты выше и забирают переходы,
@@ -363,7 +363,7 @@ def ai(cid: int, u=Depends(current_user), c=Depends(conn)):
                                                          (u["id"], cid)).fetchone()):
         raise HTTPException(404, "Сравнение не найдено")
     if not _is_client(c, u):
-        raise HTTPException(403, "ИИ-разбор по сравнению — для клиентов Seller Analytics: подключите магазин в «Настройках аккаунта»")
+        raise HTTPException(403, "ИИ-разбор по сравнению — для клиентов AI-100metric: подключите магазин в «Настройках аккаунта»")
     key = _user_key(c, u)
     if not key:
         plans = {w["plan"] for w in auth.workspaces_for(c, u)}

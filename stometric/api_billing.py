@@ -64,7 +64,7 @@ def billing_checkout(ws_id: int, body: QuoteIn, u=Depends(current_user), c=Depen
     if res.get("manual"):
         try:
             from .bots import notify_admins
-            notify_admins(c, f"💳 Заявка на оплату Seller Analytics: {u['email']}, тариф {body.plan}, {body.months} мес. (платёж №{res['payment_id']})")
+            notify_admins(c, f"💳 Заявка на оплату AI-100metric: {u['email']}, тариф {body.plan}, {body.months} мес. (платёж №{res['payment_id']})")
         except Exception:  
             pass
     return res

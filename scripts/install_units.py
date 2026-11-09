@@ -19,11 +19,11 @@ specs = {
     'shelves': (f'{python} -m stometric.shelves', True),
 }
 for name, (command, once) in specs.items():
-    text = f'[Unit]\nDescription=Seller Analytics {name}\nAfter=network-online.target\n\n[Service]\nWorkingDirectory={root}\nEnvironment=PYTHONPATH={root}\nExecStart={command}\n'
+    text = f'[Unit]\nDescription=AI-100metric {name}\nAfter=network-online.target\n\n[Service]\nWorkingDirectory={root}\nEnvironment=PYTHONPATH={root}\nExecStart={command}\n'
     text += 'Type=oneshot\nTimeoutStartSec=6h\n' if once else 'Restart=on-failure\nRestartSec=10\n'
     text += '\n[Install]\nWantedBy=default.target\n'
     (units / f'ai-stometric-{name}.service').write_text(text)
 for name, when in {'collect': '*:0/10', 'aitasks': '*:0/10', 'precompute': '*-*-* 03:30:00 UTC',
                    'showcase': '*:0/30', 'shelves': '*-*-* 23:00:00 UTC'}.items():
-    (units / f'ai-stometric-{name}.timer').write_text(f'[Unit]\nDescription=Seller Analytics {name}\n\n[Timer]\nOnCalendar={when}\nPersistent=false\n\n[Install]\nWantedBy=timers.target\n')
+    (units / f'ai-stometric-{name}.timer').write_text(f'[Unit]\nDescription=AI-100metric {name}\n\n[Timer]\nOnCalendar={when}\nPersistent=false\n\n[Install]\nWantedBy=timers.target\n')
 print('Units installed. Review them, then run systemctl --user daemon-reload. No services were started.')

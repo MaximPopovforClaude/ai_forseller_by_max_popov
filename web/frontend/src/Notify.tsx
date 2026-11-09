@@ -87,7 +87,7 @@ export function MagicPage({ tok, onDone }: { tok: string; onDone: () => void }) 
         if (pw !== pw2) { setErr("Пароли не совпадают"); return; }
         try { await api.magicUse(tok, pw); window.history.replaceState(null, "", "/"); onDone(); } catch (x) { setErr((x as Error).message); }
       }}>
-        <h1>Seller Analytics</h1>
+        <h1>AI-100metric</h1>
         {!info && !err && <div className="hint">Проверяю ссылку…</div>}
         {info?.purpose === "login" && !err && <div className="hint">Входим…</div>}
         {info?.purpose === "set_password" && <>
