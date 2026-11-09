@@ -4,10 +4,10 @@ import base64
 import json
 from datetime import datetime, timezone
 
-import httpx
 from cryptography.fernet import Fernet
 
 from . import config
+from .wb_probe import PING, verify
 
 MASTER = "AIS_MASTER_KEY"
 
@@ -15,8 +15,6 @@ SCOPES = {1: "Контент", 2: "Аналитика", 3: "Цены и скид
           7: "Вопросы и отзывы", 9: "Чат с покупателями", 10: "Поставки", 11: "Возвраты покупателями", 12: "Документы",
           13: "Финансы", 16: "Пользователи", 30: "Только чтение"}
 NEED = ["Контент", "Аналитика", "Цены и скидки", "Статистика", "Продвижение", "Финансы"]   
-PING = {"Статистика": "https://statistics-api.wildberries.ru/ping", "Контент": "https://content-api.wildberries.ru/ping",
-        "Аналитика": "https://seller-analytics-api.wildberries.ru/ping", "Финансы": "https://finance-api.wildberries.ru/ping"}
 
 
 def _fernet() -> Fernet:
@@ -53,17 +51,8 @@ def info(token: str) -> dict:
 
 
 def ping(token: str) -> str | None:
-    """Проверка ключа запросом к WB (GET /ping, только чтение). None — ок, иначе текст ошибки."""
-    for name, url in PING.items():
-        try:
-            r = httpx.get(url, headers={"Authorization": token.strip()}, timeout=15)
-        except httpx.HTTPError as e:
-            return f"WB не ответил ({name}): {type(e).__name__}"
-        if r.status_code == 401:
-            return f"WB не принял ключ (раздел «{name}»: 401) — ключ отозван или «Базовый»"
-        if r.status_code >= 500:
-            return f"WB временно недоступен ({name}: {r.status_code}) — попробуйте позже"
-    return None
+    """Compatibility wrapper; callers needing partial-result warnings use verify."""
+    return verify(token).get("error")
 
 
 def token_for(c, account: dict) -> str:

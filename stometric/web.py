@@ -379,9 +379,10 @@ def _check_token(token: str) -> dict:
     inf = vault.info(token)
     if inf.get("error"):
         raise HTTPException(400, inf["error"])
-    err = vault.ping(token)
-    if err:
-        raise HTTPException(400, err)
+    report = vault.verify(token)
+    if report.get("error"):
+        raise HTTPException(report["error_status"], report["error"])
+    inf["connection_check"] = report
     return inf
 
 
@@ -425,7 +426,7 @@ def add_shop(ws_id: int, body: ShopIn, u=Depends(current_user), c=Depends(conn))
     _audit(c, u, ws_id, "shop/add", {"shop": acc["id"], "title": title, "seller_oid": oid, "exp": str(inf.get("exp"))})
     c.commit()
     started = _start_first_load(name)
-    return {"ok": True, "shop_id": acc["id"], "first_load": started}
+    return {"ok": True, "shop_id": acc["id"], "first_load": started, "warnings": inf["connection_check"]["warnings"]}
 
 
 def _add_ozon(c, u, ws_id: int, title: str, body: ShopIn):
@@ -533,7 +534,7 @@ def replace_token(shop_id: int, body: TokenIn, u=Depends(current_user), c=Depend
     c.execute("UPDATE accounts SET seller_oid=COALESCE(seller_oid,%s) WHERE id=%s", (inf.get("seller_oid"), shop_id))
     _audit(c, u, acc["workspace_id"], "shop/token", {"shop": shop_id, "exp": str(inf.get("exp"))})
     c.commit()
-    return {"ok": True}
+    return {"ok": True, "warnings": inf["connection_check"]["warnings"]}
 
 
 class AdTokenIn(BaseModel):

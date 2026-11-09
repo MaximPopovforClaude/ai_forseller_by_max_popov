@@ -15,6 +15,7 @@ export function Shops({ w, reload, onShopsChanged }: { w: WorkspaceInfo; reload:
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [repl, setRepl] = useState<number | null>(null);
   const [newTok, setNewTok] = useState("");
   const [mp, setMp] = useState<"wb" | "ozon" | "ym">("wb");
@@ -44,6 +45,7 @@ export function Shops({ w, reload, onShopsChanged }: { w: WorkspaceInfo; reload:
       <b>Магазины кабинета</b>
       {err && <div className="err">{err}</div>}
       {ok && <div className="ok">{ok}</div>}
+      {warnings.map(message => <div key={message} className="disclaimer" role="status">⚠️ {message}</div>)}
       <table className="acc-t">
         <thead><tr><th>Магазин</th><th>Площадка</th><th>Статус</th>{isAdmin && <th>Ключ API</th>}{isAdmin && <th />}</tr></thead>
         <tbody>{w.shops.map((s) => (
@@ -55,8 +57,8 @@ export function Shops({ w, reload, onShopsChanged }: { w: WorkspaceInfo; reload:
             {isAdmin && <td className="acts">
               {repl === s.id ? <>
                 <input type="password" className="tok-in" placeholder={s.marketplace === "ozon" ? "Новый Api-Key Ozon" : s.marketplace === "ym" ? "Новый Api-Key Маркета" : "Новый ключ API"} value={newTok} onChange={(e) => setNewTok(e.target.value)} autoComplete="off" />
-                <button className="pri" disabled={busy || newTok.length < 20} onClick={() => { setBusy(true); setErr("");
-                  api.replaceToken(s.id, newTok).then(() => { setOk("Ключ заменён"); setRepl(null); setNewTok(""); reload(); })
+                <button className="pri" disabled={busy || newTok.length < 20} onClick={() => { setBusy(true); setErr(""); setOk(""); setWarnings([]);
+                  api.replaceToken(s.id, newTok).then((r) => { setOk("Ключ заменён"); setWarnings(r.warnings || []); setRepl(null); setNewTok(""); reload(); })
                     .catch((e) => setErr(e.message)).finally(() => setBusy(false)); }}>{busy ? "Проверяю…" : "Сохранить"}</button>
                 <button onClick={() => { setRepl(null); setNewTok(""); }}>Отмена</button>
               </> : adRepl === s.id ? <>
@@ -101,10 +103,11 @@ export function Shops({ w, reload, onShopsChanged }: { w: WorkspaceInfo; reload:
             Ключ хранится зашифрованным и больше нигде не показывается.
           </div>}
           <div className="acc-row"><span />
-            <button className="pri" disabled={busy || !title.trim() || token.length < 20 || (mp === "ozon" && (!clientId || !adId !== !adSecret))} onClick={() => { setBusy(true); setErr("");
+            <button className="pri" disabled={busy || !title.trim() || token.length < 20 || (mp === "ozon" && (!clientId || !adId !== !adSecret))} onClick={() => { setBusy(true); setErr(""); setOk(""); setWarnings([]);
               api.addShop(w.id, { title, token, marketplace: mp, client_id: mp === "ozon" ? clientId : undefined,
                 ad_client_id: mp === "ozon" && adId ? adId : undefined, ad_client_secret: mp === "ozon" && adSecret ? adSecret : undefined }).then((r) => {
                 setOk(r.first_load ? "Магазин добавлен — грузим историю (обычно около часа); таблицы наполняются по ходу." : "Магазин добавлен — история догрузится автосбором в течение пары часов.");
+                setWarnings(r.warnings || []);
                 setAdding(false); setTitle(""); setToken(""); setClientId(""); setAdId(""); setAdSecret(""); reload(); onShopsChanged();
               }).catch((e) => setErr(e.message)).finally(() => setBusy(false)); }}>{busy ? "Проверяю ключ…" : "Добавить"}</button>
             <button onClick={() => { setAdding(false); setToken(""); setAdId(""); setAdSecret(""); }}>Отмена</button>

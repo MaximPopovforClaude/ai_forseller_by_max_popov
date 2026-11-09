@@ -113,9 +113,9 @@ export const api = {
   acceptInvite: (tok: string, password: string, name: string) =>
     req(`/api/invites/${tok}/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password, name }) }),
   addShop: (ws: number, v: { title: string; token: string; marketplace: string; client_id?: string; ad_client_id?: string; ad_client_secret?: string }) =>
-    req<{ ok: boolean; shop_id: number; first_load: boolean }>(`/api/workspaces/${ws}/shops`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(v) }),
+    req<{ ok: boolean; shop_id: number; first_load: boolean; warnings?: string[] }>(`/api/workspaces/${ws}/shops`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(v) }),
   replaceToken: (shop: number, token: string) =>
-    req(`/api/shops/${shop}/token`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }),
+    req<{ ok: boolean; warnings?: string[] }>(`/api/shops/${shop}/token`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }),
   replaceAdToken: (shop: number, client_id: string, client_secret: string) =>
     req<{ ok: boolean; campaigns: number; running: number }>(`/api/shops/${shop}/ad_token`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_id, client_secret }) }),
   magicInfo: (tok: string) => req<{ email: string; purpose: "set_password" | "login" }>(`/api/auth/magic/${tok}`),
