@@ -6,6 +6,7 @@ network reachability only; this diagnostic cannot validate a shop key.
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
+import time
 
 import httpx
 
@@ -14,28 +15,43 @@ PING = {"Статистика": "https://statistics-api.wildberries.ru/ping",
         "Аналитика": "https://seller-analytics-api.wildberries.ru/ping",
         "Финансы": "https://finance-api.wildberries.ru/ping"}
 TIMEOUT = httpx.Timeout(4.0, connect=3.0)
+RETRY_DELAY = 0.25
+
+RETRY_WINDOW = 7.0
 
 
 def check_one(item, token=None):
     name, url = item
-    try:
-        response = httpx.get(url, headers={"Authorization": token.strip()} if token else {},
-                             timeout=TIMEOUT, follow_redirects=False)
-    except httpx.TimeoutException:
-        return {"section": name, "state": "unavailable", "reason": "timeout"}
-    except httpx.HTTPError:
-        return {"section": name, "state": "unavailable", "reason": "connection_error"}
+    started = time.monotonic()
+    for attempt in (1, 2):
+        row = {"section": name, "attempts": attempt}
+        try:
+            response = httpx.get(url, headers={"Authorization": token.strip()} if token else {},
+                                 timeout=TIMEOUT, follow_redirects=False)
+        except (httpx.ConnectTimeout, httpx.ConnectError) as exc:
+
+            if attempt == 1 and time.monotonic() - started + RETRY_DELAY + TIMEOUT.connect <= RETRY_WINDOW:
+                time.sleep(RETRY_DELAY)
+                if time.monotonic() - started + TIMEOUT.connect <= RETRY_WINDOW:
+                    continue
+            return {**row, "state": "unavailable", "stage": "connect",
+                    "reason": "timeout" if isinstance(exc, httpx.ConnectTimeout) else "connection_error"}
+        except httpx.TimeoutException:
+            return {**row, "state": "unavailable", "reason": "timeout"}
+        except httpx.HTTPError:
+            return {**row, "state": "unavailable", "reason": "connection_error"}
+        break
     code = response.status_code
     if code in (401, 403):
-        return {"section": name, "state": "denied", "http_status": code}
+        return {**row, "state": "denied", "http_status": code}
     if code == 200:
         try:
             data = response.json()
         except ValueError:
             data = None
         if isinstance(data, dict) and str(data.get("Status", data.get("status", ""))).upper() == "OK":
-            return {"section": name, "state": "ok", "http_status": code}
-    return {"section": name, "state": "unavailable", "reason": "rate_limit" if code == 429 else "unexpected_response",
+            return {**row, "state": "ok", "http_status": code}
+    return {**row, "state": "unavailable", "reason": "rate_limit" if code == 429 else "unexpected_response",
             "http_status": code}
 
 
