@@ -60,7 +60,7 @@ def models(c, shop: int, uid: int | None = None) -> list[dict]:
     if personal:
         ready = vip.available(c, shop)
         options.append({"id": vip.MODEL_ID, **MODELS[vip.MODEL_ID], "ready": ready,
-                        "why": None if ready else VIP_UNAVAILABLE, "default": ready})
+                        "why": None if ready else VIP_UNAVAILABLE, "default": True})
     for model_id, model in MODELS.items():
         if model_id == vip.MODEL_ID or (personal and model_id in PAID_GPT_MODELS):
             continue

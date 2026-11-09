@@ -204,6 +204,12 @@ class ScopeSQLTests(unittest.TestCase):
         with patch.object(visual_render.hf,'connected',return_value=False),patch.object(visual_render.oi,'connected',return_value=False):
             models=visual_render.models(self.c,self.shop,self.uid)
             self.assertTrue(next(x for x in models if x['id']==vip.MODEL_ID)['default'])
+            with patch.object(vip,'available',return_value=False):
+                unavailable=next(x for x in visual_render.models(self.c,self.shop,self.uid) if x['id']==vip.MODEL_ID)
+                self.assertTrue(unavailable['default'])
+                self.assertFalse(unavailable['ready'])
+                with self.assertRaises(visual_render.RenderError):visual_render.selected(self.c,self.shop,[vip.MODEL_ID],self.uid)
+
             self.assertNotIn(vip.MODEL_ID,[x['id'] for x in visual_render.models(self.c,self.cs,self.uid)])
     def test_four_analysis_stages_use_scoped_subscription(self):
         self.configure();key=owner.key_for(self.c,self.shop,self.uid)

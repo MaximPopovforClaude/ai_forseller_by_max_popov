@@ -13,11 +13,14 @@ export function estimateText(e: RenderEstimate): string {
   ).join("\n");
 }
 
-/** An explicit choice (including clearing all boxes) survives catalog refreshes. */
+/** Keep explicit choices within one route; adopting VIP selects its server Codex. */
 export function useRenderSelection(scope: string, models?: RenderModel[]): [string[], (ids: string[]) => void] {
-  const [choice, setChoice] = useState<{scope: string; ids: string[]} | null>(null);
-  const ids = choice?.scope === scope ? choice.ids : (models ?? []).filter(m => m.default && m.ready).map(m => m.id);
-  return [ids, next => setChoice({scope, ids: next})];
+  const defaults = (models ?? []).filter(m => m.default).map(m => m.id);
+  const route = JSON.stringify([...defaults].sort());
+  const [choice, setChoice] = useState<{scope: string; route: string; ids: string[]} | null>(null);
+  const ids = choice?.scope === scope && choice.route === route
+    ? choice.ids.filter(id => (models ?? []).some(m => m.id === id)) : defaults;
+  return [ids, next => setChoice({scope, route, ids: next})];
 }
 
 export function modelsReady(models: RenderModel[], ids: string[]): boolean {
@@ -33,7 +36,7 @@ export function RenderModels({ models, value, onChange, disabled = false }: {
       onChange={() => onChange(value.includes(m.id) ? value.filter(x => x !== m.id) : [...value, m.id])} /> {m.title}
   </label>)}</div>
   {personal && !personal.ready && <div className="hint">{personal.why}</div>}
-  {personal && value.includes(personal.id) && <div className="hint">Отрисовка использует лимит личной подписки ChatGPT.</div>}
+  {personal && value.includes(personal.id) && <div className="hint">Отрисовку запускает Codex на сервере вашей установки. GPT Image использует личную подписку ChatGPT владельца.</div>}
   {!personal && !models.some(m => m.ready) && <div className="hint">Подключите ключ GPT Image или аккаунт Higgsfield в «Настройках аккаунта».</div>}
   {value.some(id => models.find(m => m.id === id)?.provider === "openai") && <div className="hint">
     Оплата со счёта OpenAI API по фактическому расходу; точная сумма до генерации неизвестна. Формат 1152 × 1536, качество high.{" "}

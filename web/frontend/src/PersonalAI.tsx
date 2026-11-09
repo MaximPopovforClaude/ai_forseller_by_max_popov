@@ -41,7 +41,7 @@ export function PersonalAI({ onSaved }: { onSaved: () => void }) {
   const status = ready || data?.config;
   return <section className="acc-box" aria-label="Личная подписка владельца">
     <h3>VIP · личная подписка ChatGPT владельца</h3>
-    <p>Аналитика, задачи и Стометрик на сайте и в Telegram работают через твой личный ChatGPT. GPT Image использует доступные лимиты той же подписки.</p>
+    <p>Аналитика, задачи и Стометрик на сайте и в Telegram работают через твой личный ChatGPT. Слайды инфографики по умолчанию запускаются через этот же Codex на сервере вашей установки. GPT Image использует доступные лимиты той же подписки.</p>
     <p>Доступ только владельцу установки в выбранных своих магазинах. Для сторонних клиентов используются отдельные API-ключи.</p>
     <p>Сначала установи Codex и выполни личный вход на сервере по <a href="https://github.com/MaximPopovforClaude/ai_forseller_by_max_popov/blob/main/docs/PERSONAL-AI.md" target="_blank" rel="noreferrer">инструкции подключения</a>. Коды входа и токены на сайт вводить не нужно.</p>
     {error && <div className="err" role="alert">{error}</div>}
