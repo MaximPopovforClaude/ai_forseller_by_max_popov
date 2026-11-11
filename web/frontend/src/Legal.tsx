@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { http } from "./api";
 import { Logo } from "./Logo";
+import { AuthorChannel, AUTHOR_CHANNEL } from "./AuthorChannel";
 
 type About = { ready: boolean; version: string; about: string; support_bot: string | null; channel: string | null; email: string | null; org: string | null };
 type Doc = { title: string; ready: boolean; version: string; sections: { h: string; p: string[] }[] };
@@ -26,7 +27,8 @@ export function AboutPage() {
       <section className="about-card">
         <h3>👋 Команда</h3>
         <p>{a.about}</p>
-        {a.channel && <p><a className="about-btn" href={a.channel} target="_blank" rel="noreferrer">Канал в Telegram: {tgName(a.channel)} →</a></p>}
+        <AuthorChannel />
+        {a.channel && a.channel !== AUTHOR_CHANNEL && <p><a className="about-btn" href={a.channel} target="_blank" rel="noreferrer">Канал в Telegram: {tgName(a.channel)} →</a></p>}
       </section>
       <section className="about-card">
         <h3>📄 Документы</h3>
