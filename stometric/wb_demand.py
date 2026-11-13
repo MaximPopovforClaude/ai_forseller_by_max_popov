@@ -43,7 +43,7 @@ def finish(row, start, end, days):
             'complete': complete, 'orders': count,
             'orders_sum': number(row.get('orders_sum')) if money_days else None,
             'orders_day': count / days if complete else None,
-            'views': op, 'cart': cart,
+            'views': op, 'cart': cart, 'conv_orders': conv_orders,
             'conv_cart': cart / op if op else None,
             'conv_order': conv_orders / cart if cart else None}
 

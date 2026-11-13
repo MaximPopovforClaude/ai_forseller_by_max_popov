@@ -123,26 +123,65 @@ LAST4 = "за послед. 4 недели"
 SORT_COL = ("orders_sum_4w", "Сумма всех заказов, руб, за последние 4 недели")   
 
 
+def _period_sums(rows, rng):
+    """Same per-item SUMIFS, one conversion per value, bounded daily-row memory."""
+    keys = set(SUM_METRICS.values()) | {"margin", "profit", "buyouts_sum", "ads", "orders_sum", "ad_clicks", "ad_views",
+                                        "f_cart", "f_open", "f_orders", "buyouts_sum_before_spp"}
+    sums = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    for row in rows:
+        fields = [(k, float(row[k])) for k in keys if row.get(k) is not None]
+        for p, (a, b) in rng.items():
+            if a <= row['day'] <= b:
+                acc = sums[row['nm_id']][p]
+                for k, value in fields:
+                    acc[k] += value
+    return sums
+
+
+def _buyout_last4(c, shop, nm_ids=None):
+    """Last report week is per item, independent of the selected dashboard date."""
+    from ..agg import real_week
+    from ..materialize import ensure_cost_ready
+    ensure_cost_ready(c, shop)
+    if not c.execute("SELECT 1 FROM agg_state WHERE account_id=%s AND name='real_week'", (shop,)).fetchone():
+        per_nm = defaultdict(list)
+        for g in real_week.cached(c, shop):
+            if g['nm_id'] and g['date_from'] and (not nm_ids or g['nm_id'] in nm_ids):
+                per_nm[g['nm_id']].append((date.fromisoformat(g['date_from']), date.fromisoformat(g['date_to']),
+                                          float(g['deliveries'] or 0), float(g['returns'] or 0)))
+        result = {}
+        for nm, rows in per_nm.items():
+            end = max(r[1] for r in rows)
+            dl = sum(r[2] for r in rows if r[0] >= end-timedelta(days=27) and r[1] <= end)
+            rt = sum(r[3] for r in rows if r[0] >= end-timedelta(days=27) and r[1] <= end)
+            result[nm] = (dl-rt)/dl if dl else 0
+        return result
+    
+    rows = c.execute("""SELECT nm_id,
+        coalesce(sum(deliveries) FILTER (WHERE df >= last_day-27 AND dt <= last_day),0)::float deliveries,
+        coalesce(sum(returns) FILTER (WHERE df >= last_day-27 AND dt <= last_day),0)::float returns
+        FROM (SELECT q.*, max(dt) OVER (PARTITION BY nm_id) last_day FROM (
+            SELECT (data->>'nm_id')::bigint nm_id, (data->>'date_from')::date df, (data->>'date_to')::date dt,
+                   coalesce((data->>'deliveries')::numeric,0) deliveries,
+                   coalesce((data->>'returns')::numeric,0) returns
+            FROM agg_real_week WHERE account_id=%s AND (data->>'nm_id')::bigint <> 0
+              AND coalesce(data->>'date_from','') <> ''
+              AND (%s::bigint[] IS NULL OR (data->>'nm_id')::bigint=ANY(%s::bigint[]))
+        ) q) periods GROUP BY nm_id""", (shop, nm_ids or None, nm_ids or None))
+    return {r['nm_id']: (r['deliveries']-r['returns'])/r['deliveries'] if r['deliveries'] else 0 for r in rows}
+
+
 def compute(c, shop: int, yesterday: date | None = None, layout=None, nm_ids=None) -> dict:
     y = yesterday or today_msk() - timedelta(days=1)
     layout = layout or DEFAULT
     need = {p for _, m, p in layout if p} | {LAST4}
     rng = {p: period(p, y) for p in need}
     lo = min([a for a, _ in rng.values()] + [y - timedelta(days=27)])
-    rows = nm_day.cached(c, shop, lo, y)
+    rows = nm_day.iter_cached(c, shop, lo, y, nm_ids)
     tax = c.execute("SELECT * FROM tax_settings WHERE account_id=%s AND valid_from<=%s ORDER BY valid_from DESC LIMIT 1",
                     (shop, y)).fetchone() or {"regime": "Другая СНО", "rate": 0}
     
-    S = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
-    for r in rows:
-        for p, (a, b) in rng.items():
-            if a <= r["day"] <= b:
-                acc = S[r["nm_id"]][p]
-                for k in set(SUM_METRICS.values()) | {"margin", "profit", "buyouts_sum", "ads", "orders_sum", "ad_clicks", "ad_views",
-                                                       "f_cart", "f_open", "f_orders", "buyouts_sum_before_spp"}:
-                    v = r.get(k)
-                    if v is not None:
-                        acc[k] += float(v)
+    S = _period_sums(rows, rng)
     for nm in S:
         for p, acc in S[nm].items():
             if tax["regime"] == "УСН доход":
@@ -152,22 +191,12 @@ def compute(c, shop: int, yesterday: date | None = None, layout=None, nm_ids=Non
             else:
                 acc["_tax"] = 0.0
     
-    bp = {}
-    from ..agg import real_week
-    per_nm = defaultdict(list)
-    for g in real_week.cached(c, shop):
-        if g["nm_id"] and g["date_from"]:
-            per_nm[g["nm_id"]].append((date.fromisoformat(g["date_from"]), date.fromisoformat(g["date_to"]),
-                                       float(g["deliveries"] or 0), float(g["returns"] or 0)))
-    for nm, lst in per_nm.items():           
-        mx = max(x[1] for x in lst)
-        dl = sum(x[2] for x in lst if x[0] >= mx - timedelta(days=27) and x[1] <= mx)
-        rt = sum(x[3] for x in lst if x[0] >= mx - timedelta(days=27) and x[1] <= mx)
-        bp[nm] = (dl - rt) / dl if dl else 0
     from ..agg import buyout
     if buyout.needed(c, shop):              
         per, shop_bp = buyout.by_orders(c, shop)
         bp = defaultdict(lambda: shop_bp, per)
+    else:
+        bp = _buyout_last4(c, shop, nm_ids)
     nom = {r["nm_id"]: r for r in c.execute(
         "SELECT nm_id, vendor_code, title, brand, subject, imt_id FROM nomenclature WHERE account_id=%s", (shop,))}
     stock = {r["nm_id"]: r for r in c.execute(

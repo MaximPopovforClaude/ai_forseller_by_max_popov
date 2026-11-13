@@ -1,0 +1,258 @@
+{
+  "baseline": "Complete artificial reports before optimization",
+  "artificial_seed": 20261113,
+  "cases": [
+    {
+      "regime": "Другая СНО",
+      "fallback": false,
+      "layout": 0,
+      "nms": null,
+      "rows": 4,
+      "columns": 62,
+      "sha256": "1c0cf8e49d125d0a8248632934667fae4b39e5275c10c79a332d386702faf506"
+    },
+    {
+      "regime": "Другая СНО",
+      "fallback": false,
+      "layout": 0,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 62,
+      "sha256": "7b51f0e96f29b5b4239b00d52ab511ea360102aaba64e7122e18307a172d78c9"
+    },
+    {
+      "regime": "Другая СНО",
+      "fallback": false,
+      "layout": 1,
+      "nms": null,
+      "rows": 4,
+      "columns": 686,
+      "sha256": "b630a31fc045fca3642681a32969bf1042eb1fc91f88c207589016049411aa8c"
+    },
+    {
+      "regime": "Другая СНО",
+      "fallback": false,
+      "layout": 1,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 686,
+      "sha256": "5750915bf1bdbef60d404a8f06ced869900b7957aa681d127949fb4925460872"
+    },
+    {
+      "regime": "Другая СНО",
+      "fallback": true,
+      "layout": 0,
+      "nms": null,
+      "rows": 4,
+      "columns": 62,
+      "sha256": "7b5db946fa0ba8fdb09643b6d688ccbeb50b33ee61bb888c6c51e7a0e494e407"
+    },
+    {
+      "regime": "Другая СНО",
+      "fallback": true,
+      "layout": 0,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 62,
+      "sha256": "5a35978e6b40c44b9f20af3fb8b868d2f8c7c8ec7d21a85002625e256f6d0466"
+    },
+    {
+      "regime": "Другая СНО",
+      "fallback": true,
+      "layout": 1,
+      "nms": null,
+      "rows": 4,
+      "columns": 686,
+      "sha256": "98049b4eeab35f070e3b60e5795651d2df2953d05e57fe2ec179e6457ee6b40f"
+    },
+    {
+      "regime": "Другая СНО",
+      "fallback": true,
+      "layout": 1,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 686,
+      "sha256": "8795be3635545f9af3b8d1796a37ebf05d08837f0da34ef4d8cb8649d77de054"
+    },
+    {
+      "regime": "УСН доход",
+      "fallback": false,
+      "layout": 0,
+      "nms": null,
+      "rows": 4,
+      "columns": 62,
+      "sha256": "b1b7d8602a63e0e69ae868cc1cf1b6344d3b7bad89699836c8656fc8d11b4f02"
+    },
+    {
+      "regime": "УСН доход",
+      "fallback": false,
+      "layout": 0,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 62,
+      "sha256": "96ec0309c74afedd188815180e040e4e0738afad5e35d7ad9e9a181fda0e0794"
+    },
+    {
+      "regime": "УСН доход",
+      "fallback": false,
+      "layout": 1,
+      "nms": null,
+      "rows": 4,
+      "columns": 686,
+      "sha256": "6cad47389816e945585246bd3625e43510ad0c7a8e9c3db19c9ab6dca3efe2e6"
+    },
+    {
+      "regime": "УСН доход",
+      "fallback": false,
+      "layout": 1,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 686,
+      "sha256": "92064bdcd3fe7ca5ba683ebc9171d410d408142319de5037071f0fae7dd365d9"
+    },
+    {
+      "regime": "УСН доход",
+      "fallback": true,
+      "layout": 0,
+      "nms": null,
+      "rows": 4,
+      "columns": 62,
+      "sha256": "ccd787e1c49c51409aa1d06e1b9b3e88be04c225a373f59d5ae8149eaf61a04c"
+    },
+    {
+      "regime": "УСН доход",
+      "fallback": true,
+      "layout": 0,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 62,
+      "sha256": "39d510137a673371f174c3e4d245d787fc259207a778165e82a549ed906b922b"
+    },
+    {
+      "regime": "УСН доход",
+      "fallback": true,
+      "layout": 1,
+      "nms": null,
+      "rows": 4,
+      "columns": 686,
+      "sha256": "59c5a254eec83ae2fa9cc43896c2accd21ce7ad6e76bc7b70cb343c877415030"
+    },
+    {
+      "regime": "УСН доход",
+      "fallback": true,
+      "layout": 1,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 686,
+      "sha256": "c473349c18d5c8be02ace902ba2e9dc486ba0b04178246be3bf916cd9dcc1cd5"
+    },
+    {
+      "regime": "УСН доходы-расходы",
+      "fallback": false,
+      "layout": 0,
+      "nms": null,
+      "rows": 4,
+      "columns": 62,
+      "sha256": "76315bdca054a9f56593f7bcf984a02daa97d1fcba7025d4a6edc8efdc815bd9"
+    },
+    {
+      "regime": "УСН доходы-расходы",
+      "fallback": false,
+      "layout": 0,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 62,
+      "sha256": "939943098aa89072d59ec4613f42e58c7bdccc828bd1c9b821545daffc5be910"
+    },
+    {
+      "regime": "УСН доходы-расходы",
+      "fallback": false,
+      "layout": 1,
+      "nms": null,
+      "rows": 4,
+      "columns": 686,
+      "sha256": "f47be6ffb6e0dad173d757d3a86cd0e2661c87da4051810210119835a8d1625a"
+    },
+    {
+      "regime": "УСН доходы-расходы",
+      "fallback": false,
+      "layout": 1,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 686,
+      "sha256": "53c2f8449fb88ec139ab57c3c4c4f8049986129dc4ed1132f7f8bde9e8e8b813"
+    },
+    {
+      "regime": "УСН доходы-расходы",
+      "fallback": true,
+      "layout": 0,
+      "nms": null,
+      "rows": 4,
+      "columns": 62,
+      "sha256": "4d9e21ab144d3b0cf482c53653d2c0e091e5ef149f343237bece61327170dcad"
+    },
+    {
+      "regime": "УСН доходы-расходы",
+      "fallback": true,
+      "layout": 0,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 62,
+      "sha256": "de80581d07d45ac3ed4af2976a65405e0451d9805ade5f7c9e42a4e4821da55c"
+    },
+    {
+      "regime": "УСН доходы-расходы",
+      "fallback": true,
+      "layout": 1,
+      "nms": null,
+      "rows": 4,
+      "columns": 686,
+      "sha256": "725787f836f0350d33a49e5bb5de7cd73f4a6d86561386d0f60caeae92df01fa"
+    },
+    {
+      "regime": "УСН доходы-расходы",
+      "fallback": true,
+      "layout": 1,
+      "nms": [
+        1,
+        4
+      ],
+      "rows": 2,
+      "columns": 686,
+      "sha256": "6d8e54e613e141f5a3df9e7192a97a4be39b4e975d43461b56ca3bdf96ef3fac"
+    }
+  ]
+}
