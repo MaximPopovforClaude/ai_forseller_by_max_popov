@@ -107,6 +107,23 @@ ROW = {n: (lab, fmt, f) for n, lab, fmt, f in ROWS}
 RATIO = {n for n, _, fmt, _ in ROWS if fmt == "pct"}
 
 
+ORDER_NOTE = ("Первыми показаны заказы из воронки WB (конверсии), затем — из статистики WB. "
+              "Сумма воронки — до СПП. Сумма после СПП, средняя цена, СПП, ДРР и прибыль "
+              "сохраняют прежние финансовые источники. Нет данных воронки — пустая ячейка; "
+              "суммы включают только загруженные данные и могут дополняться WB.")
+_ORDER_LABELS = {
+    12: "Заказы из воронки WB: сумма до СПП, руб",
+    13: "Заказы из воронки WB: количество, шт",
+    7: "Заказы из статистики WB: сумма со скидкой продавца, руб",
+    8: "Заказы из статистики WB: количество, шт",
+    9: "Заказы из статистики WB: сумма с учетом СПП, руб",
+    10: "Средняя цена заказа со скидкой продавца (статистика WB), руб",
+    11: "Средняя СПП по заказам (статистика WB), %",
+}
+_DISPLAY_ORDER = [6, 12, 13, *[n for n, _, _, _ in ROWS if n not in (6, 12, 13)]]
+DASHBOARD_ROWS = [(n, _ORDER_LABELS.get(n, ROW[n][0]), ROW[n][1], ROW[n][2]) for n in _DISPLAY_ORDER]
+
+
 def _d(a, b):
     return a / b if b else 0
 
@@ -137,8 +154,13 @@ def _buyout_pct(weekly: list[dict], p_from: date, p_to: date) -> float:
     return _d(to_c - fr_c, to_c)
 
 
-def compute(c, shop: int, yesterday: date | None = None, nm_ids: list[int] | None = None, custom: dict | None = None) -> dict:
-    """custom — свои окна {"имя": (с, по)} вместо колонок листа (главная страница: сегодня/вчера/позавчера)."""
+def compute(c, shop: int, yesterday: date | None = None, nm_ids: list[int] | None = None, custom: dict | None = None,
+            *, funnel_first: bool = False) -> dict:
+    """custom — свои окна {"имя": (с, по)} вместо колонок листа.
+
+    funnel_first — представление пяти дашбордов: воронка первой, пропуски null.
+    Номера финансовых строк и прежний контракт Главной сохраняются.
+    """
     yesterday = yesterday or today_msk() - timedelta(days=1)
     P = custom or periods(yesterday)
     lo = min(v[0] for v in P.values())
@@ -162,6 +184,8 @@ def compute(c, shop: int, yesterday: date | None = None, nm_ids: list[int] | Non
         vals: dict[int, float] = {}
 
         def S(key, total=sums[col], k=k):
+            if funnel_first and key in ("f_orders", "f_orders_sum") and key not in total:
+                return None
             return k * float(total.get(key, 0))
 
         def R(n, vals=vals):
@@ -214,22 +238,28 @@ def compute(c, shop: int, yesterday: date | None = None, nm_ids: list[int] | Non
                 "values": {col: {n: cols[col][n] for n in cols[col]} for col in P}, "tax": regime}
 
     def change(x, y, n):
+        if cols[x][n] is None or cols[y][n] is None:
+            return None
         if n in RATIO:
             return cols[x][n] - cols[y][n]
         return _d(cols[x][n], cols[y][n]) - 1 if cols[y][n] else 0
 
     out = []
-    for n, lab, fmt, f in ROWS:
+    for n, lab, fmt, f in DASHBOARD_ROWS if funnel_first else ROWS:
         row = {"row": n, "label": lab, "fmt": fmt}
         if f is not None:
             for col in P:
-                row[col] = round(cols[col][n], 4 if fmt == "pct" else 2)
-            row["E"] = round(change("C", "D", n), 4)
-            row["H"] = round(change("F", "G", n), 4)
-            row["L"] = round(change("J", "K", n), 4)
-            row["N"] = round(change("M", "J", n), 4)
+                row[col] = rounded(cols[col][n], 4 if fmt == "pct" else 2)
+            row["E"] = rounded(change("C", "D", n), 4)
+            row["H"] = rounded(change("F", "G", n), 4)
+            row["L"] = rounded(change("J", "K", n), 4)
+            row["N"] = rounded(change("M", "J", n), 4)
         out.append(row)
     return {"periods": {k: [str(v[0]), str(v[1])] for k, v in P.items()}, "rows": out, "tax": regime}
+
+
+def rounded(value, digits):
+    return round(value, digits) if value is not None else None
 
 
 def _income_tax_estimate(base: float, regime: str, rate: float) -> float:

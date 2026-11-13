@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import date
 
 from ..agg import nm_day
+from .dash5 import ORDER_NOTE, rounded
 
 ROWS = [  
     (3, "Кол-во заказов ВСЕГО, шт", "orders", 1, "int"), (4, "Сумма заказов с учетом скидки продавца, руб", "orders_sum", 1, "money"),
@@ -32,6 +33,16 @@ ROWS = [
     (33, "Прибыль за минусом налога от суммы выкупов ДО скидки ВБ (СПП), %", lambda V: _d(V[32], V[17]), 0, "pct"),
     (34, "Кол-во возвратов, шт", "returns", 1, "int"), (35, "Сумма возвратов (к оплате продавцу), руб", "returns_for_pay", 1, "money"),
 ]
+
+
+_LABELS = {
+    11: "Заказы из воронки WB: количество, шт",
+    12: "Заказы из воронки WB: сумма до СПП, руб",
+    3: "Заказы из статистики WB: количество, шт",
+    4: "Заказы из статистики WB: сумма со скидкой продавца, руб",
+    5: "Заказы из статистики WB: сумма с учетом СПП, руб",
+}
+DASHBOARD_ROWS = [r for r in ROWS if r[0] in (11, 12)] + [r for r in ROWS if r[0] not in (11, 12)]
 
 
 def _d(a, b):
@@ -74,7 +85,8 @@ def compute(c, shop: int, df: date, dt: date, nm_ids=None) -> dict:
             elif callable(k):
                 V[n] = k(V)
             else:
-                V[n] = S[col].get(k, 0.0) * sign
+                value = S[col].get(k, None if k in ("f_orders", "f_orders_sum") else 0.0)
+                V[n] = value * sign if value is not None else None
         vals[col] = V
     months = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
     columns = [{"field": "label", "title": f"ПОКАЗАТЕЛИ ПО ДНЯМ (СНО: {tax['regime']})", "type": "label"}]
@@ -84,9 +96,9 @@ def compute(c, shop: int, df: date, dt: date, nm_ids=None) -> dict:
         else:
             columns.append({"field": col.isoformat(), "title": col.strftime("%d.%m"), "type": "rowfmt"})
     out = []
-    for n, lab, k, sign, fmt in ROWS:
-        row = {"row": n, "label": lab, "fmt": fmt}
+    for n, lab, k, sign, fmt in DASHBOARD_ROWS:
+        row = {"row": n, "label": _LABELS.get(n, lab), "fmt": fmt}
         for col in cols:
-            row[col if isinstance(col, str) else col.isoformat()] = round(vals[col][n], 4 if fmt == "pct" else 2)
+            row[col if isinstance(col, str) else col.isoformat()] = rounded(vals[col][n], 4 if fmt == "pct" else 2)
         out.append(row)
-    return {"columns": columns, "rows": out, "layout": "sheet"}
+    return {"columns": columns, "rows": out, "layout": "sheet", "note": ORDER_NOTE}

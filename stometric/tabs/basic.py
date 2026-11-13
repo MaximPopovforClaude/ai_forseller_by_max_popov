@@ -122,7 +122,7 @@ def dash5(c, shop, f):
     from datetime import date, timedelta
     from ..sheets import dash5 as d5
     y = min(f["date_to"], today_msk() - timedelta(days=1))
-    res = d5.compute(c, shop, y, f.get("nm_ids"))
+    res = d5.compute(c, shop, y, f.get("nm_ids"), funnel_first=True)
     P = res["periods"]
     fmt = lambda a, b: a[8:10] + "." + a[5:7] + ("" if a == b else " – " + b[8:10] + "." + b[5:7])
     months = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
@@ -139,7 +139,7 @@ def dash5(c, shop, f):
     from ..agg import buyout
     note = ("% выкупа — по заказам (выкуплено из заказов 14–42 дня назад): в отчёте реализации WB у магазина нет доставок к покупателю, "
             "эталонная формула по доставкам здесь не работает." if buyout.needed(c, shop) else None)
-    return {"columns": cols, "rows": res["rows"], "layout": "sheet", "note": note}
+    return {"columns": cols, "rows": res["rows"], "layout": "sheet", "note": d5.ORDER_NOTE + (" " + note if note else "")}
 
 
 def svod(c, shop, f):
@@ -478,19 +478,19 @@ def dash_nm_days(c, shop, f):
     y = min(f["date_to"], today_msk() - timedelta(days=1))
     days = [y - timedelta(days=i) for i in range(30)]
     P = {f"d{i}": (d, d) for i, d in enumerate(days)}
-    res = d5.compute(c, shop, y, f.get("nm_ids"), custom=P)
+    res = d5.compute(c, shop, y, f.get("nm_ids"), custom=P, funnel_first=True)
     V = res["values"]
     wd = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
     cols = [{"field": "label", "title": f"ПОКАЗАТЕЛИ (СНО: {res['tax']})", "type": "label"}]
     cols += [{"field": k, "title": f"{d:%d.%m} {wd[d.weekday()]}", "type": "rowfmt"} for k, (d, _) in P.items()]
     rows = []
-    for n, lab, fmt, fn in d5.ROWS:
+    for n, lab, fmt, fn in d5.DASHBOARD_ROWS:
         row = {"row": n, "label": lab, "fmt": fmt}
         if fn is not None:
             for k in P:
-                row[k] = round(V[k][n], 4 if fmt == "pct" else 2)
+                row[k] = d5.rounded(V[k][n], 4 if fmt == "pct" else 2)
         rows.append(row)
-    return {"columns": cols, "rows": rows, "layout": "sheet"}
+    return {"columns": cols, "rows": rows, "layout": "sheet", "note": d5.ORDER_NOTE}
 
 
 def no_cost(c, shop, f):
