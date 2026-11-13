@@ -81,28 +81,40 @@ def findings(c, shop: int, day: date | None = None, nms: list[int] | None = None
         for d, r in dd.items():
             shop_days.setdefault(d, []).append(r)
     prev_days = [shop_days.get(w0 + timedelta(days=i), []) for i in range(7)]
-    yo = tot(shop_days.get(y, []), "orders")
-    avg_o = sum(tot(d, "orders") for d in prev_days) / 7
-    ys = tot(shop_days.get(y, []), "orders_sum")
-    avg_s = sum(tot(d, "orders_sum") for d in prev_days) / 7
+    from . import wb_demand
+    demand = {nm: (wb_demand.records(dd,y,y), wb_demand.records(dd,w0,w1)) for nm,dd in agg.items()}
+    def complete_total(index,key):
+        rows = [v[index] for v in demand.values()]
+        valid = rows and all(r['complete'] and (key!='orders_sum' or r['money_days']==r['expected_days']) for r in rows)
+        return sum(r[key] for r in rows) if valid else None
+    yo, ys = complete_total(0,'orders'), complete_total(0,'orders_sum')
+    po, ps = complete_total(1,'orders'), complete_total(1,'orders_sum')
+    avg_o, avg_s = (po/7 if po is not None else None), (ps/7 if ps is not None else None)
     ya = tot(shop_days.get(y, []), "ads")
     avg_a = sum(tot(d, "ads") for d in prev_days) / 7
-    out = {"day": y.isoformat(), "shop": {"orders": yo, "orders_avg7": round(avg_o, 1), "orders_sum": round(ys), "orders_sum_avg7": round(avg_s),
+    out = {"day": y.isoformat(), 'orders_source': 'wb_funnel', 'data_note': wb_demand.NOTE,
+           'demand_coverage': {'items':len(demand), 'incomplete_items':sum(not(a['complete'] and b['complete']) for a,b in demand.values())},
+           "shop": {"orders": yo, "orders_avg7": wb_demand.rounded(avg_o, 1), "orders_sum": wb_demand.rounded(ys), "orders_sum_avg7": wb_demand.rounded(avg_s),
                                           "ads": round(ya), "ads_avg7": round(avg_a)},
            "articles": [], "low_stock": [], "no_cost": [], "negative": []}
     for nm, dd in agg.items():
         r = dd.get(y) or {}
         prev = [dd.get(w0 + timedelta(days=i)) or {} for i in range(7)]
-        o, a7 = float(r.get("orders") or 0), sum(float(p.get("orders") or 0) for p in prev) / 7
+        dm, prev_dm = demand[nm]
+        o = dm['orders'] if dm['complete'] else None
+        a7 = prev_dm['orders_day']
+        financial_orders = float(r.get('orders') or 0)
         nmi = names.get(nm) or {}
         vc = nmi.get("vendor_code") or str(nm)
         st = stock.get(nm)
-        if a7 >= 1 and st is not None and st / a7 < 10:
+        if a7 is not None and a7 >= 1 and st is not None and st / a7 < 10:
             out["low_stock"].append({"nm_id": nm, "vendor_code": vc, "stock": st, "orders_avg7": round(a7, 1), "days": round(st / a7, 1)})
-        if o and not r.get("cost_orders"):     
-            out["no_cost"].append({"nm_id": nm, "vendor_code": vc, "orders": o})
-        if o >= 3 and r.get("margin_orders") is not None and float(r["margin_orders"]) < 0:
-            out["negative"].append({"nm_id": nm, "vendor_code": vc, "orders": o, "margin_orders": round(float(r["margin_orders"]))})
+        if financial_orders and not r.get("cost_orders"):
+            out["no_cost"].append({"nm_id": nm, "vendor_code": vc, "orders": financial_orders, 'source':'statistics'})
+        if financial_orders >= 3 and r.get("margin_orders") is not None and float(r["margin_orders"]) < 0:
+            out["negative"].append({"nm_id": nm, "vendor_code": vc, "orders": financial_orders, 'source':'statistics', "margin_orders": round(float(r["margin_orders"]))})
+        if o is None or a7 is None:
+            continue
         if not (a7 >= 3 or o >= 10):
             continue
         diff = o - a7
@@ -122,9 +134,9 @@ def findings(c, shop: int, day: date | None = None, nms: list[int] | None = None
         rt = [p.get("rating") for p in prev if p.get("rating") is not None]
         if r.get("rating") is not None and rt and float(rt[0]) - float(r["rating"]) >= 0.1:
             why.append(f"рейтинг {float(rt[0]):.1f} → {float(r['rating']):.1f}")
-        cv = [float(p["f_to_cart"]) for p in prev if p.get("f_to_cart")]
-        if r.get("f_to_cart") and cv and float(r["f_to_cart"]) < sum(cv) / len(cv) * 0.7:
-            why.append(f"конверсия в корзину {sum(cv) / len(cv) * 100:.1f} % → {float(r['f_to_cart']) * 100:.1f} %")
+        ca, cb = dm['conv_cart'], prev_dm['conv_cart']
+        if dm['conversion_days']==1 and prev_dm['conversion_days']==7 and ca is not None and cb and ca < cb * .7:
+            why.append(f"конверсия в корзину {cb * 100:.1f} % → {ca * 100:.1f} %")
         sp = [float(p["orders_spp_share"]) for p in prev if p.get("orders_spp_share") is not None]
         if r.get("orders_spp_share") is not None and sp and abs(float(r["orders_spp_share"]) - sum(sp) / len(sp)) >= 0.05:
             why.append(f"СПП {sum(sp) / len(sp) * 100:.0f} % → {float(r['orders_spp_share']) * 100:.0f} %")
@@ -137,8 +149,8 @@ def findings(c, shop: int, day: date | None = None, nms: list[int] | None = None
         a, b = (dd.get(y) or {}).get("rating"), (dd.get(y - timedelta(days=1)) or {}).get("rating")
         if a and b and float(a) > 0 and float(b) > 0 and round(float(a), 1) != round(float(b), 1):
             rc.append({"nm_id": nm, "vendor_code": (names.get(nm) or {}).get("vendor_code") or str(nm), "before": round(float(b), 1),
-                       "now": round(float(a), 1), "orders": float((dd.get(y) or {}).get("orders") or 0)})
-    out["rating_changes"] = sorted(rc, key=lambda x: -x["orders"])[:20]
+                       "now": round(float(a), 1), "orders": demand[nm][0]['orders']})
+    out["rating_changes"] = sorted(rc, key=lambda x: -(x["orders"] or 0))[:20]
     out["articles"].sort(key=lambda x: -abs(x["orders"] - x["orders_avg7"]))
     out["low_stock"].sort(key=lambda x: x["days"])
     if nms is not None:
@@ -160,9 +172,13 @@ def template_text(f: dict) -> str:
     """Разбор без нейросети — по шаблону, только цифры из findings."""
     s = f["shop"]
     L = []
-    if s["orders_avg7"]:
+    if s["orders_avg7"] and s['orders'] is not None:
         ch = (s["orders"] - s["orders_avg7"]) / s["orders_avg7"] * 100
         L.append(f"Заказы: {s['orders']:.0f} шт ({'+' if ch >= 0 else ''}{ch:.0f} % к среднему за неделю {s['orders_avg7']:.0f}).")
+    elif s['orders'] is not None:
+        L.append(f"Заказы по воронке: {s['orders']:.0f} шт. Сравнение с неделей недоступно.")
+    else:
+        L.append('Для итогов и сравнения заказов недостаточно дневных данных воронки; пропуски не означают нулевые заказы.')
     for a in f["articles"][:5]:
         why = "; ".join(a["why"][:3]) or "явной причины в данных нет"
         L.append(f"• {a['vendor_code']}: {a['orders']:.0f} шт против {a['orders_avg7']:.0f} в среднем "

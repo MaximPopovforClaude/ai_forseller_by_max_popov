@@ -686,7 +686,7 @@ def pf_list(shop_id: int, u=Depends(current_user), c=Depends(conn)):
 
 @router.get("/api/shops/{shop_id}/photo_funnel/{nm}")
 def pf_item(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
-    from . import photos, photo_prices
+    from . import photos, photo_prices, photo_entry
     _role(c, u, shop_id, "viewer")
     own = c.execute("SELECT 1 FROM nomenclature WHERE account_id=%s AND nm_id=%s", (shop_id, nm)).fetchone()
     comp = c.execute("SELECT 1 FROM competitors WHERE account_id=%s AND comp_nm_id=%s", (shop_id, nm)).fetchone()
@@ -694,6 +694,7 @@ def pf_item(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
         raise HTTPException(404, "Артикул не из магазина и не из его конкурентов")
     snaps = c.execute("SELECT id, taken_at, source, slots FROM photo_snaps WHERE nm_id=%s ORDER BY taken_at DESC LIMIT 60", (nm,)).fetchall()
     prices = photo_prices.periods(c, shop_id, nm, snaps) if own else {}
+    entry = photo_entry.periods(c, shop_id, nm, snaps) if own else {}
     sl = {s["id"]: [x["hash"] for x in s["slots"]] for s in snaps}
     events = []
     from datetime import timedelta
@@ -706,6 +707,7 @@ def pf_item(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
             ev["effect"] = photos.effect(c, shop_id, nm, e["day"])
             ev["period"] = photos.period_stats(c, shop_id, nm, e["day"], max(e["day"], end))
             ev["period"]["prices"] = prices.get(e["snap_id"])
+            ev["period"]["entry"] = entry.get(e["snap_id"])
         end = e["day"] - timedelta(days=1)
         events.append(ev)
     if own:                                 
@@ -722,11 +724,14 @@ def pf_item(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
                                        'ctr': None, 'conv_cart': None, 'conv_order': None, 'orders_day': None}
             if ev["period_before"] is not None and "prices" not in ev["period_before"]:
                 ev["period_before"]["prices"] = prices.get(history[i]["prev_id"])
+            if ev["period_before"] is not None:
+                ev["period_before"]["entry"] = entry.get(history[i]["prev_id"])
     cur_period = None
     if own and snaps:                       
         since = events[0]["day"] if events else snaps[-1]["taken_at"].date()
         cur_period = photos.period_stats(c, shop_id, nm, since, max(since, today_msk()))
         cur_period["prices"] = prices.get(snaps[0]["id"])
+        cur_period["entry"] = entry.get(snaps[0]["id"])
     return jsonable_encoder({"nm_id": nm, "own": bool(own), "current": sl.get(snaps[0]["id"]) if snaps else None, "current_period": cur_period,
                              "taken_at": snaps[0]["taken_at"] if snaps else None, "events": events})
 

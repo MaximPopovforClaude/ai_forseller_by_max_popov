@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { http } from "./api";
-import { growthCell } from "./entryGrowth";
+import { changeCell } from "./entryGrowth";
 
 /** Точки входа — сводные виды : воронка артикулов, источники трафика, источники по дням.
  *  Данные — дневные отчёты «Точки входа» (их качает плагин) + наши заказы (₽, средняя цена, % выкупа). */
@@ -62,7 +62,7 @@ function Spark({ vals }: { vals: (number | null)[] }) {
     {vals.map((v, i) => <div key={i} style={{ width: 4, height: `${((v || 0) / max) * 100}%`, minHeight: 1, background: "#93c5fd" }} />)}</div>;
 }
 
-export function EntryViews({ shop, nm, view, pinPoints = false, growth = null }: { shop: number; nm: string; view: View; pinPoints?: boolean; growth?: number | null }) {
+export function EntryViews({ shop, nm, view, pinPoints = false, growth = null, decline = null }: { shop: number; nm: string; view: View; pinPoints?: boolean; growth?: number | null; decline?: number | null }) {
   const [days, setDays] = useState<number>(() => { try { return Number(localStorage.getItem("entry_days")) || 7; } catch { return 7; } });
   const [grain, setGrain] = useState<"day" | "week" | "month">("day");
   const [d, setD] = useState<Data | null>(null), [err, setErr] = useState("");
@@ -100,7 +100,7 @@ export function EntryViews({ shop, nm, view, pinPoints = false, growth = null }:
         <td style={{ whiteSpace: "nowrap", fontWeight: k === "views" || k === "ctr" ? 600 : undefined, paddingLeft: sub ? 18 : undefined }} className={sub ? "hint" : ""}>{t}</td>
         <td className={"n" + (sub ? " hint" : "")}>{sub ? fmt(kind, gv(cells.all, k)) : <b>{fmt(kind, gv(cells.all, k))}</b>}</td>
         {per.map((p, j) => { const a = gv(cells[p.key], k), b = j + 1 < per.length ? gv(cells[per[j + 1].key], k) : null;
-          return <td key={p.key} {...growthCell(a, b, growth, "n" + (sub ? " hint" : ""))} style={{ whiteSpace: "nowrap" }}>{fmt(kind, a)}<Chg kind={kind} a={a} b={b} /></td>; })}
+          return <td key={p.key} {...changeCell(a, b, growth, decline, "n" + (sub ? " hint" : ""))} style={{ whiteSpace: "nowrap" }}>{fmt(kind, a)}<Chg kind={kind} a={a} b={b} /></td>; })}
       </tr>));
     return (<>{bar}
       <div className="rnp-wrap"><table className="rnp-t entry-t">
@@ -176,7 +176,7 @@ export function EntryViews({ shop, nm, view, pinPoints = false, growth = null }:
             <td className="n">{kind === "n" && !sub ? fmt("n", s.all.per_day?.[k as "views"]) : ""}</td>
             <td>{!sub && <Spark vals={vals} />}</td>
             {dl.map((x, j) => { const a = gv(s.days[x], k), b = j + 1 < dl.length ? gv(s.days[dl[j + 1]], k) : null;
-              return <td key={x} {...growthCell(a, b, growth, "n")} style={{ whiteSpace: "nowrap" }}>{fmt(kind, a)}<Chg kind={kind} a={a} b={b} /></td>; })}
+              return <td key={x} {...changeCell(a, b, growth, decline, "n")} style={{ whiteSpace: "nowrap" }}>{fmt(kind, a)}<Chg kind={kind} a={a} b={b} /></td>; })}
           </tr>;
         });
       })}</tbody></table></div>

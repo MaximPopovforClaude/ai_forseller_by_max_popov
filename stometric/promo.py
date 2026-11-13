@@ -99,8 +99,11 @@ def view(c, shop: int) -> dict:
     other = manager.other_pct(c, shop)
     units = manager._unit_inputs(c, shop)
     bp, bp0 = rnp.buyout_pct(c, shop)
-    speed = {r["nm_id"]: float(r["o"] or 0) / 30 for r in c.execute(
-        """SELECT nm_id, sum((data->>'orders')::numeric) o FROM agg_nm_day WHERE account_id=%s AND day > current_date - 30 GROUP BY 1""", (shop,))}
+    from . import wb_demand
+    from .config import today_msk
+    from datetime import timedelta
+    end = today_msk() - timedelta(days=1)
+    demand = wb_demand.summary(c,shop,end-timedelta(days=29),end)
     way = {r["nm_id"]: r for r in c.execute(
         """WITH last AS (SELECT max(snap_at) t FROM stocks_wb_snap WHERE account_id=%s)
            SELECT nm_id, sum(in_way_to_client) wt, sum(in_way_from_client) wf FROM stocks_wb_snap s JOIN last ON s.snap_at=last.t
@@ -131,9 +134,10 @@ def view(c, shop: int) -> dict:
         b = bp.get(nm, bp0)
         w = way.get(nm) or {}
         have = float(u.get("stock") or 0) + float(w.get("wt") or 0) * (1 - b) + float(w.get("wf") or 0)
-        sp = speed.get(nm, 0.0)
+        dm = demand.get(nm) or wb_demand.empty(end-timedelta(days=29),end)
+        sp = dm['orders_day']
         base = manager.unit_calc(u, other, None)
-        row = {"nm_id": nm, "vendor_code": u["vendor_code"], "title": u["title"], "subject": u["subject"], "photo": u["photo"],
+        row = {"nm_id": nm, "vendor_code": u["vendor_code"], "title": u["title"], "subject": u["subject"], "photo": u["photo"], 'demand': dm,
                "turnover": round(have / sp, 1) if sp else None, "stock": base["stock"], "price": base["online"], "margin": base["margin_online_pct"],
                "margin_rub": base["margin_online"], "no_cost": base["cost"] is None, "promos": {}}
         for p in promos:
@@ -155,4 +159,4 @@ def view(c, shop: int) -> dict:
         out_p.append({k: v for k, v in p.items() if k != "items"} | {"eligible": n_el, "fact_pct": n_in / n_el if n_el else None,
                                                                     "calc_pct": n_calc / n_el if n_el else None})
     return {"rows": rows, "promos": out_p, "auto_promos": auto_promos,
-            "collection": collection_status(c, shop), "hidden_count": hidden_count}
+            "collection": collection_status(c, shop), "hidden_count": hidden_count, 'demand_note': wb_demand.NOTE}

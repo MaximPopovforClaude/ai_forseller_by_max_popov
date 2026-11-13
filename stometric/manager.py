@@ -279,10 +279,9 @@ def board(c, shop: int, days: int = 14, date_to: date | None = None, ads: bool =
     spp_price.update({nm: w["price"] for nm, w in showcase(c, shop).items()})     
     plan = {r["nm_id"]: float(r["qty"]) for r in c.execute(
         "SELECT nm_id, qty FROM nm_plans WHERE account_id=%s AND month=%s", (shop, dt.replace(day=1)))}
-    orders = {}
-    for r in c.execute("""SELECT nm_id, order_dt::date d, count(*) n FROM orders WHERE account_id=%s AND order_dt::date BETWEEN %s AND %s
-                          GROUP BY 1, 2""", (shop, df - timedelta(days=1), dt)):
-        orders.setdefault(r["nm_id"], {})[r["d"].isoformat()] = r["n"]
+    from . import wb_demand
+    orders = wb_demand.daily(c,shop,df-timedelta(days=1),dt)
+    demand = wb_demand.summary(c,shop,w0,y)
     acts = {}
     for r in c.execute("""SELECT a.id, a.nm_id, a.day, a.kind, a.value, a.note, a.user_id, coalesce(u.name, u.email) who, a.created_at
                           FROM nm_actions a LEFT JOIN users u ON u.id=a.user_id
@@ -317,8 +316,8 @@ def board(c, shop: int, days: int = 14, date_to: date | None = None, ads: bool =
     out = []
     for nm, u in units.items():
         k = k7.get(nm) or {}
-        o7 = float(k.get("orders") or 0)
-        avg = o7 / 7
+        dm = demand.get(nm) or wb_demand.empty(w0,y)
+        avg = dm['orders_day']
         sk = stk.get(nm) or {}
         stock = sk.get("total")
         calc = unit_calc(u, other, None)
@@ -328,13 +327,14 @@ def board(c, shop: int, days: int = 14, date_to: date | None = None, ads: bool =
         out.append({
             "nm_id": nm, "vendor_code": u["vendor_code"], "title": u["title"], "subject": u["subject"], "photo": u["photo"],
             "stock_wb": sk.get("wb"), "stock_fbs": sk.get("fbs"), "stock": stock, "price": calc["online"], "price_spp": _f(spp_price.get(nm)), "margin_pct": calc["margin_online_pct"],
-            "rating": _f(rating.get(nm)), "orders_avg": round(avg, 2), "stock_days": round(stock / avg, 1) if stock is not None and avg else None,
+            "rating": _f(rating.get(nm)), "orders_avg": wb_demand.rounded(avg, 2), "stock_days": round(stock / avg, 1) if stock is not None and avg else None,
+            'demand': dm, 'orders_source':'wb_funnel',
             "spp": round(1 - osum_spp / osum, 4) if osum and osum_spp is not None else None, "plan": plan.get(nm),
             "drr_orders": round(ads / osum, 4) if osum else None, "drr_buyouts": round(ads / bsum, 4) if bsum else None,
-            "conv_cart": round(fc / fo, 4) if fo else None, "conv_order": round(fr / fc, 4) if fc else None,
+            "conv_cart": wb_demand.rounded(dm['conv_cart'],4), "conv_order": wb_demand.rounded(dm['conv_order'],4),
             "orders": orders.get(nm, {}), "actions": acts.get(nm, {}),
             **({"ads": {d: {**v, "osum": osum_day.get(nm, {}).get(d)} for d, v in ad_day.get(nm, {}).items()}} if ads else {}),
         })
     out.sort(key=lambda x: (-(sum(x["orders"].values())), x["vendor_code"] or ""))
     return {"days": [(dt - timedelta(days=i)).isoformat() for i in range(days)], "kinds": KINDS, "rows": out,
-            "month": dt.replace(day=1).isoformat()}
+            "month": dt.replace(day=1).isoformat(), 'demand_note': wb_demand.NOTE}

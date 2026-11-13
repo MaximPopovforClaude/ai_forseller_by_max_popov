@@ -5,8 +5,9 @@ from datetime import timedelta
 
 from . import rnp
 from .config import today_msk
+from . import wb_demand
 
-F = rnp.F + ["f_open", "f_cart", "ad_clicks", "rating", "buyouts_sum", "orders_sum_spp"]
+F = rnp.F + ["f_open", "f_cart", "f_orders", "f_orders_sum", "ad_clicks", "rating", "buyouts_sum", "orders_sum_spp"]
 
 
 def _d(a, b):
@@ -126,7 +127,8 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
         ads = g("ads_upd") + float(x.get("ext_sum") or 0)       
         ad_cl = a.get("a_clicks", 0) + a.get("p_clicks", 0)          
         ad_sum = a.get("a_sum", 0) + a.get("p_sum", 0)
-        speed = sum(float((day.get(d - timedelta(days=i)) or {}).get("orders") or 0) for i in range(14)) / 14
+        dm = wb_demand.records(day,d,d)
+        speed = wb_demand.records(day,d-timedelta(days=13),d)['orders_day'] if d < today_msk() else None
         s = stock.get(d) or {}
         q, wt, wf = s.get("q"), s.get("wt"), s.get("wf")
         hs = [h for h in hyp if h["d_from"] <= d < h["d_from"] + timedelta(days=h["days"])]
@@ -152,10 +154,12 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
             "ret_plan": round(float(wt or 0) * (1 - b) + float(wf or 0)) if wt is not None else None,
             "stock_total": (float(q or 0) + float(wt or 0) * (1 - b) + float(wf or 0)) if q is not None else None,
             "stock_rub": (float(q or 0) + float(wt or 0) * (1 - b) + float(wf or 0)) * unit_cost0 if q is not None and unit_cost0 else None,
-            "speed14": round(speed, 2), "stock": q, "days_left": int(float(q) / speed) if q is not None and speed else None,
-            "carts": g("f_cart") or None, "cart_cost": _d(ads, g("f_cart")), "cart_rate": _d(g("f_cart"), g("f_open")),
+            "speed14": wb_demand.rounded(speed, 2), "stock": q, "days_left": int(float(q) / speed) if q is not None and speed else None,
+            'demand_orders':dm['orders'], 'demand_sum':dm['orders_sum'], 'demand_days':dm['covered_days'],
+            '_funnel_views':dm['views'], '_funnel_cart':dm['cart'], '_funnel_orders':dm.get('conv_orders'),
+            "carts": g("f_cart") or None, "cart_cost": _d(ads, g("f_cart")), "cart_rate": dm['conv_cart'],
             "orders_sum": g("orders_sum") or None, "orders": g("orders") or None, "order_cost": _d(ads, g("orders")),
-            "order_rate": _d(g("orders"), g("f_cart")),
+            "order_rate": dm['conv_order'],
             "give_qty": x.get("give_qty") or None, "give_sum": x.get("give_sum") or None,
             "buyouts_sum": g("buyouts_sum_before_spp") or None, "buyouts": g("buyouts") or None,
             "cx_sum": e.get("cx_sum") or None, "cx_n": e.get("cx_n") or None, "rt_sum": e.get("rt_sum") or None, "rt_n": e.get("rt_n") or None,
@@ -163,7 +167,7 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
             "ob_sum": e.get("ob_sum") or None, "ob_n": e.get("ob_n") or None, "oc_sum": e.get("oc_sum") or None, "oc_n": e.get("oc_n") or None,
             "or_sum": e.get("or_sum") or None, "or_n": e.get("or_n") or None,
             "done": _d((e.get("ob_n") or 0) + (e.get("oc_n") or 0) + (e.get("or_n") or 0), e.get("o_n")),
-            "cr": _d(g("orders"), g("f_open")),
+            "cr": dm.get('conv_orders',0) / dm['views'] if dm['views'] else None,
             "price": _d(g("orders_sum"), g("orders")), "spp": 1 - g("orders_sum_spp") / g("orders_sum") if g("orders_sum") else None,
             "price_spp": _d(g("orders_sum_spp"), g("orders")),
             "unit_cost": _d(g("orders_sum"), g("orders")) * (1 - p_pre / r15) if r15 and g("orders") else None,
@@ -186,6 +190,7 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
 
 GROUPS = [  
     ("", [("day", "Дата", "date")]),
+    ('Спрос (воронка WB)', [('demand_orders','Заказы воронки, шт','int'),('demand_sum','Сумма воронки, ₽','money'),('demand_days','Дней с данными воронки','int')]),
     ("Гипотезы", [("hyp_ind", "Тест показателя", "text"), ("hyp", "Гипотеза", "text")]),
     ("Трафик", [("clicks", "Кликов", "int"), ("clicks_dyn", "Дин", "pct"), ("organic", "% орг.", "pct"), ("avg_pos", "Сред. позиция (реклама)", "num")]),
     ("АРК (единая ставка)", [("a_views", "Показов АРК", "int"), ("a_clicks", "Кликов АРК", "int"), ("a_ctr", "CTR АРК", "pct"), ("a_cpc", "CPC", "money"),
@@ -204,9 +209,9 @@ GROUPS = [
                  ("stock_total", "Итого в остатках", "int"), ("stock_rub", "Итого в остатках, ₽ (по с/с)", "money"),
                  ("speed14", "Скор. прод 14Д", "num"), ("stock", "Остатки", "int"), ("days_left", "Хватит на, дн", "int")]),
     ("Корзины", [("carts", "Корзин, шт", "int"), ("cart_cost", "Цена корз.", "money"), ("cart_rate", "% корз", "pct")]),
-    ("Заказы", [("orders_sum", "Заказов, ₽", "money"), ("orders", "Заказов, шт", "int"), ("order_cost", "Цена заказа", "money"),
-                ("order_rate", "% заказ", "pct")]),
-    ("Раздачи", [("give_qty", "Раздачи, шт", "num"), ("give_sum", "Затраты на раздачи", "money"), ("cr", "CR карт", "pct")]),
+    ("Заказы (статистика)", [("orders_sum", "Заказов, ₽", "money"), ("orders", "Заказов, шт", "int"), ("order_cost", "Цена заказа", "money"),
+                ("order_rate", "% заказ (воронка)", "pct")]),
+    ("Раздачи", [("give_qty", "Раздачи, шт", "num"), ("give_sum", "Затраты на раздачи", "money"), ("cr", "CR карт (воронка)", "pct")]),
     ("Выкупы, отмены, возвраты (в день события)", [("buyouts_sum", "Выкупы, ₽", "money"), ("buyouts", "Выкупы, шт", "int"),
                                                    ("cx_sum", "Отмены, ₽", "money"), ("cx_n", "Отмены, шт", "int"),
                                                    ("rt_sum", "Возвраты, ₽", "money"), ("rt_n", "Возвраты, шт", "int"),
@@ -290,6 +295,15 @@ def total(rows: list[dict]) -> dict:
               "drr_all": f(t["ads"] + t["bonus"], t["orders_sum"]) if t["bonus"] else None,
               "bp": rows[0]["bp"] if rows else None, "rating": rows[0]["rating"] if rows else None, "stock": rows[0]["stock"] if rows else None,
               "speed14": rows[0]["speed14"] if rows else None, "days_left": rows[0]["days_left"] if rows else None})
+    if any('demand_days' in r for r in rows):
+        ds = [r for r in rows if r.get('demand_days')]
+        cv = [r for r in rows if r.get('_funnel_orders') is not None and r.get('_funnel_views') is not None and r.get('_funnel_cart') is not None]
+        t.update(demand_orders=sum(r['demand_orders'] for r in ds) if ds else None,
+                 demand_sum=sum(r['demand_sum'] for r in ds if r['demand_sum'] is not None) if any(r['demand_sum'] is not None for r in ds) else None,
+                 demand_days=len(ds),
+                 cart_rate=f(sum(r['_funnel_cart'] for r in cv),sum(r['_funnel_views'] for r in cv)),
+                 order_rate=f(sum(r['_funnel_orders'] for r in cv),sum(r['_funnel_cart'] for r in cv)),
+                 cr=f(sum(r['_funnel_orders'] for r in cv),sum(r['_funnel_views'] for r in cv)))
     return t
 
 
@@ -365,6 +379,7 @@ def summary(c, shop: int, d_from, d_to, nms: list[int] | None = None) -> list[di
     bp_all, bp0 = rnp.buyout_pct(c, shop)
     tx = rnp._tax(c, shop, d_to)
     days = (d_to - d_from).days + 1
+    demand = wb_demand.summary(c,shop,d_from,d_to,nms)
     rows = []
     for nm, r in S.items():
         if nm in ex or (nms and nm not in nms):
@@ -380,7 +395,8 @@ def summary(c, shop: int, d_from, d_to, nms: list[int] | None = None) -> list[di
         ad_cl = a.get("a_clicks", 0) + a.get("p_clicks", 0)
         s = stock.get(nm) or {}
         q = float(s.get("q") or 0)
-        speed = g("orders") / days
+        dm = demand.get(nm) or wb_demand.empty(d_from,d_to)
+        speed = dm['orders_day']
         have = q + float(s.get("wt") or 0) * (1 - b) + float(s.get("wf") or 0)
         cost_b = g("cost_orders") * b
         n = nom.get(nm) or {}
@@ -393,10 +409,12 @@ def summary(c, shop: int, d_from, d_to, nms: list[int] | None = None) -> list[di
             "drr": _d(ads, g("orders_sum")), "ads": ads, "rating": rating.get(nm), "local": _d(g("loc_w"), g("orders")),
             "bonus": g("ads_bonus") or None, "drr_bonus": _d(g("ads_bonus"), g("orders_sum")) if g("ads_bonus") else None,
             "drr_all": _d(ads + g("ads_bonus"), g("orders_sum")) if g("ads_bonus") else None,
-            "stock": q, "speed": round(speed, 2), "days_left": round(have / speed) if speed else None, "days_left0": round(q / speed) if speed else None,
-            "carts": g("f_cart"), "cart_cost": _d(ads, g("f_cart")), "cart_rate": _d(g("f_cart"), g("f_open")),
-            "orders_sum": g("orders_sum"), "orders": g("orders"), "order_cost": _d(ads, g("orders")), "order_rate": _d(g("orders"), g("f_cart")),
-            "buyouts_sum": g("buyouts_sum_before_spp"), "buyouts": g("buyouts"), "bp": b, "cr": _d(g("orders"), g("f_open")),
+            "stock": q, "speed": wb_demand.rounded(speed, 2), "days_left": round(have / speed) if speed else None, "days_left0": round(q / speed) if speed else None,
+            'demand_orders':dm['orders'], 'demand_sum':dm['orders_sum'],
+            'demand_days':dm['covered_days'], 'demand_expected':dm['expected_days'],
+            "carts": g("f_cart"), "cart_cost": _d(ads, g("f_cart")), "cart_rate": dm['conv_cart'],
+            "orders_sum": g("orders_sum"), "orders": g("orders"), "order_cost": _d(ads, g("orders")), "order_rate": dm['conv_order'],
+            "buyouts_sum": g("buyouts_sum_before_spp"), "buyouts": g("buyouts"), "bp": b, "cr": dm.get('conv_orders',0)/dm['views'] if dm['views'] else None,
             "price": _d(g("orders_sum"), g("orders")), "spp": 1 - g("orders_sum_spp") / g("orders_sum") if g("orders_sum") else None,
             "margin_pre": _d(p_pre, r15), "margin": _d(p_with, r15), "profit_pre": round(p_pre), "profit": round(p_with),
             "kem": _d(p_with, p_pre) if p_pre > 0 else None, "roi_pre": _d(p_pre, cost_b) if cost_b > 0 else None,
@@ -448,7 +466,7 @@ def _potentials(c, shop: int, rows: list[dict], ad: dict):
             x["pot_ads"] = x["margin_pre"] / (x["kem"] * cov)
         if x.get("local") is not None:
             x["pot_supply"] = max(0.0, 0.7 - x["local"])
-        if views is not None and freq and ctr:
+        if views is not None and freq and ctr and x.get("cart_rate") is not None and x.get("order_rate") is not None:
             pv = max(0.0, freq - views)
             pc = pv * ctr
             po = pc * (x.get("cart_rate") or 0) * (x.get("order_rate") or 0)
@@ -479,6 +497,7 @@ def _score10x(rows: list[dict]):
 
 SUMMARY_COLS = [
     ("", [("vendor_code", "Артикул", "text"), ("nm_id", "SKU", "int"), ("subject", "Предмет", "text")]),
+    ('Спрос (воронка WB)', [('demand_orders','Заказы воронки, шт','int'),('demand_sum','Сумма воронки, ₽','money'),('demand_days','Дней с данными','int'),('demand_expected','Полных дней периода','int')]),
     ("ABC анализ", [("abc_sum", "Сумма выкупов", "text"), ("abc_profit", "Прибыль до ДРР", "text"), ("abc_roi", "ROI до ДРР", "text"),
                     ("abc_kem", "КЭМ", "text"), ("rec", "Рекомендация", "text")]),
     ("Джем", [("jam_freq", "Частота за период", "int"), ("jam_views", "Показы за период", "int"), ("jam_cov", "% охвата кластеров", "pct"),
@@ -500,7 +519,7 @@ SUMMARY_COLS = [
     ("Остатки", [("stock", "Остатки", "int"), ("speed", "Скорость, шт/день", "num"), ("days_left", "Хватит на (с % выкупа)", "int"),
                  ("days_left0", "Хватит на (без)", "int")]),
     ("Воронка", [("carts", "Корзин", "int"), ("cart_cost", "Цена корз.", "money"), ("cart_rate", "% корз", "pct"), ("orders_sum", "Заказов, ₽", "money"),
-                 ("orders", "Заказов, шт", "int"), ("order_cost", "Цена заказа", "money"), ("order_rate", "% заказ", "pct"), ("cr", "CR карт", "pct")]),
+                 ("orders", "Заказов, шт", "int"), ("order_cost", "Цена заказа", "money"), ("order_rate", "% заказ (воронка)", "pct"), ("cr", "CR карт (воронка)", "pct")]),
     ("Выкупы и цена", [("buyouts_sum", "Выкупы, ₽", "money"), ("buyouts", "Выкупы, шт", "int"), ("bp", "% выкупа", "pct"),
                        ("price", "Цена без СПП", "money"), ("spp", "СПП", "pct")]),
 ]

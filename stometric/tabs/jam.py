@@ -40,9 +40,9 @@ def _msg(text: str, retry: int | None = None, nm=None, label: str = "") -> dict:
 def _pick_nm(c, shop, f) -> tuple[int | None, str]:
     if f.get("nm_ids"):
         return f["nm_ids"][0], ("Выбрано несколько артикулов — отчёт Джема строится по одному: показан первый. " if len(f["nm_ids"]) > 1 else "")
-    r = c.execute("""SELECT nm_id, sum((data->>'orders')::numeric) o FROM agg_nm_day WHERE account_id=%s AND day BETWEEN %s AND %s
-                     GROUP BY 1 ORDER BY 2 DESC NULLS LAST LIMIT 1""", (shop, f["date_from"], f["date_to"])).fetchone()
-    return (r["nm_id"] if r else None), "Артикул не выбран — показан самый заказываемый за период (выберите свой в фильтре «Артикулы»). "
+    r = c.execute("""SELECT nm_id, sum((data->>'f_orders')::numeric) o FROM agg_nm_day WHERE account_id=%s AND day BETWEEN %s AND %s
+                     GROUP BY 1 HAVING count(data->>'f_orders')>0 ORDER BY 2 DESC NULLS LAST LIMIT 1""", (shop, f["date_from"], f["date_to"])).fetchone()
+    return (r["nm_id"] if r else None), "Артикул не выбран — показан самый заказываемый по доступной воронке WB за период (выберите свой в фильтре «Артикулы»). "
 
 
 def unit_profit(c, shop: int, nm: int, a, b) -> tuple[float | None, str]:

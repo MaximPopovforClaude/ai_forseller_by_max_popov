@@ -161,20 +161,19 @@ def daily(limit_own: int = 400) -> dict:
 def effect(c, shop: int, nm: int, day, days: int = 7) -> dict:
     """Свои карточки: конверсии за N дней до и после смены фото (переходы → корзина → заказ, заказы в день)."""
     def win(a, b):
-        r = c.execute("""SELECT sum((data->>'f_open')::numeric) o, sum((data->>'f_cart')::numeric) k, sum((data->>'orders')::numeric) z, count(*) n
-                         FROM agg_nm_day WHERE account_id=%s AND nm_id=%s AND day BETWEEN %s AND %s""", (shop, nm, a, b)).fetchone()
-        o, k, z = float(r["o"] or 0), float(r["k"] or 0), float(r["z"] or 0)
-        return {"views": o, "cart": k, "orders": z, "conv_cart": k / o if o else None, "conv_order": z / k if k else None,
-                "orders_day": z / days}
+        from . import wb_demand
+        r = wb_demand.summary(c,shop,a,b,[nm]).get(nm) or wb_demand.empty(a,b)
+        
+        r['orders_day'] = r['orders_day'] if r['expected_days'] == days else None
+        return r
     return {"before": win(day - timedelta(days=days), day - timedelta(days=1)), "after": win(day, day + timedelta(days=days - 1))}
 
 
 def period_stats(c, shop: int, nm: int, a, b) -> dict:
     """Self-hosted application component."""
-    r = c.execute("""SELECT sum((data->>'f_open')::numeric) o, sum((data->>'f_cart')::numeric) k, sum((data->>'orders')::numeric) z,
-                            sum((data->>'ad_views')::numeric) v, sum((data->>'ad_clicks')::numeric) cl, count(*) n
-                     FROM agg_nm_day WHERE account_id=%s AND nm_id=%s AND day BETWEEN %s AND %s""", (shop, nm, a, b)).fetchone()
-    o, k, z, v, cl = (float(r[x] or 0) for x in ("o", "k", "z", "v", "cl"))
-    days = (b - a).days + 1
-    return {"from": a, "to": b, "days": days, "views": o, "cart": k, "orders": z, "ctr": cl / v if v else None,
-            "conv_cart": k / o if o else None, "conv_order": z / k if k else None, "orders_day": z / days if days else None}
+    from . import wb_demand
+    r = wb_demand.summary(c,shop,a,b,[nm]).get(nm) or wb_demand.empty(a,b)
+    ad = c.execute("""SELECT sum((data->>'ad_views')::numeric) v, sum((data->>'ad_clicks')::numeric) cl
+                     FROM agg_nm_day WHERE account_id=%s AND nm_id=%s AND day BETWEEN %s AND %s""",
+                   (shop,nm,a,r['to'])).fetchone()
+    return {**r, 'days': r['expected_days'], 'ctr': float(ad['cl'] or 0)/float(ad['v']) if ad and ad['v'] else None}

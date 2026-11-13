@@ -84,6 +84,7 @@ class ExistingInstallation(unittest.TestCase):
                 applied = db.migrate()
                 self.assertIn('110_password_reset.sql', applied)
                 self.assertIn('121_workspace_xyz_news.sql', applied)
+                self.assertIn('125_order_sources_news.sql', applied)
                 self.assertNotIn('900_selfhost_personal_ai.sql', applied)
                 self.assertEqual(db.migrate(), [])
             self.assertEqual({t:c.execute('SELECT * FROM '+t).fetchall() for t in tables}, before)

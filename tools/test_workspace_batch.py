@@ -75,9 +75,11 @@ class Sql(unittest.TestCase):
           INSERT INTO agg_state VALUES(7,'nm_day','2026-10-01','2026-11-12');
           INSERT INTO nomenclature VALUES(7,1,'stable','{}'),(7,2,'sparse','{}'),
             (7,3,'new','{"createdAt":"2026-11-05T12:00:00Z"}'),(7,4,'zero','{}');
-          INSERT INTO agg_nm_day SELECT 7,1,d,'{"orders":100,"orders_sum":10000,"orders_sum_spp":8000,"ads_upd":123,"buyouts":40}'::jsonb
+          INSERT INTO agg_nm_day SELECT 7,1,d,'{"orders":100,"f_orders":100,"orders_sum":10000,"orders_sum_spp":8000,"ads_upd":123,"buyouts":40}'::jsonb
             FROM generate_series('2026-11-01'::date,'2026-11-13'::date,interval '1 day') d;
-          INSERT INTO agg_nm_day VALUES(7,2,'2026-11-12','{"orders":1200}'),(8,1,'2026-11-01','{"orders":999999}');
+          INSERT INTO agg_nm_day SELECT 7,2,d,jsonb_build_object('orders',1200,'f_orders', CASE WHEN d::date='2026-11-12' THEN 1200 ELSE 0 END) FROM generate_series('2026-11-01'::date,'2026-11-12'::date,interval '1 day') d;
+          INSERT INTO agg_nm_day SELECT 7,4,d,'{"orders":0,"f_orders":0}'::jsonb FROM generate_series('2026-11-01'::date,'2026-11-12'::date,interval '1 day') d;
+          INSERT INTO agg_nm_day VALUES(8,1,'2026-11-01','{"orders":999999,"f_orders":999999}');
         ''')
     def test_xyz_complete_days_new_items_shop_scope_and_gaps(self):
         with patch.object(xyz,'today_msk',return_value=DAY):
@@ -127,9 +129,9 @@ class Sql(unittest.TestCase):
         sql=(Path(__file__).resolve().parents[1]/'stometric/migrations/121_workspace_xyz_news.sql').read_text()
         self.c.raw(sql); self.c.raw(sql)
         self.assertEqual(self.c.execute('SELECT count(*) n FROM service_news').fetchone()['n'],0)
-        self.assertIn('|xyz-orders:',tabcache.calculation_version('abc','original'))
-        self.assertIn('|xyz-orders:',tabcache.calculation_version('checklist_svod','original'))
-        self.assertNotIn('|xyz-orders:',tabcache.calculation_version('pnl_real_w','original'))
+        self.assertIn('|xyz-funnel:',tabcache.calculation_version('abc','original'))
+        self.assertIn('|xyz-funnel:',tabcache.calculation_version('checklist_svod','original'))
+        self.assertNotIn('|xyz-funnel:',tabcache.calculation_version('pnl_real_w','original'))
 
     def test_chart_sql_scope_coverage_and_exclusion(self):
         tax={'regime':'Другая СНО','rate':0,'vat':0,'vat_wb':0}

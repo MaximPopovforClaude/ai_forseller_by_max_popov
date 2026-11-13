@@ -33,7 +33,9 @@ def calculation_version(tab: str, data_version: str) -> str:
     if tab in {"oz_dash", "v2_day", "v2_week", "v2_month", "home"}:
         version += "|ozon-order-prices:20261109-1"
     if tab in {"abc", "checklist_svod"}:
-        version += "|xyz-orders:20261113-1"
+        version += "|xyz-funnel:20261113-2"
+    if tab in {'checklist','checklist_svod','actions'}:
+        version += '|demand-funnel:20261113-1'
     
     
     return version + "|dashboard:stream-20261101-2" if tab in DASHBOARD_TABS else version
@@ -256,7 +258,7 @@ def _jam_prefetch(c, shop: int, log=print):
         """SELECT d.nm_id FROM agg_nm_day d WHERE d.account_id=%s AND d.day > current_date - 30
            AND NOT EXISTS (SELECT 1 FROM jam_cache j WHERE j.account_id=d.account_id AND j.nm_id=d.nm_id AND j.state='done'
                            AND j.date_to=%s AND j.fetched_at > now() - interval '2 hours')
-           GROUP BY 1 ORDER BY sum((d.data->>'orders')::numeric) DESC NULLS LAST LIMIT %s""", (shop, b, JAM_TOP))]
+           GROUP BY 1 ORDER BY sum((d.data->>'f_orders')::numeric) DESC NULLS LAST LIMIT %s""", (shop, b, JAM_TOP))]
     from .exclusions import excluded
     ex = excluded(c, shop)
     for nm in [x for x in top if x not in ex]:

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from .wb import RateLimited
+from .api_log_params import encode as log_params
 
 HOST = "https://api-seller.ozon.ru"
 READ_PATHS = {
@@ -108,7 +109,7 @@ class Ozon:
             except httpx.HTTPError as e:
                 err = f"{type(e).__name__}: {e}"[:500]
             self.c.execute("INSERT INTO api_log(account_id,method,params,status,rows,error,duration_ms) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                           (self.acc["id"], bucket, json.dumps(body, ensure_ascii=False, default=str)[:2000], status, None, err,
+                           (self.acc["id"], bucket, log_params(body), status, None, err,
                             int((time.time() - t0) * 1000)))
             self.c.commit()
             if data is not None:

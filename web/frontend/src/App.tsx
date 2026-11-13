@@ -882,7 +882,7 @@ export default function App() {
         {shop && data?.custom === "ext_costs" && data.key === tab && <ExtCosts shop={shop} />}
         {shop && data?.custom === "mrc" && data.key === tab && <Mrc shop={shop} />}
         {shop && data?.custom === "shelves" && data.key === tab && <Shelves shop={shop} />}
-        {shop && data?.custom === "promo" && data.key === tab && <Promo shop={shop} />}
+        {shop && data?.custom === "promo" && data.key === tab && <Promo shop={shop} nm={nm} only={staffOnly} />}
         {shop && data?.custom === "hypotheses" && data.key === tab && <Hypotheses shop={shop} />}
         {shop && data?.custom === "seo" && data.key === tab && <Seo shop={shop} nm={nm} />}
         {data && !data.custom && !data.home && !loading && !data.rows.length && data.empty && <div className="hint">{data.empty}</div>}

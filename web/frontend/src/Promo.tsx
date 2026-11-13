@@ -1,15 +1,16 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { http } from "./api";
 
 /** Расчёт акций WB (видео 10X №16): по каждой акции — факт участия, «расчёт» (галочки для себя), цена по акции, маржа с акцией, разница. */
 type Cell = { in_action: boolean; calc: boolean; price: number | null; margin: number | null; margin_rub: number | null; diff: number | null };
 type Row = { nm_id: number; vendor_code: string | null; title: string | null; photo: string | null; turnover: number | null; stock: number | null;
-  price: number | null; margin: number | null; margin_rub: number | null; no_cost: boolean; promos: Record<string, Cell> };
+  price: number | null; margin: number | null; margin_rub: number | null; no_cost: boolean; promos: Record<string, Cell>;
+  demand?: { covered_days: number; expected_days: number } };
 type P = { key: string; name: string; source: "api" | "file"; from?: string; to?: string; eligible: number; fact_pct: number | null; calc_pct: number | null };
 type Collection = { status: "ok" | "never" | "error" | "stale" | "disabled"; last_ok_at?: string; last_run_at?: string;
   catalog_at?: string; interval_minutes: number; future_days: number };
 type Data = { rows: Row[]; promos: P[]; can_edit: boolean; auto_promos?: Pick<P, "key" | "name" | "from" | "to">[];
-  collection?: Collection; hidden_count?: number };
+  collection?: Collection; hidden_count?: number; demand_note?: string };
 const dateMsk = (value?: string) => value ? new Date(value).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit",
   month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "ещё нет";
 const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
@@ -23,7 +24,7 @@ const FIXED = [["photo", "Фото"], ["art", "Артикул"], ["turn", "Об�
 const loadPins = (): string[] => { try { const v = JSON.parse(localStorage.getItem("promo_pins") || "null"); if (Array.isArray(v)) return v; } catch { /* */ } return ["photo", "art"]; };
 const zone = (v: number | null | undefined) => (v == null ? "" : v >= 0.25 ? "z-good" : v >= 0.15 ? "z-mid" : "z-bad");
 
-export function Promo({ shop }: { shop: number }) {
+export function Promo({ shop, nm = "", only = null }: { shop: number; nm?: string; only?: Set<number> | null }) {
   const [d, setD] = useState<Data | null>(null);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -31,6 +32,13 @@ export function Promo({ shop }: { shop: number }) {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [onlyIn, setOnlyIn] = useState(false);
+  // ArtPicker sends marketplace IDs for articles, categories and own groups.
+  // Keep the full calculation for shop-wide boosting percentages and edits.
+  const rows = useMemo(() => {
+    const ids = nm.trim() ? new Set(nm.split(/[\s,;]+/).filter(x => /^\d+$/.test(x)).map(Number)) : null;
+    return (d?.rows || []).filter(r => (!ids || ids.has(r.nm_id)) && (!only || only.has(r.nm_id))
+      && (!onlyIn || Object.keys(r.promos).length > 0));
+  }, [d, nm, only, onlyIn]);
   const file = useRef<HTMLInputElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const context = useRef(0);
@@ -46,7 +54,7 @@ export function Promo({ shop }: { shop: number }) {
   useLayoutEffect(() => {
     let x = 0;
     setLefts(FIXED.map(([f], i) => { const l = x; if (pins.includes(f)) x += ths.current[i]?.offsetWidth || 0; return l; }));
-  }, [d, pins, onlyIn]);
+  }, [rows, pins]);
   const stick = (i: number, th = false) => (pins.includes(FIXED[i][0])
     ? { style: { position: "sticky" as const, left: lefts[i] || 0, zIndex: th ? 4 : 2 }, "data-pin": "" } : {});
   const load = (stamp = context.current) => http.get<Data>(`/api/shops/${shop}/promo`)
@@ -97,7 +105,6 @@ export function Promo({ shop }: { shop: number }) {
     http.put(`/api/shops/${shop}/promo/calc`, { promo: p, nm_id: nm, on }).catch((e) => setErr(e.message));
   };
   if (!d) return <div className="hint">{err || "Загрузка…"}</div>;
-  const rows = onlyIn ? d.rows.filter((r) => Object.keys(r.promos).length) : d.rows;
   const calcPct = (p: P) => { const el = d.rows.filter((r) => r.promos[p.key]); return el.length ? el.filter((r) => r.promos[p.key].calc).length / el.length : null; };
   return (
     <div className="promo">
@@ -123,6 +130,7 @@ export function Promo({ shop }: { shop: number }) {
         {msg && <span className="ok">{msg}</span>}
       </div>
       {err && <div className="err">{err}</div>}
+      {d.demand_note && <details className="hint"><summary>Источник спроса и полнота данных</summary>{d.demand_note}</details>}
       {d.collection && <div className={d.collection.status === "error" || d.collection.status === "stale" ? "err" : "hint"} role="status">
         Сбор из WB: {d.collection.status === "disabled" ? "для магазина выключен. " : `по расписанию раз в ${d.collection.interval_minutes / 60} ч. `}
         Последний успешный сбор: {dateMsk(d.collection.last_ok_at)} (МСК).
@@ -137,6 +145,8 @@ export function Promo({ shop }: { shop: number }) {
       <div className="hint">Обычные акции WB подтягиваются сами (API календаря акций). Для автоакций API отдаёт названия и сроки, а товары и цены нужно загрузить файлом: в ЛК → «Товары и цены» → «Календарь акций» →
         акция → «Настроить список товаров» → «Сформировать файл» → «Скачать», затем впишите название и «Добавить акцию». «Расчёт» — галочки только для себя:
         видно, какая доля товаров наберётся для бустинга WB. Маржа — до рекламы, как в «ОнлайнЦене».</div>
+      <div className="hint">Показано товаров: {rows.length} из {d.rows.length}. Фильтры артикула, категории и менеджера — вверху страницы.
+        Доли «Факт» и «Расчёт» считаются по всем подходящим товарам магазина, независимо от фильтра.</div>
       {!!d.auto_promos?.length && <details open className="promo-auto">
         <summary>Автоакции из календаря WB ({d.auto_promos.length}) — товары загружаются файлом</summary>
         <ul>{d.auto_promos.map(p => <li key={p.key}>
@@ -159,11 +169,14 @@ export function Promo({ shop }: { shop: number }) {
               <th>Факт<div className="hint">{pc(p.fact_pct)}</div></th><th>Расчёт<div className="hint">{pc(calcPct(p))}</div></th>
               <th>Цена акции</th><th>Маржа с акцией, ₽ / %</th><th>Разница</th></Fragment>)}</tr>
           </thead>
-          <tbody>{rows.map((r) => (
+          <tbody>{!rows.length && <tr><td colSpan={FIXED.length + d.promos.length * 5} className="hint">
+            Нет товаров по выбранным фильтрам. Измените выбор вверху страницы или снимите «только товары в акциях».
+          </td></tr>}{rows.map((r) => (
             <tr key={r.nm_id}>
               <td className="rnp-photo" {...stick(0)}>{r.photo && <img src={r.photo} alt="" loading="lazy" style={{ height: 40 }} />}</td>
               <td {...stick(1)}><b>{r.vendor_code || r.nm_id}</b><div className="hint">{r.nm_id}</div></td>
-              <td {...stick(2)} className={r.turnover == null ? "" : r.turnover > 60 ? "z-bad" : r.turnover > 30 ? "z-mid" : "z-good"}>{r.turnover == null ? "" : r.turnover.toFixed(1).replace(".", ",")}</td>
+              <td {...stick(2)} className={r.turnover == null ? "" : r.turnover > 60 ? "z-bad" : r.turnover > 30 ? "z-mid" : "z-good"}>{r.turnover == null ? "—" : r.turnover.toFixed(1).replace(".", ",")}
+                {r.demand && <small className="hint">Воронка: {r.demand.covered_days}/{r.demand.expected_days} дн.</small>}</td>
               <td {...stick(3)}>{r.stock == null ? "" : nf.format(r.stock)}</td><td {...stick(4)}>{r.price == null ? "" : nf.format(r.price) + " ₽"}</td>
               <td {...stick(5)} className={zone(r.margin)}><Mg r={r.margin_rub} p={r.margin} noCost={r.no_cost} /></td>
               {d.promos.map((p) => { const x = r.promos[p.key]; return <Fragment key={p.key}>

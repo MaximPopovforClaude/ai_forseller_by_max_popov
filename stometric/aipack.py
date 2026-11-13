@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import timedelta
 
 from .config import today_msk
+from . import wb_demand
 
 
 WEEKDAYS = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")
@@ -19,7 +20,9 @@ def _per_nm(c, shop: int, df, dt) -> dict[int, dict]:
     keys = ("orders", "orders_sum", "buyouts", "buyouts_sum", "returns", "profit", "margin", "ads", "ads_upd", "ads_bonus", "storage", "logistics",
             "acquiring", "cost", "cx_orders", "f_open", "f_cart", "f_orders")
     out: dict[int, dict] = {}
-    for r in c.execute("SELECT nm_id, data FROM agg_nm_day WHERE account_id=%s AND day BETWEEN %s AND %s", (shop, df, dt)):
+    daily = {}
+    for r in c.execute("SELECT nm_id, day, data FROM agg_nm_day WHERE account_id=%s AND day BETWEEN %s AND %s", (shop, df, dt)):
+        daily.setdefault(r['nm_id'],{})[r['day']] = r['data']
         d = out.setdefault(r["nm_id"], {k: 0.0 for k in keys} | {"days": 0, "no_cost_days": 0})
         for k in keys:
             if k != "cost":
@@ -27,6 +30,8 @@ def _per_nm(c, shop: int, df, dt) -> dict[int, dict]:
         d["days"] += 1
         if r["data"].get("orders") and not r["data"].get("cost_orders"):   
             d["no_cost_days"] += 1
+    for nm, d in out.items():
+        d['demand'] = wb_demand.records(daily[nm],df,dt)
     return out
 
 
@@ -66,19 +71,22 @@ def money_leaks(c, shop: int, days: int = 30) -> dict:
     oos = []
     for n, v in nm.items():
         s = (st.get(n) or {}).get("total")
-        if s == 0 and v["orders"] >= days * 1.5:
-            avg_price = v["orders_sum"] / v["orders"] if v["orders"] else 0
-            oos.append({"vendor_code": vc(n), "orders_per_day": round(v["orders"] / days, 1),
-                        "lost_per_day_rub": round(v["orders"] / days * avg_price)})
+        d = v['demand']
+        if s == 0 and d['complete'] and d['money_days']==days and d['orders'] >= days * 1.5:
+            oos.append({"vendor_code": vc(n), "orders_per_day": round(d['orders_day'], 1),
+                        "lost_per_day_rub": round(d['orders_sum']/days), 'source':'wb_funnel',
+                        'estimate_note':'Сценарий оборота по прошлому спросу, не потерянная прибыль.'})
     oos.sort(key=lambda x: -x["lost_per_day_rub"])
     returns = sorted([{"vendor_code": vc(n), "buyout_pct": round(v["buyouts"] / (v["buyouts"] + v["returns"]) * 100),
                        "returns": v["returns"], "logistics": round(v["logistics"])}
                       for n, v in nm.items() if v["buyouts"] + v["returns"] >= 20 and v["returns"] / (v["buyouts"] + v["returns"]) > 0.2],
                      key=lambda x: x["buyout_pct"])
     no_cost = [{"vendor_code": vc(n), "orders": v["orders"]} for n, v in nm.items() if v["no_cost_days"] and v["orders"]]
-    return {"period": f"{df:%d.%m}–{y:%d.%m}", "totals": tot,
-            "checked": "Каждый список ниже код проверил по всем артикулам за период (ДРР от выкупов, маржа, остатки — всё есть); "
-                       "пустой список = таких артикулов нет, а не «нет данных». «Нет среди карточек магазина» — строки отчёта WB не по товару "
+    return {"period": f"{df:%d.%m}–{y:%d.%m}", "totals": tot, 'totals_orders_source':'statistics',
+            'demand_note': wb_demand.NOTE,
+            'demand_incomplete_items':sum(not v['demand']['complete'] for v in nm.values()),
+            "checked": "Пустой список может означать отсутствие случаев или недостаток исходных данных. "
+                       "Финансовые списки сохраняют свою базу, спрос — по воронке с полным покрытием. «Нет среди карточек магазина» — строки отчёта WB не по товару "
                        "продавца (например, «неопознанный товар» — WB возвращает продавцу чужой/неопознанный товар и берёт за это логистику): "
                        "так и объясни, не называй это товаром магазина.",
             "unprofitable": loss[:10], "ads_eat_margin": ads_eat[:10],
@@ -114,18 +122,18 @@ def cabinet_issues(c, shop: int) -> dict:
         """SELECT DISTINCT ON (nm_id) nm_id, (data->>'rating')::numeric r FROM agg_nm_day WHERE account_id=%s AND data->>'rating' IS NOT NULL
            AND day >= %s ORDER BY nm_id, day DESC""", (shop, y - timedelta(days=30)))}
     st = stocks(c, shop)
-    top = sorted(w1, key=lambda n: -w1[n]["orders_sum"])[:20]          
+    top = sorted(w1, key=lambda n: -(w1[n]['demand']['orders_sum'] or 0))[:20]
     vc = lambda n: (names.get(n) or {}).get("vendor_code") or str(n)  
     conv, drops, cards, low_rating, low_stock = [], [], [], [], []
     for n in top:
         a, b = w1[n], w0.get(n) or {}
-        ca = a["f_cart"] / a["f_open"] if a["f_open"] else None
-        cb = b.get("f_cart", 0) / b["f_open"] if b.get("f_open") else None
-        if ca is not None and cb and ca < cb * 0.8 and a["f_open"] > 300:
-            conv.append({"vendor_code": vc(n), "conv_cart_now": round(ca * 100, 1), "conv_cart_before": round(cb * 100, 1), "views": a["f_open"]})
-        if b.get("orders") and a["orders"] < b["orders"] * 0.75 and b["orders"] >= 20:
-            drops.append({"vendor_code": vc(n), "orders_week": a["orders"], "orders_prev_week": b["orders"],
-                          "change_pct": round((a["orders"] / b["orders"] - 1) * 100)})
+        da, db = a['demand'], b.get('demand') or wb_demand.empty(y-timedelta(days=13),y-timedelta(days=7))
+        ca, cb = da['conv_cart'], db['conv_cart']
+        if da['conversion_days']==7 and db['conversion_days']==7 and ca is not None and cb and ca < cb * .8 and da['views'] > 300:
+            conv.append({"vendor_code": vc(n), "conv_cart_now": round(ca * 100, 1), "conv_cart_before": round(cb * 100, 1), "views": da['views']})
+        if da['complete'] and db['complete'] and db['orders'] >= 20 and da['orders'] < db['orders'] * .75:
+            drops.append({"vendor_code": vc(n), "orders_week": da['orders'], "orders_prev_week": db['orders'],
+                          "change_pct": round((da['orders'] / db['orders'] - 1) * 100)})
         info = names.get(n) or {}
         miss = [x for x, bad in (("фото меньше 5", info.get("photos", 0) < 5), ("нет видео", not info.get("video")),
                                  ("короткое описание", info.get("descr", 0) < 500)) if bad]
@@ -134,7 +142,7 @@ def cabinet_issues(c, shop: int) -> dict:
         if rating.get(n) and rating[n] < 4.7:
             low_rating.append({"vendor_code": vc(n), "rating": rating[n]})
         s = (st.get(n) or {}).get("total")
-        per_day = a["orders"] / 7
+        per_day = da['orders_day']
         if s is not None and per_day and s / per_day < 14:
             low_stock.append({"vendor_code": vc(n), "stock": s, "days": round(s / per_day, 1), "orders_per_day": round(per_day, 1)})
     paused = [dict(r) for r in c.execute(
@@ -145,28 +153,38 @@ def cabinet_issues(c, shop: int) -> dict:
     f = insights.findings(c, shop, y)
     
     d1, d0, d7 = (_per_nm(c, shop, d, d) for d in (y, y - timedelta(days=1), y - timedelta(days=7)))
-    top_d = sorted(set(d0) | set(d7), key=lambda n: -((d0.get(n) or {}).get("orders_sum", 0) + (d7.get(n) or {}).get("orders_sum", 0)))[:20]
+    top_d = sorted(set(d0) | set(d7), key=lambda n: -sum(((d.get(n) or {}).get('demand') or {}).get('orders_sum') or 0 for d in (d0,d7)))[:20]
     zero = {"orders": 0.0, "orders_sum": 0.0, "f_open": 0.0, "f_cart": 0.0, "ads": 0.0}
 
     def day_drops(b):
         out, cv = [], []
         for n in top_d:
             a, z = d1.get(n) or zero, b.get(n) or zero
-            if z["orders"] >= 5 and a["orders"] < z["orders"] * 0.75:
-                out.append({"vendor_code": vc(n), "orders": a["orders"], "orders_before": z["orders"],
-                            "change_pct": round((a["orders"] / z["orders"] - 1) * 100), "views": a["f_open"], "views_before": z["f_open"]})
-            ca = a["f_cart"] / a["f_open"] if a["f_open"] >= 100 else None
-            cb = z["f_cart"] / z["f_open"] if z["f_open"] >= 100 else None
+            da,dz = a.get('demand'),z.get('demand')
+            if not da or not dz or not da['complete'] or not dz['complete']:
+                continue
+            if dz['orders'] >= 5 and da['orders'] < dz['orders'] * .75:
+                out.append({"vendor_code": vc(n), "orders": da['orders'], "orders_before": dz['orders'],
+                            "change_pct": round((da['orders']/dz['orders']-1)*100), "views": da['views'], "views_before": dz['views']})
+            ca = da['conv_cart'] if (da['views'] or 0)>=100 else None
+            cb = dz['conv_cart'] if (dz['views'] or 0)>=100 else None
             if ca is not None and cb and ca < cb * 0.8:
                 cv.append({"vendor_code": vc(n), "conv_cart_now": round(ca * 100, 1), "conv_cart_before": round(cb * 100, 1), "views": a["f_open"]})
         return out[:10], cv[:10]
 
     def shop_line(b):
-        return {k: {"now": round(sum(v[k] for v in d1.values())), "before": round(sum(v[k] for v in b.values()))}
-                for k in ("orders", "orders_sum", "f_open", "ads", "profit")}
+        def total(rows,k):
+            if k in ('orders','orders_sum'):
+                ds = [v['demand'] for v in rows.values()]
+                if set(rows) != set(d1)|set(b) or not ds or not all(v['complete'] and (k!='orders_sum' or v['money_days']==1) for v in ds):
+                    return None
+                return round(sum(v[k] for v in ds))
+            return round(sum(v[k] for v in rows.values()))
+        return {k: {'now':total(d1,k),'before':total(b,k)} for k in ('orders','orders_sum','f_open','ads','profit')}
     dd0, cv0 = day_drops(d0)
     dd7, cv7 = day_drops(d7)
-    daily = {"yesterday": f"{y:%d.%m}, {WEEKDAYS[y.weekday()]}", "day_before": f"{y - timedelta(days=1):%d.%m}", "same_day_last_week": f"{y - timedelta(days=7):%d.%m}",
+    daily = {'orders_source':'wb_funnel', 'data_note':wb_demand.NOTE,
+             "yesterday": f"{y:%d.%m}, {WEEKDAYS[y.weekday()]}", "day_before": f"{y - timedelta(days=1):%d.%m}", "same_day_last_week": f"{y - timedelta(days=7):%d.%m}",
              "shop_vs_day_before": shop_line(d0), "shop_vs_same_day_last_week": shop_line(d7),
              "orders_drop_vs_day_before": dd0, "orders_drop_vs_same_day_last_week": dd7,
              "conversion_drop_vs_day_before": cv0, "conversion_drop_vs_same_day_last_week": cv7}

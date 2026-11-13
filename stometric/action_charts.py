@@ -3,11 +3,12 @@ from datetime import timedelta
 from . import rnp
 from .config import today_msk
 from .materialize import ensure_cost_ready, NotReady
+from . import wb_demand
 
 KEYS = ('orders', 'buyouts', 'price_spp', 'ads', 'profit')
 
 
-def values(rows, days, bp, tax, covered=None):
+def values(rows, days, bp, tax, covered=None, funnel=False):
     out = {k: [] for k in KEYS}
     for day in days:
         if covered is not None and not (covered[0] <= day <= covered[1]):
@@ -18,6 +19,8 @@ def values(rows, days, bp, tax, covered=None):
         v = rnp._vals(s, bp, tax)
         o = float(s.get('orders') or 0)
         v['price_spp'] = round(float(s['orders_sum_spp']) / o, 2) if o and s.get('orders_sum_spp') is not None else None
+        if funnel:
+            v['orders'] = wb_demand.number(s.get('f_orders')) if day < today_msk() else None
         for k in KEYS:
             out[k].append(v[k])
     return out
@@ -37,19 +40,19 @@ def get(c, shop, end=None):
         covered = (state['covered_from'], state['covered_to'])
         bp, bp0 = rnp.buyout_pct(c, shop)
         
-        sel = ', '.join(f"(data->>'{k}')::numeric {k}" for k in rnp.F)
+        sel = ', '.join(f"(data->>'{k}')::numeric {k}" for k in rnp.F + ['f_orders'])
         raw = c.execute(f'''SELECT nm_id, day, {sel} FROM agg_nm_day
             WHERE account_id=%s AND day BETWEEN %s AND %s ORDER BY nm_id, day''', (shop, days[0], end))
         out, current, daily = {}, None, {}
         for row in raw:
             nm = row['nm_id']
             if current is not None and current != nm:
-                out[current] = values(daily, days, bp.get(current, bp0), tax, covered)
+                out[current] = values(daily, days, bp.get(current, bp0), tax, covered, funnel=True)
                 daily = {}
             current = nm
             daily[row['day']] = row
         if current is not None:
-            out[current] = values(daily, days, bp.get(current, bp0), tax, covered)
+            out[current] = values(daily, days, bp.get(current, bp0), tax, covered, funnel=True)
     elif mp == 'ozon':
         from . import rnp_mp
         src = rnp_mp.source(c, shop, mp, days[0], end)
@@ -63,5 +66,5 @@ def get(c, shop, end=None):
             'price_label': 'Цена с СПП, ₽' if mp == 'wb' else 'Цена продавца Ozon, ₽',
             'note': 'Заказы и выкупы — шт.; реклама — фактический расход в рублях, прибыль — расчётная по формулам РНП. '
                     'Цена — средняя в заказах дня; без заказов цены нет. Сегодня — неполный день.' +
-                    (' Дни за границами готовых итогов показаны пропусками.' if covered else
+                    (' Заказы — по воронке WB за полные дни; отсутствие данных — пропуск. Цена и прибыль сохраняют финансовые источники.' if covered else
                      ' Цена Ozon указана до соинвеста: источник РНП не содержит цену покупателя.')}

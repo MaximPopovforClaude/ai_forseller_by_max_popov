@@ -8,13 +8,18 @@ global.localStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)
 const m={views:100,clicks:20,carts:4,orders:2,ctr:.2,conv_cart:.2,conv_order:.5,ad_views:30,org_views:70};
 const day='2026-11-10',per={from:day,to:day,days:1,ctr:.2,conv_cart:.2,conv_order:.5,orders_day:2};
 const pair={from:day+'T00:00:00Z',to:day+'T12:00:00Z',before_spp:1234.56,after_spp:987.65,coverage:.75};
-const full={nm_id:77,own:true,current:[],current_period:{...per,prices:pair},taken_at:null,
- events:[{day,summary:'Смена фото',before:[],after:[],period:{...per,prices:null},period_before:{...per,prices:{...pair,before_spp:800,after_spp:600,coverage:1}}}]};
+const entry={from:'2026-11-08',to:day,expected_days:3,covered_days:2,report_days:3,missing_days:['2026-11-09'],coverage:2/3,status:'partial',
+ ctr:.25,conv_cart:.3,conv_order:.4,views:400,clicks:100,carts:30,orders:12};
+const full={nm_id:77,own:true,current:[],current_period:{...per,prices:pair,entry},taken_at:null,
+ events:[{day,summary:'Смена фото',before:[],after:[],period:{...per,prices:null,entry:{...entry,status:'empty',covered_days:0,ctr:null,conv_cart:null,conv_order:null}},
+ period_before:{...per,prices:{...pair,before_spp:800,after_spp:600,coverage:1},entry:{...entry,status:'complete',covered_days:3,coverage:1,missing_days:[]}}}]};
 const detail={reports:[],periods:[{id:'one',d_from:day,d_to:day},{id:'two',d_from:'2026-11-09',d_to:'2026-11-09'}],points:[{section:'Поиск',point:'Запрос',cells:{one:m}}],
  total:{one:m},articles:[],can_edit:false,ads:{one:{total:m,search:m,rest:m,organic:m}}};
 const sources={periods:[{key:day,d_from:day,d_to:day,n_days:1}],sources:[{...m,section:'Поиск',points:[{...m,point:'Запрос'}]}],
  sources_total:m,sources_days:[{section:'Поиск',all:m,days:{[day]:m}}],days:[day],d_from:day,d_to:day,n_days:1};
+let holdPhotos=false;const photoRequests=[];
 const http={get:async url=>{
+ if(holdPhotos&&url.includes('/photo_funnel'))return new Promise(resolve=>photoRequests.push({url,resolve}));
  if(url.endsWith('/photo_funnel'))return [{nm_id:77,vendor_code:'DEMO',kind:'own',changes:1,has_snap:true}];
  if(url.endsWith('/photo_funnel/77'))return full;
  if(url.includes('/entry_points?'))return detail;
@@ -48,6 +53,24 @@ const tables=()=>nodes().filter(n=>n.tagName==='TABLE'),pinned=()=>nodes().filte
  assert.ok(kpis[0].textContent.includes('1 234,56 ₽'));assert.ok(kpis[0].textContent.includes('987,65 ₽'));
  assert.ok(kpis[0].textContent.includes('75,0 %'));assert.ok(kpis[1].textContent.includes('800 ₽'));
  assert.ok(kpis[2].textContent.includes('Нет истории цен'));assert.ok(!kpis[2].textContent.includes('0 ₽'));
+ const entries=()=>nodes().filter(n=>props(n)['aria-label']==='Показатели из точек входа');
+ assert.equal(entries().length,3);assert.ok(entries()[0].textContent.includes('25 %'));
+ assert.ok(entries()[0].textContent.includes('30 %'));assert.ok(entries()[0].textContent.includes('40 %'));
+ assert.ok(kpis[0].textContent.includes('CTR рекламы20,00 %'),'old advertising CTR retained independently');
+ assert.ok(entries()[0].textContent.includes('2 из 3'));assert.ok(entries()[0].textContent.includes('не полностью'));
+ assert.ok(entries()[0].textContent.includes('09.11.2026'));assert.ok(entries()[0].textContent.includes('Показы: 400'));
+ assert.ok(entries()[2].textContent.includes('Нет дневных данных'));assert.ok(!entries()[2].textContent.includes('CTR0 %'));
+ for(const [status,message] of [['intraday','нельзя разделить'],['pending','нет завершённых дней']]){
+  full.current_period.entry={...entry,status,expected_days:0,covered_days:0,to:null,ctr:null,conv_cart:null,conv_order:null};
+  flushSync(()=>root.render(null));await render(PhotoFunnel,{shop:7});assert.ok(entries()[0].textContent.includes(message));
+ }
+ full.current_period={...full.current_period,orders_day:null,conv_cart:null,conv_order:null,covered_days:2,expected_days:3,conversion_days:1};
+ flushSync(()=>root.render(null));await render(PhotoFunnel,{shop:7});
+ const partial=nodes().find(n=>props(n).className==='pf-kpi').textContent;
+ assert.ok(partial.includes('заказы 2/3'));assert.ok(!partial.includes('Заказов в день0'));
+ assert.ok(!partial.includes('Конв. в заказ0 %'));
+ delete full.current_period.entry;delete full.events[0].period.entry;delete full.events[0].period_before.entry;
+ flushSync(()=>root.render(null));await render(PhotoFunnel,{shop:7});assert.equal(entries().length,0,'legacy demo payload stays compatible');
  assert.ok(nodes().filter(n=>n.tagName==='DETAILS'&&props(n).className==='hint pf-price-note').every(n=>!props(n).open),'price explanations collapsed by default');
  await render(EntryPoints,{shop:7,nm:''});
  assert.ok(nodes().some(n=>props(n)['data-test-chart']));
@@ -73,5 +96,15 @@ const tables=()=>nodes().filter(n=>n.tagName==='TABLE'),pinned=()=>nodes().filte
  await click(find('📌 Открепить точки входа'));assert.equal(store.get('entry_pin_points'),'0');
  assert.ok(!props(tables()[0]).className.includes('entry-pin'));
  await render(EntryPoints,{shop:7,nm:'',enablePin:false});assert.ok(!find('📌 Закрепить точки входа'));
+ // Switching shop/article cannot display delayed photo KPIs from old requests.
+ holdPhotos=true;await render(PhotoFunnel,{shop:7});const oldList=photoRequests.at(-1);
+ await render(PhotoFunnel,{shop:8});const newList=photoRequests.at(-1);
+ newList.resolve([{nm_id:77,vendor_code:'NEW-77',kind:'own'},{nm_id:88,vendor_code:'NEW-88',kind:'own'}]);await settle();await settle();
+ const oldItem=photoRequests.at(-1);assert.ok(oldItem.url.endsWith('/77'));
+ oldList.resolve([{nm_id:99,vendor_code:'OLD',kind:'own'}]);await settle();assert.ok(!box.textContent.includes('OLD'));
+ await click(nodes().find(n=>n.tagName==='BUTTON'&&n.textContent.includes('NEW-88')));
+ photoRequests.at(-1).resolve({...full,nm_id:88});await settle();await settle();
+ const heading=()=>nodes().find(n=>props(n).className==='board-bar');assert.ok(heading().textContent.startsWith('88'));
+ oldItem.resolve({...full,nm_id:77});await settle();assert.ok(heading().textContent.startsWith('88'));
  assert.deepEqual(warnings,[]);console.log('Photo prices and entry pin: rendering, coverage, missing values, all source views, summary/subrows and persistence OK');
 }finally{flushSync(()=>root.unmount());console.error=oldError}})().catch(e=>{console.error(e);process.exitCode=1});

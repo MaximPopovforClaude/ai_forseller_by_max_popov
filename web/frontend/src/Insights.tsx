@@ -3,7 +3,7 @@ import { http } from "./api";
 import { describeAiAccess, type AiAccess } from "./aiAccess";
 
 type Art = { nm_id: number; vendor_code: string; title: string; orders: number; orders_avg7: number; change_pct: number; why: string[] };
-type F = { day: string; shop: { orders: number; orders_avg7: number; orders_sum: number; orders_sum_avg7: number; ads: number; ads_avg7: number };
+type F = { day: string; data_note?: string; shop: { orders: number | null; orders_avg7: number | null; orders_sum: number | null; orders_sum_avg7: number | null; ads: number; ads_avg7: number };
   articles: Art[]; low_stock: { vendor_code: string; stock: number; orders_avg7: number; days: number }[];
   no_cost: { vendor_code: string; orders: number }[]; negative: { vendor_code: string; orders: number; margin_orders: number }[]; competitors: string[] };
 type Res = AiAccess & { findings: F; ai_text: string | null; ai_model: string | null; text: string; plan: string; built_at?: string };
@@ -23,7 +23,8 @@ export function Insights({ shop, staff }: { shop: number; staff?: number | null 
   };
   useEffect(() => { setR(null); load(); }, [shop, day, staff]); // eslint-disable-line react-hooks/exhaustive-deps
   const f = r?.findings;
-  const card = (t: string, a: number, b: number, unit = "") => {
+  const card = (t: string, a: number | null, b: number | null, unit = "") => {
+    if (a == null || b == null) return <div><span>{t}</span><b>{a == null ? "—" : nf.format(a) + unit}</b><div className="hint">Недостаточно данных воронки для сравнения</div></div>;
     const c = ch(a, b);
     return <div className="ins-card"><div className="hint">{t}</div><b>{nf.format(a)}{unit}</b>
       <div className={c > 0 ? "up" : c < 0 ? "down" : ""}>{c > 0 ? "+" : ""}{c} % к среднему ({nf.format(b)}{unit})</div></div>;
@@ -37,6 +38,7 @@ export function Insights({ shop, staff }: { shop: number; staff?: number | null 
       </div>
       {err && <div className="err">{err}</div>}
       {f && <>
+        {f.data_note && <details className="hint"><summary>Источники и полнота данных</summary>{f.data_note}</details>}
         <div className="ins-cards">
           {card("Заказы, шт", f.shop.orders, f.shop.orders_avg7)}
           {card("Сумма заказов", f.shop.orders_sum, f.shop.orders_sum_avg7, " ₽")}

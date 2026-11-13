@@ -7,7 +7,8 @@ type Act = { id: number | string; kind: string; value: string | null; note?: str
 type Row = {
   nm_id: number; vendor_code: string | null; title: string | null; subject: string | null; photo: string | null;
   stock_wb: number | null; stock_fbs: number | null; stock: number | null; price: number | null; price_spp: number | null;
-  margin_pct: number | null; rating: number | null; orders_avg: number; stock_days: number | null; spp: number | null; plan: number | null;
+  margin_pct: number | null; rating: number | null; orders_avg: number | null; stock_days: number | null; spp: number | null; plan: number | null;
+  orders_source?: string; demand?: { covered_days: number; expected_days: number };
   drr_orders: number | null; drr_buyouts: number | null; conv_cart: number | null; conv_order: number | null;
   orders: Record<string, number>; actions: Record<string, Act[]>;
   ads?: Record<string, { all: number; ark: number; prk: number; search: number; rec: number; osum: number | null }>;
@@ -16,7 +17,7 @@ type Row = {
 type Target = { shop: number; nm: number };
 const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const keyOf = (r: { shop_id?: number; nm_id: number }) => `${r.shop_id}:${r.nm_id}`;
-type Board = { days: string[]; kinds: Kind[]; rows: Row[]; month: string; me: number; can_edit: boolean; mp?: string };
+type Board = { days: string[]; kinds: Kind[]; rows: Row[]; month: string; me: number; can_edit: boolean; mp?: string; demand_note?: string };
 
 const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const nf1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
@@ -217,6 +218,7 @@ export function ActionsBoard({ shop, shops, enableCharts = true }: { shop: numbe
         {picked.size > 0 && <button className="link" onClick={() => setPicked(new Set())}>снять выбор</button>}
         <span className="hint">Клик по дню — записать действия. ⚙ — изменения, которые мы заметили сами в API {oz ? "Ozon" : "WB"}.</span>
       </div>
+      {b.demand_note && <details className="hint"><summary>Источник заказов и полнота данных</summary>{b.demand_note}</details>}
       {showCharts && <div className="hint">{[...new Set(Object.values(charts).map(c => c.note).filter(Boolean))].join(" ")}</div>}
       <div className="board-wrap">
         <table className="board-t">
@@ -239,7 +241,7 @@ export function ActionsBoard({ shop, shops, enableCharts = true }: { shop: numbe
                   {[
                     [oz ? "Ост. FBO" : "Ост. WB", num(r.stock_wb)], ["Ост. ФБС", num(r.stock_fbs)], ["Ост. всего", num(r.stock)],
                     [oz ? "Цена продавца" : "Цена без СПП", num(r.price)], [oz ? "Цена с акциями" : "Цена с СПП", num(r.price_spp)],
-                    ["Маржа %", pct(r.margin_pct)], ["Рейтинг", r.rating == null ? "" : nf1.format(r.rating)], ["Ср. заказы", nf1.format(r.orders_avg)],
+                    ["Маржа %", pct(r.margin_pct)], ["Рейтинг", r.rating == null ? "" : nf1.format(r.rating)], [r.demand ? `Ср. зак. (${r.demand.covered_days}/${r.demand.expected_days} дн.)` : "Ср. заказы", r.orders_avg == null ? "—" : nf1.format(r.orders_avg)],
                     ["Ост. в днях", num(r.stock_days)], [oz ? "Скидка Ozon %" : "СПП %", pct(r.spp)],
                     [`План ${month}`, planEdit === keyOf(r) ? <input key="plan" autoFocus aria-label={`План ${r.vendor_code}`} defaultValue={r.plan ?? ""}
                       onBlur={e => savePlan(r, e.target.value)} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setPlanEdit(null); }} />
@@ -252,14 +254,15 @@ export function ActionsBoard({ shop, shops, enableCharts = true }: { shop: numbe
                 </div></td>}
                 {showCharts && <td><ActionSparks data={charts[r.shop_id!]} nm={r.nm_id} /></td>}
                 {b.days.map((d, i) => {
-                  const o = r.orders[d] ?? 0;
+                  const o = r.orders[d] ?? (r.orders_source === "wb_funnel" ? null : 0);
                   const prevDay = b.days[i + 1] ?? new Date(new Date(d).getTime() - 864e5).toISOString().slice(0, 10);
                   const p = r.orders[prevDay];
                   const acts = r.actions[d] || [];
                   return (
                     <td key={d} className={"day" + (r.can_edit ? " click" : "")}
                       onClick={() => r.can_edit && setEdit({ t: [{ shop: r.shop_id!, nm: r.nm_id }], label: `${r.vendor_code} · ${dd(d)}`, day: d, existing: acts })}>
-                      <div className={"o" + (p != null && o > p ? " up" : p != null && o < p ? " down" : "")}>{o}</div>
+                      <div title={r.orders_source === "wb_funnel" ? "Заказы по воронке WB; прочерк — нет данных полного дня" : undefined}
+                        className={"o" + (o != null && p != null && o > p ? " up" : o != null && p != null && o < p ? " down" : "")}>{o ?? "—"}</div>
                       {drr.length > 0 && r.ads?.[d] && <div className="hint" style={{ fontSize: 11, lineHeight: 1.25, whiteSpace: "nowrap" }}>
                         {DRR.filter(([k]) => drr.includes(k)).map(([k, , short]) => { const a = r.ads![d], v = a[k as "all"];
                           return v ? <div key={k}>{short} {a.osum ? nf1.format(v / a.osum * 100) + "%" : nf.format(v) + " ₽"}</div> : null; })}</div>}

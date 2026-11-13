@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from uuid import uuid4
 
-from stometric import photo_prices as prices, api_manager, photos, showcase
+from stometric import photo_prices as prices, photo_entry, api_manager, photos, showcase
 from tools.test_calendar import Standalone, Cursor
 
 T = datetime(2026, 11, 10, tzinfo=timezone.utc)
@@ -72,6 +72,7 @@ class Arithmetic(unittest.TestCase):
             return Cursor([{'ok':1}]) if c.own and 'FROM nomenclature' in sql else original(sql,args)
         c.execute = execute
         with patch.object(api_manager, '_role'), patch.object(photos, 'period_stats', side_effect=lambda *a: {}),\
+             patch.object(photo_entry, 'periods', return_value={}),\
              patch.object(photos, 'effect', return_value={}), patch.object(prices, 'periods', return_value={i:{'before_spp':i*100} for i in (1,2,3)}) as read:
             result = api_manager.pf_item(7,77,u={},c=c)
             self.assertEqual(result['current_period']['prices']['before_spp'],300)

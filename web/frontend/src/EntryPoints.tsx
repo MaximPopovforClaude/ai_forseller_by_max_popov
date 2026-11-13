@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { http } from "./api";
 import { EntryViews, type View } from "./EntryViews";
-import { growthCell, growthThreshold } from "./entryGrowth";
+import { changeCell, declineThreshold, growthThreshold } from "./entryGrowth";
 
 /** Точки входа WB (отчёт из ЛК — загружает пользователь): откуда приходят в карточки и как меняется каждая точка входа по периодам. */
 type M = { views: number; clicks: number; carts: number; orders: number; ctr: number | null; conv_cart: number | null; conv_order: number | null; share?: number | null };
@@ -31,6 +31,12 @@ export function EntryPoints({ shop, nm, hideChg = false, enablePin = true, enabl
   const growth = enableGrowth && growthOn ? threshold : null;
   const setGrowth = (on: boolean) => { setGrowthOn(on); try { localStorage.setItem("entry_growth_on", on ? "1" : "0"); } catch { /* no storage */ } };
   const setThreshold = (value: string) => { setGrowthText(value); if (growthThreshold(value) != null) { try { localStorage.setItem("entry_growth_threshold", value); } catch { /* no storage */ } } };
+  const [declineOn, setDeclineOn] = useState(() => { try { return localStorage.getItem("entry_decline_on") !== "0"; } catch { return true; } });
+  const [declineText, setDeclineText] = useState(() => { try { return String(declineThreshold(localStorage.getItem("entry_decline_threshold")) ?? 30); } catch { return "30"; } });
+  const dropThreshold = declineThreshold(declineText);
+  const decline = enableGrowth && declineOn ? dropThreshold : null;
+  const setDecline = (on: boolean) => { setDeclineOn(on); try { localStorage.setItem("entry_decline_on", on ? "1" : "0"); } catch { /* no storage */ } };
+  const setDropThreshold = (value: string) => { setDeclineText(value); if (declineThreshold(value) != null) { try { localStorage.setItem("entry_decline_threshold", value); } catch { /* no storage */ } } };
   const pickView = (v: View | "detail") => { setView(v); try { localStorage.setItem("entry_view", v); } catch { /* */ } };
   const tabs = <div className="rnp-bar entry-tabs">
     {([["funnel", "Воронка артикулов"], ["sources", "Источники трафика"], ["sources_days", "Источники трафика по дням"], ["detail", "Точки входа подробно"]] as const)
@@ -39,18 +45,24 @@ export function EntryPoints({ shop, nm, hideChg = false, enablePin = true, enabl
   </div>;
   const growthSettings = enableGrowth && view !== "sources" && <div className="rnp-bar entry-growth-settings">
     <label className="chk" title="Рост на 300 % — например, со 100 до 400. Для CTR и конверсий тоже сравнивается относительный рост, не разница в процентных пунктах.">
-      <input type="checkbox" checked={growthOn} onChange={e => setGrowth(e.target.checked)} /> Подсвечивать рост от
+      <input type="checkbox" checked={growthOn} onChange={e => setGrowth(e.target.checked)} /> Подсвечивать рост зелёным от
     </label>
     <input type="number" min="0" step="any" aria-label="Порог роста, %" aria-invalid={threshold == null}
       value={growthText} disabled={!growthOn} onChange={e => setThreshold(e.target.value)} /> %
-    {growthOn && threshold == null ? <span className="entry-growth-error" role="alert">Укажите процент больше 0.</span>
-      : <span className="hint">К предыдущему периоду. Нули и пропуски не сравниваются.</span>}
+    {growthOn && threshold == null && <span className="entry-growth-error" role="alert">Для роста укажите процент больше 0.</span>}
+    <label className="chk" title="Падение больше 30 % — например, со 100 до 69. Ровно 30 % не подсвечивается. CTR и конверсии сравниваются в относительных процентах.">
+      <input type="checkbox" checked={declineOn} onChange={e => setDecline(e.target.checked)} /> Подсвечивать падение красным больше
+    </label>
+    <input type="number" min="0" max="100" step="any" aria-label="Порог падения, %" aria-invalid={dropThreshold == null}
+      value={declineText} disabled={!declineOn} onChange={e => setDropThreshold(e.target.value)} /> %
+    {declineOn && dropThreshold == null && <span className="entry-growth-error" role="alert">Для падения укажите процент больше 0 и не больше 100.</span>}
+    <span className="hint">К предыдущему периоду. Если прежнее значение равно нулю или данных нет, подсветки нет. Падение до нуля учитывается.</span>
   </div>;
-  if (view !== "detail") return <div className="entry">{tabs}{growthSettings}<EntryViews shop={shop} nm={nm} view={view} pinPoints={enablePin && pinPoints} growth={growth} /></div>;
-  return <div className="entry">{tabs}{growthSettings}<EntryDetail shop={shop} nm={nm} hideChg={hideChg} pinPoints={enablePin && pinPoints} growth={growth} /></div>;
+  if (view !== "detail") return <div className="entry">{tabs}{growthSettings}<EntryViews shop={shop} nm={nm} view={view} pinPoints={enablePin && pinPoints} growth={growth} decline={decline} /></div>;
+  return <div className="entry">{tabs}{growthSettings}<EntryDetail shop={shop} nm={nm} hideChg={hideChg} pinPoints={enablePin && pinPoints} growth={growth} decline={decline} /></div>;
 }
 
-function EntryDetail({ shop, nm, hideChg = false, pinPoints = false, growth = null }: { shop: number; nm: string; hideChg?: boolean; pinPoints?: boolean; growth?: number | null }) {
+function EntryDetail({ shop, nm, hideChg = false, pinPoints = false, growth = null, decline = null }: { shop: number; nm: string; hideChg?: boolean; pinPoints?: boolean; growth?: number | null; decline?: number | null }) {
   const [showChart, setShowChart] = useState(() => { try { return localStorage.getItem("entry_chart") !== "0"; } catch { return true; } });
   const [d, setD] = useState<Data | null>(null);
   const [mode, setMode] = useState<Mode>(() => { try { return (localStorage.getItem("entry_mode") as Mode) || "days"; } catch { return "days"; } });
@@ -123,7 +135,7 @@ function EntryDetail({ shop, nm, hideChg = false, pinPoints = false, growth = nu
   const cells = (row: Record<string, M>, bold: boolean) => per.map((p, i) => <Fragment key={p.id}>{metrics.map((k) => {
     const a = val(k, row[String(p.id)], p), b = i + 1 < per.length ? val(k, row[String(per[i + 1].id)], per[i + 1]) : null;
     const x = dyn(k, a, b);
-    return <Fragment key={k}><td {...growthCell(a, b, growth)}>{bold ? <b>{fmt(k, a)}</b> : fmt(k, a)}</td>
+    return <Fragment key={k}><td {...changeCell(a, b, growth, decline)}>{bold ? <b>{fmt(k, a)}</b> : fmt(k, a)}</td>
       {i + 1 < per.length && !hideChg && <td className={x ? (x.good ? "t-good" : "t-bad") : ""}>{x?.t || ""}</td>}</Fragment>;
   })}</Fragment>);
   return (
