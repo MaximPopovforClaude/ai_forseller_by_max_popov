@@ -35,7 +35,7 @@ def calculation_version(tab: str, data_version: str) -> str:
     if tab in {"abc", "checklist_svod"}:
         version += "|xyz-funnel:20261113-2"
     if tab in {'checklist','checklist_svod','actions'}:
-        version += '|demand-funnel:20261113-1'
+        version += '|demand-funnel:20261113-2'
     
     
     return version + "|dashboard:stream-20261101-2" if tab in DASHBOARD_TABS else version

@@ -192,6 +192,35 @@ class Sql(unittest.TestCase):
         self.c.raw(sql);self.c.raw(sql)
         self.assertEqual(self.c.execute('SELECT count(*) n FROM service_news').fetchone()['n'],0)
 
+    def test_rating_context_demand_zero_missing_and_other_shop(self):
+        y=DAY-timedelta(days=1)
+        self.put(y,{'rating':4.5,'orders':0,'f_orders':2})
+        self.put(y-timedelta(days=1),{'rating':4.8,'f_orders':3})
+        self.put(y,{'rating':3,'f_orders':99999},shop=2)
+        result=aipack.rating_changes(self.c,1,y,str)
+        self.assertEqual(len(result),1);self.assertEqual(result[0]['orders_yesterday'],2)
+        self.c.execute("UPDATE agg_nm_day SET data=data-'f_orders' WHERE account_id=1 AND day=%s",(y,))
+        self.assertIsNone(aipack.rating_changes(self.c,1,y,str)[0]['orders_yesterday'])
+
+    def test_streaming_demand_does_not_retain_raw_rows(self):
+        import weakref,gc
+        class Data(dict):pass
+        refs=[]
+        class Stream:
+            def execute(self,*args):
+                for i in range(60):
+                    gc.collect()
+                    self_test.assertLessEqual(sum(x() is not None for x in refs),2)
+                    data=Data(orders=1,f_orders=i%3,f_open=100,f_cart=10)
+                    refs.append(weakref.ref(data))
+                    yield {'nm_id':77,'day':DAY-timedelta(days=i+1),'data':data}
+        self_test=self
+        with patch('stometric.materialize.ensure_cost_ready'):
+            got=aipack._per_nm(Stream(),1,DAY-timedelta(days=60),DAY)[77]
+        self.assertEqual(got['orders'],60);self.assertEqual(got['demand']['orders'],60)
+        self.assertEqual(got['demand']['covered_days'],60)
+        self.assertTrue(all(x() is None for x in refs))
+
     def test_action_graph_demand_does_not_change_financial_values(self):
         day=DAY-timedelta(days=1)
         row={'orders':1,'f_orders':2,'orders_sum':100,'orders_sum_spp':80,'cost_orders':20,'ads_upd':5}

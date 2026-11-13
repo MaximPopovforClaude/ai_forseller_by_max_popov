@@ -20,9 +20,12 @@ def _per_nm(c, shop: int, df, dt) -> dict[int, dict]:
     keys = ("orders", "orders_sum", "buyouts", "buyouts_sum", "returns", "profit", "margin", "ads", "ads_upd", "ads_bonus", "storage", "logistics",
             "acquiring", "cost", "cx_orders", "f_open", "f_cart", "f_orders")
     out: dict[int, dict] = {}
-    daily = {}
+    demand = {}
+    start,end,days = wb_demand.window(df,dt)
     for r in c.execute("SELECT nm_id, day, data FROM agg_nm_day WHERE account_id=%s AND day BETWEEN %s AND %s", (shop, df, dt)):
-        daily.setdefault(r['nm_id'],{})[r['day']] = r['data']
+        if start <= r['day'] <= end:
+            acc = demand.setdefault(r['nm_id'],wb_demand.accumulator())
+            wb_demand.accumulate(acc,r['data'])
         d = out.setdefault(r["nm_id"], {k: 0.0 for k in keys} | {"days": 0, "no_cost_days": 0})
         for k in keys:
             if k != "cost":
@@ -31,7 +34,7 @@ def _per_nm(c, shop: int, df, dt) -> dict[int, dict]:
         if r["data"].get("orders") and not r["data"].get("cost_orders"):   
             d["no_cost_days"] += 1
     for nm, d in out.items():
-        d['demand'] = wb_demand.records(daily[nm],df,dt)
+        d['demand'] = wb_demand.finish(demand.get(nm),start,end,days)
     return out
 
 
@@ -96,14 +99,14 @@ def money_leaks(c, shop: int, days: int = 30) -> dict:
 
 def rating_changes(c, shop: int, y, vc) -> list[dict]:
     """Self-hosted application component."""
-    rows = c.execute("""SELECT a.nm_id, (a.data->>'rating')::numeric now, (b.data->>'rating')::numeric before, coalesce((a.data->>'orders')::numeric, 0) o
+    rows = c.execute("""SELECT a.nm_id, (a.data->>'rating')::numeric now, (b.data->>'rating')::numeric before, CASE WHEN jsonb_typeof(a.data->'f_orders')='number' THEN (a.data->>'f_orders')::numeric END o
                         FROM agg_nm_day a JOIN agg_nm_day b ON b.account_id=a.account_id AND b.nm_id=a.nm_id AND b.day=%s
                         WHERE a.account_id=%s AND a.day=%s AND a.data->>'rating' IS NOT NULL AND b.data->>'rating' IS NOT NULL
                           AND (a.data->>'rating')::numeric > 0 AND (b.data->>'rating')::numeric > 0
                           AND round((a.data->>'rating')::numeric, 1) <> round((b.data->>'rating')::numeric, 1)
-                        ORDER BY o DESC LIMIT 20""", (y - timedelta(days=1), shop, y)).fetchall()
+                        ORDER BY o DESC NULLS LAST LIMIT 20""", (y - timedelta(days=1), shop, y)).fetchall()
     return [{"vendor_code": vc(r["nm_id"]), "nm_id": r["nm_id"], "rating_before": float(round(r["before"], 1)), "rating_now": float(round(r["now"], 1)),
-             "direction": "вырос" if r["now"] > r["before"] else "упал", "orders_yesterday": int(r["o"])} for r in rows]
+             "direction": "вырос" if r["now"] > r["before"] else "упал", "orders_yesterday": wb_demand.number(r["o"]), "orders_source":"wb_funnel"} for r in rows]
 
 
 def cabinet_issues(c, shop: int) -> dict:

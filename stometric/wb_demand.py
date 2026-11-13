@@ -79,21 +79,29 @@ def empty(start, end):
     return finish({}, *window(start,end))
 
 
+def accumulator():
+    return dict(orders=0, squares=0, covered_days=0, orders_sum=0, money_days=0,
+                views=0, cart=0, conv_orders=0, conversion_days=0)
+
+
+def accumulate(r, data):
+    """Add one unique article/day; retain only scalar totals, never raw rows."""
+    z,s,o,k = (number(data.get(key)) for key in ('f_orders','f_orders_sum','f_open','f_cart'))
+    if z is not None:
+        r['orders'] += z; r['squares'] += z*z; r['covered_days'] += 1
+        if s is not None:
+            r['orders_sum'] += s; r['money_days'] += 1
+        if o is not None and k is not None:
+            r['views'] += o; r['cart'] += k; r['conv_orders'] += z; r['conversion_days'] += 1
+
+
 def records(records, start, end):
     """Same calculation for callers already holding the per-day aggregate."""
     start,end,days = window(start,end)
-    r = dict(orders=0, squares=0, covered_days=0, orders_sum=0, money_days=0,
-             views=0, cart=0, conv_orders=0, conversion_days=0)
+    r = accumulator()
     for day, data in records.items():
-        if not start <= day <= end:
-            continue
-        z,s,o,k = (number(data.get(key)) for key in ('f_orders','f_orders_sum','f_open','f_cart'))
-        if z is not None:
-            r['orders'] += z; r['squares'] += z*z; r['covered_days'] += 1
-            if s is not None:
-                r['orders_sum'] += s; r['money_days'] += 1
-            if o is not None and k is not None:
-                r['views'] += o; r['cart'] += k; r['conv_orders'] += z; r['conversion_days'] += 1
+        if start <= day <= end:
+            accumulate(r, data)
     return finish(r,start,end,days)
 
 
