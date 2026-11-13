@@ -19,6 +19,10 @@ class NotReady(RuntimeError):
     """Большой магазин: готовые итоги ещё считаются — вкладка покажет сообщение вместо долгого расчёта."""
 
 
+class CostRebuildPending(NotReady):
+    """Manual financial edits are saved; dependent aggregates are not ready yet."""
+
+
 def mark_cost_dirty(c, acc_id: int, valid_from: date) -> None:
     """Durable WB rebuild request in the same transaction as the manual edit.
 
@@ -47,7 +51,9 @@ def cost_dirty(c, acc_id: int) -> dict | None:
 
 def ensure_cost_ready(c, acc_id: int) -> None:
     if cost_dirty(c, acc_id):
-        raise NotReady("Себестоимость или налоги сохранены. Пересчитываем зависимые итоги; они появятся после ближайшего успешного цикла сбора.")
+        raise CostRebuildPending("Новая себестоимость или налоги сохранены. Пересчитываем зависимые финансовые показатели; "
+                                 "они появятся после ближайшего успешного цикла сбора данных магазина. "
+                                 "До завершения пересчёта прежние суммы не показываем.")
 
 
 def ensure_ready(c, acc_id: int, covered: bool):

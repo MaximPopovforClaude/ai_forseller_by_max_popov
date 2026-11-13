@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import type { Me, Tab, Workspace } from "./api";
 import { Logo } from "./Logo";
 
-export type Page = "tab" | "account" | "calendar" | "members" | "billing" | "referral" | "admin" | "about" | "service_news" | "reviews" | "questions" | "actions" | "cards" | "seo" | "visual" | "ads" | "total" | "kb" | "ai";
+export type Page = "tab" | "account" | "calendar" | "members" | "billing" | "referral" | "admin" | "about" | "service_news" | "reviews" | "questions" | "actions" | "cards" | "seo" | "visual" | "ads" | "total" | "kb" | "ai" | "compare";
+
+// Also applies to the frozen demo's saved tab registry.
+export const navigationGroup = (t: Tab): Tab => ({ ...t, group: t.key === "rnp" ? "Магазин" : t.group === "Version2" ? "Управление" : t.group });
 
 const ROLE: Record<string, string> = { owner: "Владелец", admin: "Админ", editor: "Редактор", viewer: "Просмотр" };
 const WORK_TABS = [
@@ -18,10 +21,10 @@ type Props = {
   page: Page; tab: string; onTab: (k: string) => void; onPage: (p: Page) => void;
   theme: "light" | "dark"; onTheme: () => void; onLogout: () => void; onAssistant?: () => void;
   allTabs?: Tab[]; hidden?: string[]; onHidden?: (keys: string[]) => void;
-  compareEnabled?: boolean; logoutLabel?: string;
+  compareEnabled?: boolean; logoutLabel?: string; homeInWork?: boolean;
 };
 
-export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, theme, onTheme, onLogout, onAssistant, allTabs, hidden = [], onHidden, compareEnabled = true, logoutLabel = 'Выйти' }: Props) {
+export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, theme, onTheme, onLogout, onAssistant, allTabs, hidden = [], onHidden, compareEnabled = true, logoutLabel = 'Выйти', homeInWork = true }: Props) {
   const [q, setQ] = useState("");
   const [edit, setEdit] = useState(false);       // настройка: какие вкладки показывать
   const hide = (keys: string[], on: boolean) => onHidden?.(on ? [...new Set([...hidden, ...keys])] : hidden.filter((k) => !keys.includes(k)));
@@ -33,11 +36,12 @@ export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, them
     try { localStorage.setItem("side_groups", JSON.stringify(n)); } catch { /* нет хранилища */ }
     return n;
   });
-  const regularTabs = useMemo(() => me.tabs.filter((t) => !isWorkTab(t)), [me.tabs]);
+  const regularTabs = useMemo(() => me.tabs.filter((t) => !isWorkTab(t) && !(homeInWork && t.key === "home")), [me.tabs, homeInWork]);
+  const groupFor = (t: Tab) => homeInWork && t.key === "home" ? "Работа с кабинетом" : menuGroup(t);
   const groups = useMemo(() => [...new Set(regularTabs.map((t) => t.group))], [regularTabs]);
   const ql = q.trim().toLowerCase();
   const workSearch = Boolean(ql) && WORK_TABS.some((item) => me.tabs.some((t) =>
-    t.key === item.key && (t.title.toLowerCase().includes(ql) || item.title.toLowerCase().includes(ql))));
+    t.key === item.key && (t.title.toLowerCase().includes(ql) || item.title.toLowerCase().includes(ql)))) || Boolean(ql && homeInWork && "главная".includes(ql));
   const item = (key: Page, icon: string, title: string) => (
     <button className={"side-item" + (page === key ? " on" : "")} title={title} onClick={() => onPage(key)}>
       <span className="ic">{icon}</span>{open && <span className="tx">{title}</span>}
@@ -76,6 +80,8 @@ export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, them
         {item("kb", "📚", "База знаний")}</>}
         {open && <button className="side-h side-h-btn" onClick={() => flip("__work")}>{shut.__work ? "▸" : "▾"} Работа с кабинетом</button>}
         {(!(open && shut.__work) || workSearch) && <>
+        {homeInWork && <button className={"side-item" + (page === "tab" && tab === "home" ? " on" : "")} title="Главная" onClick={() => onTab("home")}>
+          <span className="ic">🏠</span>{open && <span className="tx">Главная</span>}</button>}
         {item("reviews", "⭐", "Отзывы")}
         {item("questions", "❓", "Вопросы")}
         {item("cards", "🃏", "Карточки")}
@@ -88,8 +94,7 @@ export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, them
             <span className="ic">{item.icon}</span>{open && <span className="tx">{item.title}</span>}
           </button>
         ))}
-        {compareEnabled && <a className="side-item" href="/compare" title="Бесплатный инструмент: хранение и наглядный разбор отчётов WB «Сравнение карточек»">
-          <span className="ic">⚖️</span>{open && <span className="tx">Сравнение карточек</span>}</a>}
+        {compareEnabled && item("compare", "⚖️", "Сравнение карточек")}
         {item("actions", "🤝", "Взаимодействия")}</>}
         {open && <div className="side-h" />}
         <button className={"side-item" + (page === "service_news" ? " on" : "")} title="Новости сервиса: что нового и что улучшили"
@@ -108,8 +113,8 @@ export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, them
               <div className="side-edit">
                 <div className="side-edit-h">Снимите галочку — вкладка пропадёт из меню (только у вас, вернуть можно здесь же).
                   {hidden.length > 0 && <button onClick={() => onHidden?.([])}>Показать все ({hidden.length} скрыто)</button>}</div>
-                {[...new Set(allTabs.map(menuGroup))].map((g) => {
-                  const list = allTabs.filter((t) => menuGroup(t) === g);
+                {[...new Set(allTabs.map(groupFor))].map((g) => {
+                  const list = allTabs.filter((t) => groupFor(t) === g);
                   const keys = list.map((t) => t.key).filter((k) => k !== "home");
                   const shown = keys.filter((k) => !hidden.includes(k)).length;
                   return (
@@ -147,9 +152,9 @@ export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, them
           </>
         ) : (
           <>
-            <button className={"side-item" + (page === "tab" && tab === "home" ? " on" : "")} title="Главная" onClick={() => onTab("home")}>
+            {!homeInWork && <button className={"side-item" + (page === "tab" && tab === "home" ? " on" : "")} title="Главная" onClick={() => onTab("home")}>
               <span className="ic">🏠</span>
-            </button>
+            </button>}
             <button className="side-item" title="Все вкладки — развернуть меню" onClick={onToggle}><span className="ic">📑</span></button>
           </>
         )}

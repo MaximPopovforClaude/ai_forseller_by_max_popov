@@ -1,0 +1,19 @@
+/** Relative growth of the same displayed metric in adjacent periods. */
+export function growthThreshold(raw: string | null): number | null {
+  if (raw == null || !raw.trim()) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export function growthCell(a: number | null | undefined, b: number | null | undefined,
+  threshold: number | null, baseClass = ""): { className: string; title?: string } {
+  if (threshold == null || !Number.isFinite(threshold) || threshold <= 0 ||
+      a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b) || b <= 0 || a <= b)
+    return { className: baseClass };
+  const growth = (a - b) / b * 100;
+  // Ratios such as 0.3 / 0.1 can be a few machine epsilons below the boundary.
+  const tolerance = Number.EPSILON * Math.max(1, Math.abs(growth), threshold) * 8;
+  if (!Number.isFinite(growth) || growth + tolerance < threshold) return { className: baseClass };
+  return { className: [baseClass, "entry-growth"].filter(Boolean).join(" "),
+    title: `Рост +${growth.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} % к предыдущему периоду (относительное изменение)` };
+}

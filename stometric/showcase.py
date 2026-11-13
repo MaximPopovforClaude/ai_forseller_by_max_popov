@@ -113,7 +113,8 @@ def save(c, tg: dict, prices: dict) -> dict:
         spp = round((1 - price / sp) * 100, 1) if sp else None
         o = old.get((a, nm))
         n["checked"] += 1
-        changed = o is None or float(o["price"] or 0) != price or (o["spp"] is None) != (spp is None) or\
+        changed = o is None or float(o["price"] or 0) != price or\
+            (None if o["seller_price"] is None else float(o["seller_price"])) != sp or (o["spp"] is None) != (spp is None) or\
             (spp is not None and float(o["spp"]) != spp)
         c.execute("""INSERT INTO wb_showcase(account_id,nm_id,basic,price,seller_price,spp,checked_at,changed_at)
                      VALUES (%s,%s,%s,%s,%s,%s,now(),now())

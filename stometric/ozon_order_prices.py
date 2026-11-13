@@ -33,7 +33,7 @@ def customer_price(row):
     if len(matches) != 1:
         return None
     item = matches[0]
-
+    
     if item.get("quantity") is not None and number(item["quantity"]) != number(row["qty"]):
         return None
     price = item.get("customer_price")
@@ -70,7 +70,7 @@ def daily(rows, skus=None):
 
 
 def load_daily(c, shop, start, end, skus=None):
-
+    
     rows = c.execute("""SELECT order_day, sku, qty, price,
                                raw#>'{financial_data,products}' AS financial_products
                         FROM oz_postings WHERE account_id=%s AND order_day BETWEEN %s AND %s""",

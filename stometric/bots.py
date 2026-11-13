@@ -36,6 +36,8 @@ from .bot_runtime import settings as bot_job_settings
 
 
 def new_token(c, user_id: int, purpose: str, hours: int) -> str:
+    
+    c.execute("SELECT id FROM users WHERE id=%s FOR UPDATE", (user_id,))
     tok = secrets.token_urlsafe(24)
     c.execute("INSERT INTO login_tokens(token_hash,user_id,purpose,expires_at) VALUES (%s,%s,%s, now() + make_interval(hours => %s))",
               (hashlib.sha256(tok.encode()).hexdigest(), user_id, purpose, hours))
@@ -61,6 +63,22 @@ def handle_register(bot: Bot, m: dict):
     name = " ".join(x for x in (m["from"].get("first_name"), m["from"].get("last_name")) if x) or None
     with db.connect() as c:
         u = c.execute("SELECT * FROM users WHERE telegram_id=%s", (tg,)).fetchone()
+        if text in ("/reset", "/start reset"):
+            from fastapi import HTTPException
+            from . import password_reset as reset
+            if not u or not u["is_active"]:
+                bot.send(tg, "Для восстановления нужен Telegram, ранее привязанный к аккаунту. Если доступа к нему нет, обратитесь к владельцу сервиса за ссылкой.")
+                return
+            try:
+                target = reset.lock_users(c, [u["id"]]).get(u["id"])
+                if not target or not target["is_active"] or target["telegram_id"] != tg:
+                    raise HTTPException(403, "Привязка изменилась. Обратитесь к владельцу сервиса.")
+                link = reset.issue(c, target, u["id"], "telegram")
+                reset.deliver(c, target, u["id"], None, link, bot=bot)
+            except HTTPException as e:
+                c.rollback()
+                bot.send(tg, e.detail)
+            return
         if u:
             if not u["is_active"]:
                 bot.send(tg, "Доступ к аккаунту отключён. Обратитесь к владельцу сервиса.")

@@ -48,6 +48,9 @@ async def sec_headers(request: Request, call_next):
     resp = await call_next(request)
     for k, v in SEC_HEADERS.items():
         resp.headers.setdefault(k, v)
+    if request.url.path == "/reset-password" or "/password-reset" in request.url.path:
+        resp.headers["Cache-Control"] = "no-store"
+        resp.headers["Referrer-Policy"] = "no-referrer"
     return resp
 
 
@@ -150,7 +153,7 @@ def _failed(request: Request, email: str) -> None:
 def login(body: Login, request: Request, response: Response, c=Depends(conn)):
     email = body.email.strip().lower()
     _throttle(request, email)
-    u = c.execute("SELECT * FROM users WHERE email=%s AND is_active", (email,)).fetchone()
+    u = c.execute("SELECT * FROM users WHERE email=%s AND is_active FOR UPDATE", (email,)).fetchone()
     ok = auth.check_password(body.password, u["password_hash"] if u else None)
     if not u or not ok:
         _failed(request, email)
@@ -281,11 +284,13 @@ def workspace(ws_id: int, u=Depends(current_user), c=Depends(conn)):
             sh["token"] = {k: v for k, v in vault.info(tok).items() if k != "error"} if tok else None
     members = None
     if auth.can(role, "admin"):
-        members = c.execute("""SELECT u.id,u.email,u.name,m.role,m.shop_ids,u.last_login_at,u.is_active FROM memberships m
+        members = c.execute("""SELECT u.id,u.email,u.name,m.role,m.shop_ids,u.last_login_at,u.is_active,u.is_superadmin FROM memberships m
                                JOIN users u ON u.id=m.user_id WHERE m.workspace_id=%s
                                ORDER BY array_position(ARRAY['owner','admin','editor','viewer'], m.role), u.email""", (ws_id,)).fetchall()
     from .__main__ import FIRST_LOAD
-    return jsonable_encoder({**ws, "first_load_total": len(FIRST_LOAD), "role": role, "role_title": ROLE_TITLE.get(role, role), "roles": ROLE_TITLE,
+    reset_role = c.execute("SELECT role,shop_ids FROM memberships WHERE workspace_id=%s AND user_id=%s", (ws_id, u["id"])).fetchone()
+    can_reset = bool(not u.get("_mcp") and reset_role and auth.can(reset_role["role"], "admin") and reset_role["shop_ids"] is None)
+    return jsonable_encoder({**ws, "can_reset_passwords": can_reset, "first_load_total": len(FIRST_LOAD), "role": role, "role_title": ROLE_TITLE.get(role, role), "roles": ROLE_TITLE,
                              "shops": shops, "members": members, "plans": PLANS, "can_set_plan": bool(u["is_superadmin"])})
 
 
@@ -735,7 +740,9 @@ class AcceptIn(BaseModel):
 def invite_accept(tok: str, body: AcceptIn, request: Request, response: Response, c=Depends(conn)):
     inv = _invite(c, tok)
     _throttle(request, inv["email"])
-    user = c.execute("SELECT * FROM users WHERE email=%s", (inv["email"],)).fetchone()
+    user = c.execute("SELECT * FROM users WHERE email=%s FOR UPDATE", (inv["email"],)).fetchone()
+    if user and not user["is_active"]:
+        raise HTTPException(403, "Доступ к аккаунту отключён")
     if user and user["password_hash"]:
         if not auth.check_password(body.password, user["password_hash"]):
             _failed(request, inv["email"])
@@ -760,16 +767,21 @@ def invite_accept(tok: str, body: AcceptIn, request: Request, response: Response
     c.execute("INSERT INTO audit_log(user_id,workspace_id,action,details) VALUES (%s,%s,'invite/accept',%s)",
               (uid, inv["workspace_id"], json.dumps({"id": inv["token_hash"][:12], "role": inv["role"] if added else None,
                                                      "membership_created": bool(added)})))
-    c.commit()
     s_tok = auth.new_session(c, uid, request.client.host if request.client else None, request.headers.get("user-agent"))
     response.set_cookie(COOKIE, s_tok, max_age=auth.SESSION_DAYS * 86400, httponly=True, secure=True, samesite="lax")
     return {"ok": True}
 
 
 
-def _magic(c, tok: str) -> dict:
+def _magic(c, tok: str, lock: bool = False) -> dict:
+    if lock:
+        target = c.execute("SELECT user_id FROM login_tokens WHERE token_hash=%s",
+                           (__import__("hashlib").sha256(tok.encode()).hexdigest(),)).fetchone()
+        if target:
+            c.execute("SELECT id FROM users WHERE id=%s FOR UPDATE", (target["user_id"],))
     r = c.execute("""SELECT t.*, u.email FROM login_tokens t JOIN users u ON u.id=t.user_id
-                     WHERE token_hash=%s AND used_at IS NULL AND expires_at>now() AND u.is_active""",
+                     WHERE token_hash=%s AND used_at IS NULL AND expires_at>clock_timestamp() AND u.is_active"""
+                  + (" FOR UPDATE OF t" if lock else ""),
                   (__import__("hashlib").sha256(tok.encode()).hexdigest(),)).fetchone()
     if not r:
         raise HTTPException(404, "Ссылка устарела или уже использована — запросите новую в боте регистрации (/start)")
@@ -788,15 +800,16 @@ class MagicIn(BaseModel):
 
 @app.post("/api/auth/magic/{tok}")
 def magic_use(tok: str, body: MagicIn, request: Request, response: Response, c=Depends(conn)):
-    r = _magic(c, tok)
+    r = _magic(c, tok, lock=True)
     if r["purpose"] == "set_password":
         if not body.password or len(body.password) < 10:
             raise HTTPException(400, "Пароль — не короче 10 символов")
         c.execute("UPDATE users SET password_hash=%s WHERE id=%s", (auth.hash_password(body.password), r["user_id"]))
         c.execute("DELETE FROM sessions WHERE user_id=%s", (r["user_id"],))      
+        c.execute("UPDATE login_tokens SET used_at=clock_timestamp() WHERE user_id=%s AND used_at IS NULL", (r["user_id"],))
+        c.execute("UPDATE password_reset_tokens SET used_at=clock_timestamp() WHERE user_id=%s AND used_at IS NULL", (r["user_id"],))
     c.execute("UPDATE login_tokens SET used_at=now() WHERE token_hash=%s", (r["token_hash"],))
     c.execute("INSERT INTO audit_log(user_id,action,details) VALUES (%s,%s,'{}')", (r["user_id"], "auth/magic:" + r["purpose"]))
-    c.commit()
     s_tok = auth.new_session(c, r["user_id"], request.client.host if request.client else None, request.headers.get("user-agent"))
     response.set_cookie(COOKIE, s_tok, max_age=auth.SESSION_DAYS * 86400, httponly=True, secure=True, samesite="lax")
     return {"ok": True}
@@ -906,7 +919,7 @@ def tab(shop_id: int, key: str, date_from: date | None = None, date_to: date | N
         f["campaign"] = campaign
     f["user_id"] = u["id"]
     import psycopg
-    from .materialize import NotReady
+    from .materialize import CostRebuildPending, NotReady
     try:
         res = _cached(c, key, shop_id, f)
     except (NotReady, psycopg.errors.QueryCanceled) as e:     
@@ -914,6 +927,11 @@ def tab(shop_id: int, key: str, date_from: date | None = None, date_to: date | N
         msg = str(e) if isinstance(e, NotReady) else ("В связи с большим объёмом артикулов данные на этой вкладке появятся позже: "
                                                      "расчёт не уложился в минуту. Попробуйте позже или выберите меньший период / артикулы.")
         res = {"columns": [{"field": "msg", "title": "Данные готовятся", "type": "text"}], "rows": [{"msg": msg}], "plain": True, "note": msg}
+        if isinstance(e, CostRebuildPending):
+            
+            
+            msg += " Вкладка проверяет готовность каждые 15 секунд и обновится автоматически."
+            res.update(note=msg, rows=[{"msg": msg}], retry=15)
     f.pop("user_id", None)
     from .exclusions import excluded
     ex = excluded(c, shop_id)
@@ -1236,6 +1254,8 @@ app.include_router(api_mcp.router)
 app.include_router(api_ai_tasks.router)
 from . import api_calendar  
 app.include_router(api_calendar.router)
+from . import api_password_reset  
+app.include_router(api_password_reset.router)
 
 if DIST.exists():
     class _Assets(StaticFiles):
@@ -1253,3 +1273,4 @@ if DIST.exists():
         f = (DIST / path).resolve()
         ok = path and f.is_file() and f.is_relative_to(DIST.resolve())
         return FileResponse(f if ok else DIST / "index.html")
+

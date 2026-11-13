@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { http } from "./api";
 import { EntryViews, type View } from "./EntryViews";
+import { growthCell, growthThreshold } from "./entryGrowth";
 
 /** Точки входа WB (отчёт из ЛК — загружает пользователь): откуда приходят в карточки и как меняется каждая точка входа по периодам. */
 type M = { views: number; clicks: number; carts: number; orders: number; ctr: number | null; conv_cart: number | null; conv_order: number | null; share?: number | null };
@@ -20,18 +21,37 @@ const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const dd = (s: string) => `${s.slice(8, 10)}.${s.slice(5, 7)}`;
 const days = (p: Per) => p.n_days ?? Math.round((new Date(p.d_to).getTime() - new Date(p.d_from).getTime()) / 86400000) + 1;
 
-export function EntryPoints({ shop, nm, hideChg = false }: { shop: number; nm: string; hideChg?: boolean }) {
+export function EntryPoints({ shop, nm, hideChg = false, enablePin = true, enableGrowth = true }: { shop: number; nm: string; hideChg?: boolean; enablePin?: boolean; enableGrowth?: boolean }) {
   const [view, setView] = useState<View | "detail">(() => { try { return (localStorage.getItem("entry_view") as View) || "funnel"; } catch { return "funnel"; } });
+  const [pinPoints, setPinPoints] = useState(() => { try { return localStorage.getItem("entry_pin_points") === "1"; } catch { return false; } });
+  const pin = () => setPinPoints(value => { const next = !value; try { localStorage.setItem("entry_pin_points", next ? "1" : "0"); } catch { /* no storage */ } return next; });
+  const [growthOn, setGrowthOn] = useState(() => { try { return localStorage.getItem("entry_growth_on") !== "0"; } catch { return true; } });
+  const [growthText, setGrowthText] = useState(() => { try { return String(growthThreshold(localStorage.getItem("entry_growth_threshold")) ?? 300); } catch { return "300"; } });
+  const threshold = growthThreshold(growthText);
+  const growth = enableGrowth && growthOn ? threshold : null;
+  const setGrowth = (on: boolean) => { setGrowthOn(on); try { localStorage.setItem("entry_growth_on", on ? "1" : "0"); } catch { /* no storage */ } };
+  const setThreshold = (value: string) => { setGrowthText(value); if (growthThreshold(value) != null) { try { localStorage.setItem("entry_growth_threshold", value); } catch { /* no storage */ } } };
   const pickView = (v: View | "detail") => { setView(v); try { localStorage.setItem("entry_view", v); } catch { /* */ } };
   const tabs = <div className="rnp-bar entry-tabs">
     {([["funnel", "Воронка артикулов"], ["sources", "Источники трафика"], ["sources_days", "Источники трафика по дням"], ["detail", "Точки входа подробно"]] as const)
       .map(([v, t]) => <button key={v} className={view === v ? "on" : ""} onClick={() => pickView(v)}>{t}</button>)}
+    {enablePin && view !== "funnel" && <button className={pinPoints ? "on" : ""} aria-pressed={pinPoints} onClick={pin}>📌 {pinPoints ? "Открепить" : "Закрепить"} точки входа</button>}
   </div>;
-  if (view !== "detail") return <div className="entry">{tabs}<EntryViews shop={shop} nm={nm} view={view} /></div>;
-  return <div className="entry">{tabs}<EntryDetail shop={shop} nm={nm} hideChg={hideChg} /></div>;
+  const growthSettings = enableGrowth && view !== "sources" && <div className="rnp-bar entry-growth-settings">
+    <label className="chk" title="Рост на 300 % — например, со 100 до 400. Для CTR и конверсий тоже сравнивается относительный рост, не разница в процентных пунктах.">
+      <input type="checkbox" checked={growthOn} onChange={e => setGrowth(e.target.checked)} /> Подсвечивать рост от
+    </label>
+    <input type="number" min="0" step="any" aria-label="Порог роста, %" aria-invalid={threshold == null}
+      value={growthText} disabled={!growthOn} onChange={e => setThreshold(e.target.value)} /> %
+    {growthOn && threshold == null ? <span className="entry-growth-error" role="alert">Укажите процент больше 0.</span>
+      : <span className="hint">К предыдущему периоду. Нули и пропуски не сравниваются.</span>}
+  </div>;
+  if (view !== "detail") return <div className="entry">{tabs}{growthSettings}<EntryViews shop={shop} nm={nm} view={view} pinPoints={enablePin && pinPoints} growth={growth} /></div>;
+  return <div className="entry">{tabs}{growthSettings}<EntryDetail shop={shop} nm={nm} hideChg={hideChg} pinPoints={enablePin && pinPoints} growth={growth} /></div>;
 }
 
-function EntryDetail({ shop, nm, hideChg = false }: { shop: number; nm: string; hideChg?: boolean }) {
+function EntryDetail({ shop, nm, hideChg = false, pinPoints = false, growth = null }: { shop: number; nm: string; hideChg?: boolean; pinPoints?: boolean; growth?: number | null }) {
+  const [showChart, setShowChart] = useState(() => { try { return localStorage.getItem("entry_chart") !== "0"; } catch { return true; } });
   const [d, setD] = useState<Data | null>(null);
   const [mode, setMode] = useState<Mode>(() => { try { return (localStorage.getItem("entry_mode") as Mode) || "days"; } catch { return "days"; } });
   const [pick, setPick] = useState<number[]>([]);         // режим «отчёты»: выбранные для сравнения
@@ -103,7 +123,7 @@ function EntryDetail({ shop, nm, hideChg = false }: { shop: number; nm: string; 
   const cells = (row: Record<string, M>, bold: boolean) => per.map((p, i) => <Fragment key={p.id}>{metrics.map((k) => {
     const a = val(k, row[String(p.id)], p), b = i + 1 < per.length ? val(k, row[String(per[i + 1].id)], per[i + 1]) : null;
     const x = dyn(k, a, b);
-    return <Fragment key={k}><td>{bold ? <b>{fmt(k, a)}</b> : fmt(k, a)}</td>
+    return <Fragment key={k}><td {...growthCell(a, b, growth)}>{bold ? <b>{fmt(k, a)}</b> : fmt(k, a)}</td>
       {i + 1 < per.length && !hideChg && <td className={x ? (x.good ? "t-good" : "t-bad") : ""}>{x?.t || ""}</td>}</Fragment>;
   })}</Fragment>);
   return (
@@ -130,24 +150,26 @@ function EntryDetail({ shop, nm, hideChg = false }: { shop: number; nm: string; 
         (xlsx или zip), либо поставьте плагин Chrome — он качает отчёт сам за каждый день. Каждый период — отдельный столбец, повтор того же периода заменяет прошлый. CTR и конверсии считаем из штук (в файле WB они округлены).</div>
       {d && !per.length && <div className="hint">{mode !== "reports" && d.reports.length ? "Дневных отчётов пока нет — их качает плагин Chrome (Аккаунт → «Плагин Chrome») или загрузите отчёт за один день." : "Пока ничего не загружено."}</div>}
       {mode === "weeks" && per.length > 0 && <div className="hint">Окна по 7 дней от последнего загруженного дня; «в день» — среднее по дням, за которые есть отчёт.</div>}
-      {chart && <div className="acc-box"><ReactECharts option={chart} style={{ height: 300 }} notMerge /></div>}
+      {chart && <button className="btn" aria-expanded={showChart} onClick={() => { setShowChart(!showChart); try { localStorage.setItem("entry_chart", showChart ? "0" : "1"); } catch { /* no storage */ } }}>
+        {showChart ? "Скрыть график" : "Показать график"}</button>}
+      {chart && showChart && <div className="acc-box"><ReactECharts option={chart} style={{ height: 300 }} notMerge /></div>}
       {per.length > 0 && <div className="rnp-wrap">
-        <table className="rnp-t entry-t">
-          <thead><tr><th rowSpan={2}>Раздел</th><th rowSpan={2}>Точка входа</th>
+        <table className={"rnp-t entry-t" + (pinPoints ? " entry-pin" : "")}>
+          <thead><tr><th rowSpan={2}>Раздел</th><th className="entry-point-cell" rowSpan={2}>Точка входа</th>
             {per.map((p, i) => <th key={p.id} colSpan={metrics.length * (i + 1 < per.length && !hideChg ? 2 : 1)} className="rnp-month">
               {dd(p.d_from)}–{dd(p.d_to)} <span className="hint">{days(p)} дн.</span></th>)}</tr>
             <tr>{per.map((p, i) => <Fragment key={p.id}>{metrics.map((k) => <Fragment key={k}><th>{titleOf(k)}</th>
               {i + 1 < per.length && !hideChg && <th className="hint">изм.</th>}</Fragment>)}</Fragment>)}</tr></thead>
           <tbody>
-            {d?.total && <tr className="rnp-first"><td colSpan={2}><b>Итого {nm ? "по артикулу" : "по магазину"}</b></td>
+            {d?.total && <tr className="rnp-first"><td /><td className="entry-point-cell"><b>Итого {nm ? "по артикулу" : "по магазину"}</b></td>
               {cells({ ...Object.fromEntries(per.filter((p) => d.total![p.id]).map((p) => [p.id, { ...d.total![p.id], share: 1 }])) }, true)}</tr>}
             {d?.ads && ([...(split.ad ? [["total", "↳ из них реклама (вся)"], ["search", "   ↳ реклама в поиске"], ["rest", "   ↳ реклама вне поиска (полки, каталог, главная)"]] : []),
               ...(split.org ? [["organic", "↳ органика"]] : [])] as ["total" | "search" | "rest" | "organic", string][]).map(([k, t]) =>
-              <tr key={"ads" + k} className="hint"><td colSpan={2} style={{ whiteSpace: "pre" }}>{t}</td>
+              <tr key={"ads" + k} className="hint"><td /><td className="entry-point-cell">{t}</td>
                 {cells(Object.fromEntries(per.filter((p) => d.ads![p.id]).map((p) => [p.id, { ...d.ads![p.id][k], share: d.total![p.id]?.clicks ? d.ads![p.id][k].clicks / d.total![p.id].clicks : null }])), false)}</tr>)}
             {(d?.points || []).map((r) => (
               <tr key={r.section + r.point}>
-                <td className="hint">{r.section}</td><td>{r.point}</td>
+                <td className="hint">{r.section}</td><td className="entry-point-cell">{r.point}</td>
                 {cells(r.cells, false)}
               </tr>))}
           </tbody>

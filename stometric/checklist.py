@@ -409,6 +409,11 @@ def summary(c, shop: int, d_from, d_to, nms: list[int] | None = None) -> list[di
         x["abc_sum"], x["abc_profit"] = sa.get(x["nm_id"]), pa.get(x["nm_id"])
         x["abc_roi"], x["abc_kem"] = _grade(x["roi_pre"], 0.7, 0.3), _grade(x["kem"], 0.8, 0.5)
         x["rec"] = recommend(x["abc_sum"], x["abc_profit"], x["abc_roi"], x["abc_kem"]) if x["orders"] else "-"
+    from . import xyz
+    stability = xyz.orders(c, shop, d_from, d_to, [x["nm_id"] for x in rows])
+    for x in rows:
+        x.update(stability[x["nm_id"]])
+        x["abcxyz"] = x["abc_sum"] + x["xyz"] if x["abc_sum"] and x["xyz"] else None
     _score10x(rows)
     rows.sort(key=lambda x: -x["orders_sum"])
     return rows
@@ -478,6 +483,8 @@ SUMMARY_COLS = [
                     ("abc_kem", "КЭМ", "text"), ("rec", "Рекомендация", "text")]),
     ("Джем", [("jam_freq", "Частота за период", "int"), ("jam_views", "Показы за период", "int"), ("jam_cov", "% охвата кластеров", "pct"),
               ("jam_clicks", "Клики по Джему", "int"), ("jam_period", "Период Джема", "text")]),
+    ("XYZ анализ", [("xyz", "XYZ по заказам", "text"), ("xyz_cv", "CV заказов", "pct"),
+                     ("abcxyz", "ABC выкупов × XYZ", "text"), ("xyz_days", "Дней XYZ", "num"), ("xyz_status", "Данные XYZ", "text")]),
     ("Потенциал товара", [("pot_ads", "Потенциал работы с РК", "pct"), ("pot_supply", "Потенциал поставок", "pct"),
                           ("pot_views", "Потенциал показов РК поиск", "int"), ("pot_clicks", "Потенциал кликов", "int"),
                           ("pot_orders", "Потенциал заказов, шт", "int"), ("pot_sum", "Потенциал заказов, ₽", "money"),

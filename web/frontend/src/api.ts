@@ -45,8 +45,8 @@ export type Article = { nm_id: number; vendor_code: string | null; title: string
 export type Workspace = { id: number; name: string; role: string; plan: string };
 export type Me = { user: { id: number; email: string; name: string | null; superadmin: boolean; google_email?: string | null }; default_shop: number | null; shops: (Shop & { workspace_id: number })[];
   workspaces: Workspace[]; tabs: Tab[]; oz_tabs: Tab[]; ym_tabs: Tab[]; hidden_tabs?: Record<string, string[]>; tabbar?: Record<string, string[]>; gsheet?: boolean; terms_need?: boolean; terms_version?: string; news_unread?: number };
-export type Member = { id: number; email: string; name: string | null; role: string; shop_ids: number[] | null; last_login_at: string | null; is_active: boolean };
-export type WorkspaceInfo = { id: number; name: string; created_at: string; role: string; role_title: string; roles: Record<string, string>;
+export type Member = { id: number; email: string; name: string | null; role: string; shop_ids: number[] | null; last_login_at: string | null; is_active: boolean; is_superadmin?: boolean };
+export type WorkspaceInfo = { id: number; name: string; created_at: string; role: string; role_title: string; roles: Record<string, string>; can_reset_passwords?: boolean;
   shops: { id: number; name: string; title: string | null; marketplace: string; is_active: boolean; created_at: string;
     token?: { exp: string | null; scopes: string[]; kind: string; seller_oid: number | null; roles?: string[]; read_only?: boolean } | null; token_at: string | null;
     ad_token?: { added_at: string; campaigns?: number; running?: number; client_id_tail?: string } | null;

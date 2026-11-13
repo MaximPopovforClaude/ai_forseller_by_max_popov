@@ -3,6 +3,11 @@
 import os
 from functools import lru_cache
 from pathlib import Path
+from contextvars import ContextVar
+
+
+
+reference_day = ContextVar('reference_day', default=None)
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -31,6 +36,9 @@ def get(key: str) -> str:
 
 def today_msk():
     """Сегодня по Москве: WB отдаёт даты в МСК, «вчера» в дашбордах — московское (сервер живёт в UTC)."""
+    fixed = reference_day.get()
+    if fixed is not None:
+        return fixed
     from datetime import datetime
     from zoneinfo import ZoneInfo
     return datetime.now(ZoneInfo("Europe/Moscow")).date()

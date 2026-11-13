@@ -1,8 +1,10 @@
 """Self-hosted application component."""
 
 import io
+import math
 import re
 import zipfile
+from datetime import datetime, timedelta, timezone
 
 from . import manager, rnp
 from .cost_import import open_xlsx
@@ -16,7 +18,8 @@ def _num(v):
     if v is None or v == "":
         return None
     try:
-        return float(str(v).replace("\xa0", "").replace(" ", "").replace(",", "."))
+        value = float(re.sub(r"\s+", "", str(v)).replace("₽", "").replace(",", "."))
+        return value if math.isfinite(value) else None
     except ValueError:
         return None
 
@@ -24,23 +27,40 @@ def _num(v):
 def parse_file(raw: bytes, name: str) -> list[dict]:
     """Файл товаров акции из ЛК WB: ищем столбцы «Артикул WB», «Плановая цена для акции» (или «Цена для участия/по акции»),
     «Товар уже участвует в акции» / «Участвует»."""
-    if raw[:2] == b"PK" and name.lower().endswith(".zip"):
-        z = zipfile.ZipFile(io.BytesIO(raw))
-        inner = [n for n in z.namelist() if n.lower().endswith(".xlsx")]
-        if not inner:
-            raise PromoError("В архиве нет .xlsx")
-        raw = z.read(inner[0])
+    if name.lower().endswith(".zip"):
+        try:
+            with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                inner = [n for n in z.namelist() if n.lower().endswith(".xlsx")
+                         and not n.startswith("__MACOSX/") and not n.rsplit("/", 1)[-1].startswith("._")]
+                if not inner:
+                    raise PromoError("В архиве нет файла .xlsx. Загрузите файл товаров акции из ЛК WB.")
+                raw = z.read(inner[0])
+        except (zipfile.BadZipFile, RuntimeError, KeyError, NotImplementedError) as e:
+            raise PromoError("Не удалось открыть ZIP-архив. Распакуйте его и загрузите файл .xlsx.") from e
     try:
         wb = open_xlsx(io.BytesIO(raw))
     except Exception as e:  
         raise PromoError("Не похоже на файл акции из ЛК WB (xlsx)") from e
+    try:
+        return _parse_workbook(wb)
+    except PromoError:
+        raise
+    except Exception as e:  
+        raise PromoError("Не удалось прочитать таблицу. Скачайте файл акции заново в формате .xlsx.") from e
+    finally:
+        wb.close()
+
+
+def _parse_workbook(wb):
     for ws in wb.worksheets:
         head = None
         out = []
         for row in ws.iter_rows(values_only=True):
-            cells = [str(x or "").strip().lower() for x in row]
+            cells = [re.sub(r"\s+", " ", str(x or "")).strip().lower() for x in row]
             if head is None:
-                nm_i = next((i for i, x in enumerate(cells) if x in ("артикул wb", "артикул вб", "номенклатура (код 1с)", "артикул")), None)
+                
+                
+                nm_i = next((cells.index(x) for x in ("артикул wb", "артикул вб", "номенклатура (код 1с)", "артикул") if x in cells), None)
                 pr_i = next((i for i, x in enumerate(cells) if "плановая цена" in x or "цена для акции" in x or "цена по акции" in x
                              or "цена для участия" in x), None)
                 if nm_i is not None and pr_i is not None:
@@ -48,7 +68,7 @@ def parse_file(raw: bytes, name: str) -> list[dict]:
                     head = (nm_i, pr_i, part_i)
                 continue
             nm = _num(row[head[0]]) if head[0] < len(row) else None
-            if not nm:
+            if nm is None or nm <= 0 or not nm.is_integer():
                 continue
             price = _num(row[head[1]]) if head[1] < len(row) else None
             part = str(row[head[2]] or "").strip().lower() if head[2] is not None and head[2] < len(row) else ""
@@ -57,7 +77,22 @@ def parse_file(raw: bytes, name: str) -> list[dict]:
             if not out:
                 raise PromoError("В файле нет строк с товарами")
             return out
-    raise PromoError("Не нашёл столбцы «Артикул WB» и «Плановая цена для акции» — пришлите файл, разберу формат")
+    raise PromoError("Не найдены столбцы «Артикул WB» и цены акции. Нужен XLSX списка товаров выбранной акции из ЛК WB.")
+
+
+def collection_status(c, shop: int) -> dict:
+    """Shop-scoped collection evidence; never expose raw API error messages."""
+    from .schedule import EVERY_MIN
+    from .collectors.prices import PROMO_FUTURE_DAYS
+    state = c.execute("""SELECT last_ok_at, last_run_at, COALESCE(last_error <> '', false) failed
+                         FROM collector_state WHERE account_id=%s AND collector='promotions'""", (shop,)).fetchone() or {}
+    account = c.execute("SELECT is_active FROM accounts WHERE id=%s", (shop,)).fetchone() or {}
+    catalog_at = c.execute("SELECT max(updated_at) at FROM wb_promotions WHERE account_id=%s", (shop,)).fetchone()["at"]
+    ok = state.get("last_ok_at")
+    status = "disabled" if not account.get("is_active") else "error" if state.get("failed") else "never" if not ok else (
+        "stale" if datetime.now(timezone.utc) - ok > timedelta(minutes=EVERY_MIN["promotions"]) else "ok")
+    return {"status": status, "last_ok_at": ok, "last_run_at": state.get("last_run_at"), "catalog_at": catalog_at,
+            "interval_minutes": EVERY_MIN["promotions"], "future_days": PROMO_FUTURE_DAYS}
 
 
 def view(c, shop: int) -> dict:
@@ -71,11 +106,16 @@ def view(c, shop: int) -> dict:
            SELECT nm_id, sum(in_way_to_client) wt, sum(in_way_from_client) wf FROM stocks_wb_snap s JOIN last ON s.snap_at=last.t
            WHERE account_id=%s GROUP BY 1""", (shop, shop))}
     hidden = {r["promo"] for r in c.execute("SELECT promo FROM promo_hidden WHERE account_id=%s", (shop,))}
-    promos = []
-    for p in c.execute("""SELECT promo_id, name, kind, start_at, end_at FROM wb_promotions WHERE account_id=%s AND kind <> 'auto'
+    promos, auto_promos = [], []
+    hidden_count = 0
+    for p in c.execute("""SELECT promo_id, name, kind, start_at, end_at FROM wb_promotions WHERE account_id=%s
                           AND end_at > now() ORDER BY start_at""", (shop,)).fetchall():
         key = f"api:{p['promo_id']}"
         if key in hidden:
+            hidden_count += 1
+            continue
+        if p["kind"] == "auto":
+            auto_promos.append({"key": key, "name": p["name"] or f"Акция {p['promo_id']}", "from": p["start_at"], "to": p["end_at"]})
             continue
         items = {r["nm_id"]: {"price": float(r["plan_price"]) if r["plan_price"] is not None else None, "in_action": r["in_action"]}
                  for r in c.execute("SELECT * FROM wb_promo_items WHERE account_id=%s AND promo_id=%s", (shop, p["promo_id"]))}
@@ -114,4 +154,5 @@ def view(c, shop: int) -> dict:
         n_calc = sum(1 for r in rows if r["promos"].get(p["key"], {}).get("calc"))
         out_p.append({k: v for k, v in p.items() if k != "items"} | {"eligible": n_el, "fact_pct": n_in / n_el if n_el else None,
                                                                     "calc_pct": n_calc / n_el if n_el else None})
-    return {"rows": rows, "promos": out_p}
+    return {"rows": rows, "promos": out_p, "auto_promos": auto_promos,
+            "collection": collection_status(c, shop), "hidden_count": hidden_count}

@@ -31,6 +31,19 @@ def board(shop_id: int, days: int = 14, date_to: date | None = None, ads: bool =
                              "can_edit": auth.can(auth.shop_role(c, u, shop_id), "editor")})
 
 
+@router.get("/api/shops/{shop_id}/manager/charts")
+def board_charts(shop_id: int, date_to: date | None = None, u=Depends(current_user), c=Depends(conn)):
+    _role(c, u, shop_id, "viewer")
+    from . import action_charts
+    from .materialize import NotReady
+    import psycopg
+    try:
+        return jsonable_encoder(action_charts.get(c, shop_id, date_to))
+    except (NotReady, psycopg.errors.QueryCanceled) as e:
+        c.rollback()
+        return {"error": str(e) if isinstance(e, NotReady) else "Графики не успели загрузиться. Повторите позже."}
+
+
 class ActionItem(BaseModel):
     kind: str
     value: str | None = None
@@ -673,23 +686,26 @@ def pf_list(shop_id: int, u=Depends(current_user), c=Depends(conn)):
 
 @router.get("/api/shops/{shop_id}/photo_funnel/{nm}")
 def pf_item(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
-    from . import photos
+    from . import photos, photo_prices
     _role(c, u, shop_id, "viewer")
     own = c.execute("SELECT 1 FROM nomenclature WHERE account_id=%s AND nm_id=%s", (shop_id, nm)).fetchone()
     comp = c.execute("SELECT 1 FROM competitors WHERE account_id=%s AND comp_nm_id=%s", (shop_id, nm)).fetchone()
     if not own and not comp:
         raise HTTPException(404, "Артикул не из магазина и не из его конкурентов")
     snaps = c.execute("SELECT id, taken_at, source, slots FROM photo_snaps WHERE nm_id=%s ORDER BY taken_at DESC LIMIT 60", (nm,)).fetchall()
+    prices = photo_prices.periods(c, shop_id, nm, snaps) if own else {}
     sl = {s["id"]: [x["hash"] for x in s["slots"]] for s in snaps}
     events = []
     from datetime import timedelta
     from .config import today_msk
     end = today_msk()                       
-    for e in c.execute("SELECT * FROM photo_events WHERE nm_id=%s ORDER BY day DESC, id DESC LIMIT 60", (nm,)).fetchall():
+    history = c.execute("SELECT * FROM photo_events WHERE nm_id=%s ORDER BY day DESC, id DESC LIMIT 60", (nm,)).fetchall()
+    for e in history:
         ev = {"day": e["day"], "summary": e["summary"], "after": sl.get(e["snap_id"]), "before": sl.get(e["prev_id"]), "detail": e["detail"]}
         if own:
             ev["effect"] = photos.effect(c, shop_id, nm, e["day"])
             ev["period"] = photos.period_stats(c, shop_id, nm, e["day"], max(e["day"], end))
+            ev["period"]["prices"] = prices.get(e["snap_id"])
         end = e["day"] - timedelta(days=1)
         events.append(ev)
     if own:                                 
@@ -699,10 +715,18 @@ def pf_item(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
             b = ev["day"] - timedelta(days=1)
             ev["period_before"] = (events[i + 1].get("period") if i + 1 < len(events)
                                    else photos.period_stats(c, shop_id, nm, a, b) if a and a <= b else None)
+            if ev["period_before"] is None and prices.get(history[i]["prev_id"]) is not None:
+                
+                
+                ev["period_before"] = {'from': ev['day'], 'to': ev['day'], 'days': 0,
+                                       'ctr': None, 'conv_cart': None, 'conv_order': None, 'orders_day': None}
+            if ev["period_before"] is not None and "prices" not in ev["period_before"]:
+                ev["period_before"]["prices"] = prices.get(history[i]["prev_id"])
     cur_period = None
     if own and snaps:                       
         since = events[0]["day"] if events else snaps[-1]["taken_at"].date()
         cur_period = photos.period_stats(c, shop_id, nm, since, max(since, today_msk()))
+        cur_period["prices"] = prices.get(snaps[0]["id"])
     return jsonable_encoder({"nm_id": nm, "own": bool(own), "current": sl.get(snaps[0]["id"]) if snaps else None, "current_period": cur_period,
                              "taken_at": snaps[0]["taken_at"] if snaps else None, "events": events})
 

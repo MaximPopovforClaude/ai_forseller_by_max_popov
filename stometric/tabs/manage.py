@@ -194,18 +194,18 @@ def promo(c, shop, f):
 def checklist_summary(c, shop, f):
     """Сводный чек-лист: показатели Чек-листа за период по всем артикулам + ABC-анализ по 4 показателям (сумма выкупов,
     прибыль до ДРР, ROI до ДРР, КЭМ) и рекомендация: Удерживать / ТОП Развивать / Развивать / Сливать. Всё — прогноз от заказов × % выкупа."""
-    from .. import checklist as ck
+    from .. import checklist as ck, xyz
     rows = ck.summary(c, shop, f["date_from"], min(f["date_to"], today_msk()), f.get("nm_ids"))
     cols = [{"field": k, "title": t, "type": "share" if ty == "pct" else ty, "group": g} for g, items in ck.SUMMARY_COLS for k, t, ty in items]
     if not any(r.get("bonus") for r in rows):
         cols = [x for x in cols if x["field"] not in ck.BONUS_FIELDS]
     color = {"A": "#bbf7d0", "B": "#fef08a", "C": "#fecaca"}
     return {"columns": cols, "rows": rows,
-            "cell_colors": {**{k: color for k in ("abc_sum", "abc_profit", "abc_roi", "abc_kem")},
+            "cell_colors": {"xyz": xyz.COLORS, **{k: color for k in ("abc_sum", "abc_profit", "abc_roi", "abc_kem")},
                             "rec": {"Удерживать": "#bbf7d0", "ТОП Развивать": "#bfdbfe", "Развивать": "#fef08a", "Сливать": "#fecaca"}},
             "heat": [["profit_pre"], ["profit"], ["orders_sum"], ["buyouts_fc"]],
             "note": "ABC: выкупы и прибыль — накопительно 80/95 %; ROI до ДРР A ≥ 70 %, B ≥ 30 %; КЭМ A ≥ 80 %, B ≥ 50 %. "
-                    "Рекомендация — по сочетанию четырёх букв."}
+                    "Рекомендация — по сочетанию четырёх букв. " + xyz.NOTE}
 
 
 def hypotheses(c, shop, f):

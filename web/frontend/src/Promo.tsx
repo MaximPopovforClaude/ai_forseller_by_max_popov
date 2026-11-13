@@ -6,7 +6,12 @@ type Cell = { in_action: boolean; calc: boolean; price: number | null; margin: n
 type Row = { nm_id: number; vendor_code: string | null; title: string | null; photo: string | null; turnover: number | null; stock: number | null;
   price: number | null; margin: number | null; margin_rub: number | null; no_cost: boolean; promos: Record<string, Cell> };
 type P = { key: string; name: string; source: "api" | "file"; from?: string; to?: string; eligible: number; fact_pct: number | null; calc_pct: number | null };
-type Data = { rows: Row[]; promos: P[]; can_edit: boolean };
+type Collection = { status: "ok" | "never" | "error" | "stale" | "disabled"; last_ok_at?: string; last_run_at?: string;
+  catalog_at?: string; interval_minutes: number; future_days: number };
+type Data = { rows: Row[]; promos: P[]; can_edit: boolean; auto_promos?: Pick<P, "key" | "name" | "from" | "to">[];
+  collection?: Collection; hidden_count?: number };
+const dateMsk = (value?: string) => value ? new Date(value).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit",
+  month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "ещё нет";
 const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const pc = (v: number | null | undefined) => (v == null ? "" : (v * 100).toFixed(2).replace(".", ",") + " %");
 const rub = (v: number | null | undefined) => (v == null ? "" : nf.format(v) + " ₽");
@@ -22,10 +27,13 @@ export function Promo({ shop }: { shop: number }) {
   const [d, setD] = useState<Data | null>(null);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [onlyIn, setOnlyIn] = useState(false);
   const file = useRef<HTMLInputElement>(null);
+  const titleInput = useRef<HTMLInputElement>(null);
+  const context = useRef(0);
   const [pins, setPins] = useState<string[]>(loadPins);
   const [lefts, setLefts] = useState<number[]>([]);
   const ths = useRef<(HTMLTableCellElement | null)[]>([]);
@@ -41,18 +49,48 @@ export function Promo({ shop }: { shop: number }) {
   }, [d, pins, onlyIn]);
   const stick = (i: number, th = false) => (pins.includes(FIXED[i][0])
     ? { style: { position: "sticky" as const, left: lefts[i] || 0, zIndex: th ? 4 : 2 }, "data-pin": "" } : {});
-  const load = () => http.get<Data>(`/api/shops/${shop}/promo`).then(setD).catch((e) => setErr(e.message));
-  useEffect(() => { setD(null); load(); }, [shop]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const load = (stamp = context.current) => http.get<Data>(`/api/shops/${shop}/promo`)
+    .then(x => { if (stamp === context.current) setD(x); })
+    .catch(e => { if (stamp === context.current) setErr(e.message); });
+  useEffect(() => {
+    const stamp = ++context.current;
+    setD(null); setTitle(""); setErr(""); setMsg(""); setBusy(false); setRefreshing(false); load(stamp);
+    return () => { ++context.current; };
+  }, [shop]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const pickFile = () => {
+    if (busy || refreshing) return;
+    if (!title.trim()) { setErr("Сначала введите название акции в поле слева, затем выберите файл."); titleInput.current?.focus(); return; }
+    setErr(""); file.current?.click();
+  };
   const upload = async (f: File) => {
+    if (busy || refreshing) return;
+    const uploadTitle = title.trim(), stamp = context.current;
+    if (!uploadTitle) { pickFile(); return; }
+    if (!/\.(xlsx|zip)$/i.test(f.name)) { setErr("Выберите файл .xlsx или ZIP-архив с файлом .xlsx."); return; }
+    if (!f.size) { setErr("Выбран пустой файл. Скачайте файл акции заново."); return; }
     setErr(""); setMsg(""); setBusy(true);
     try {
-      const r = await fetch(`/api/shops/${shop}/promo/upload?name=${encodeURIComponent(f.name)}&title=${encodeURIComponent(title)}`,
+      const r = await fetch(`/api/shops/${shop}/promo/upload?name=${encodeURIComponent(f.name)}&title=${encodeURIComponent(uploadTitle)}`,
         { method: "POST", body: f, credentials: "same-origin", headers: { "Content-Type": "application/octet-stream" } });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.detail || r.statusText);
-      setMsg(`Акция «${title}» добавлена: ${j.items} товаров`); setTitle(""); load();
-    } catch (e) { setErr((e as Error).message); }
-    setBusy(false);
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        const fallback = r.status === 413 ? "Файл слишком большой для загрузки. Попробуйте отдельный XLSX из архива."
+          : r.status === 401 ? "Сессия истекла. Войдите на сайт заново."
+          : `Сервер не подтвердил загрузку (HTTP ${r.status}). Обновите таблицу перед повторной отправкой.`;
+        throw new Error(typeof j?.detail === "string" ? j.detail : fallback);
+      }
+      if (j?.ok && typeof j.message === "string") {
+        // The frozen demo returns an explicit educational notice, not an import.
+        if (stamp === context.current) setMsg(j.message);
+        return;
+      }
+      if (!j?.ok || !Number.isInteger(j.items) || j.items < 1)
+        throw new Error("Сервер не подтвердил результат загрузки. Обновите таблицу перед повторной отправкой.");
+      if (stamp === context.current) { setMsg(`Акция «${uploadTitle}» добавлена: ${j.items} товаров`); setTitle(""); await load(stamp); }
+    } catch (e) {
+      if (stamp === context.current) setErr(e instanceof TypeError
+        ? "Связь прервалась. Результат загрузки неизвестен — обновите таблицу перед повторной отправкой." : (e as Error).message);
+    } finally { if (stamp === context.current) setBusy(false); }
   };
   const toggle = (p: string, nm: number, on: boolean) => {
     setD((x) => x && { ...x, rows: x.rows.map((r) => r.nm_id === nm ? { ...r, promos: { ...r.promos, [p]: { ...r.promos[p], calc: on } } } : r) });
@@ -64,12 +102,16 @@ export function Promo({ shop }: { shop: number }) {
   return (
     <div className="promo">
       <div className="rnp-bar">
+        <button disabled={busy || refreshing} title="Перечитать сохранённые данные. Сбор из WB выполняется по расписанию."
+          onClick={async () => { const stamp = context.current; setRefreshing(true); setErr(""); await load(stamp);
+            if (stamp === context.current) setRefreshing(false); }}>{refreshing ? "Обновляю таблицу…" : "Обновить таблицу"}</button>
         {d.can_edit && <>
-          <input placeholder="Название автоакции (из календаря акций WB)" value={title} onChange={(e) => setTitle(e.target.value)} style={{ minWidth: 280 }} />
-          <input ref={file} type="file" accept=".xlsx,.zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
-          <button disabled={busy || !title.trim()} title={title.trim() ? "" : "Сначала впишите название акции"} onClick={() => file.current?.click()}>
+          <input ref={titleInput} aria-label="Название акции" placeholder="Название автоакции (из календаря акций WB)" disabled={busy} maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} style={{ minWidth: 280 }} />
+          <input ref={file} type="file" accept=".xlsx,.zip" disabled={busy || refreshing} hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
+          <button disabled={busy || refreshing} onClick={pickFile}>
             {busy ? "Загружаю…" : "➕ Добавить акцию (файл из ЛК)"}</button>
-          <button onClick={() => { if (confirm("Очистить расчёт: убрать все акции и галочки из таблицы?")) http.post(`/api/shops/${shop}/promo/clear`).then(load); }}>
+          {!title.trim() && <span className="hint">1. Укажите название акции. 2. Нажмите «Добавить акцию» и выберите XLSX или ZIP.</span>}
+          <button disabled={busy || refreshing} onClick={() => { if (confirm("Очистить расчёт: убрать все акции и галочки из таблицы?")) { const stamp = context.current; http.post(`/api/shops/${shop}/promo/clear`).then(() => load(stamp)); } }}>
             🗑 Очистить расчёт</button>
         </>}
         <details className="pin-pick">
@@ -81,9 +123,27 @@ export function Promo({ shop }: { shop: number }) {
         {msg && <span className="ok">{msg}</span>}
       </div>
       {err && <div className="err">{err}</div>}
-      <div className="hint">Обычные акции WB подтягиваются сами (API календаря акций). Автоакции WB по API не отдаёт: в ЛК → «Товары и цены» → «Календарь акций» →
+      {d.collection && <div className={d.collection.status === "error" || d.collection.status === "stale" ? "err" : "hint"} role="status">
+        Сбор из WB: {d.collection.status === "disabled" ? "для магазина выключен. " : `по расписанию раз в ${d.collection.interval_minutes / 60} ч. `}
+        Последний успешный сбор: {dateMsk(d.collection.last_ok_at)} (МСК).
+        {d.collection.last_run_at && <> Последняя завершённая попытка: {dateMsk(d.collection.last_run_at)} (МСК).</>}
+        {d.collection.catalog_at && <> Сохранённый список акций: {dateMsk(d.collection.catalog_at)} (МСК).</>}
+        {d.collection.status === "error" && <> Последняя попытка завершилась ошибкой. Список или товары акций могут быть неполными; показаны сохранённые данные.</>}
+        {d.collection.status === "never" && <> Успешного сбора ещё не было.</>}
+        {d.collection.status === "stale" && <> Данные старше интервала сбора; обновление пока не подтверждено.</>}
+        {" "}Период запроса: от вчера до {d.collection.future_days} дней вперёд. Более поздних акций здесь может ещё не быть.
+      </div>}
+      {!!d.hidden_count && <div className="hint">Акций скрыто после «Очистить расчёт»: {d.hidden_count}. Обновление таблицы не возвращает скрытые акции.</div>}
+      <div className="hint">Обычные акции WB подтягиваются сами (API календаря акций). Для автоакций API отдаёт названия и сроки, а товары и цены нужно загрузить файлом: в ЛК → «Товары и цены» → «Календарь акций» →
         акция → «Настроить список товаров» → «Сформировать файл» → «Скачать», затем впишите название и «Добавить акцию». «Расчёт» — галочки только для себя:
         видно, какая доля товаров наберётся для бустинга WB. Маржа — до рекламы, как в «ОнлайнЦене».</div>
+      {!!d.auto_promos?.length && <details open className="promo-auto">
+        <summary>Автоакции из календаря WB ({d.auto_promos.length}) — товары загружаются файлом</summary>
+        <ul>{d.auto_promos.map(p => <li key={p.key}>
+          <b>{p.name}</b> · {dateMsk(p.from)} — {dateMsk(p.to)} (МСК){" "}
+          {d.can_edit && <button disabled={busy} onClick={() => { setTitle(p.name); setErr(""); setMsg("Название подставлено. Нажмите «Добавить акцию» и выберите её файл из ЛК WB."); titleInput.current?.focus(); }}>Подставить название</button>}
+        </li>)}</ul>
+      </details>}
       <div className="rnp-wrap">
         <table className="rnp-t promo-t">
           <thead>

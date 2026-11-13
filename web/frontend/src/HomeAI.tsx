@@ -85,7 +85,10 @@ export function HomeAI({ shop }: { shop: number }) {
       expected: r?.expected_sections, requestPending: true };
     persist(); setBuilding(true); setRetryAllowed(false); setMsg("Запускаю обновление сводки…");
     try {
-      const x = await http.post<{ message: string; expected_sections?: string[] }>(`/api/shops/${shop}/ai_report/build`);
+      const x = await http.post<{ message: string; expected_sections?: string[]; frozen?: boolean }>(`/api/shops/${shop}/ai_report/build`);
+      if (generation.current === current && pending.current?.started === started && x.frozen) {
+        pending.current = null; persist(); setBuilding(false); setRetryAllowed(false); setMsg(x.message); return;
+      }
       if (generation.current === current && pending.current?.started === started) {
         pending.current = { ...pending.current, requestPending: false, expected: x.expected_sections || pending.current.expected };
         persist(); setMsg(x.message);

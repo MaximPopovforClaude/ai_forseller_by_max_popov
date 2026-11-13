@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { http } from "./api";
+import { ActionSparks, type ActionChartData } from "./ActionSparks";
 
 type Kind = { key: string; title: string; color: string; unit?: string };
 type Act = { id: number | string; kind: string; value: string | null; note?: string | null; who?: string; user_id?: number; auto?: boolean; color?: string | null };
@@ -127,30 +128,49 @@ function Editor({ targets, kinds, label, day0, existing, me, onClose, onSaved }:
   );
 }
 
-export function ActionsBoard({ shop, shops }: { shop: number; shops: { id: number; title: string }[] }) {
+export function ActionsBoard({ shop, shops, enableCharts = true }: { shop: number; shops: { id: number; title: string }[]; enableCharts?: boolean }) {
   const [scope, setScope] = useState<"one" | "all">(() => (lsGet("act_scope") === "all" ? "all" : "one"));
   const [days, setDays] = useState<number>(() => Number(lsGet("act_days") || 14) || 14);
   const [b, setB] = useState<Board | null>(null);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
   const [onlyActs, setOnlyActs] = useState(false);
+  const [chartsOn, setShowCharts] = useState(() => lsGet("act_charts") === "1");
+  const showCharts = enableCharts && chartsOn;
+  const [charts, setCharts] = useState<Record<number, ActionChartData>>({});
+  const [chartsReload, setChartsReload] = useState(0);
+  const request = useRef(0);
+  const context = useRef("");
   const [showKey, setShowKey] = useState(() => lsGet("act_key") !== "0");
   const [drr, setDrr] = useState<string[]>(() => (lsGet("act_drr") || "").split(",").filter(Boolean));
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [edit, setEdit] = useState<{ t: Target[]; label: string; day: string; existing: Act[] } | null>(null);
   const [planEdit, setPlanEdit] = useState<string | null>(null);
   const many = scope === "all" && shops.length > 1;
+  const shopKey = (many ? shops.map(s => s.id) : [shop]).join(",");
+  context.current = `${shopKey}:${days}:${drr.length > 0}`;
   const load = () => {
+    const generation = ++request.current, key = context.current;
     const list = many ? shops : [{ id: shop, title: "" }];
     Promise.all(list.map((s) => http.get<Board>(`/api/shops/${s.id}/manager/board?days=${days}${drr.length ? "&ads=true" : ""}`)
       .then((x) => ({ ...x, rows: x.rows.map((r) => ({ ...r, shop_id: s.id, shop_title: s.title, can_edit: x.can_edit })) }))))
-      .then((bs) => { setB({ ...bs[0], can_edit: bs.some((x) => x.can_edit), rows: bs.flatMap((x) => x.rows) }); setErr(""); })
-      .catch((e) => setErr(e.message));
+      .then((bs) => { if (generation !== request.current || key !== context.current) return; setB({ ...bs[0], can_edit: bs.some((x) => x.can_edit), rows: bs.flatMap((x) => x.rows) }); setErr(""); })
+      .catch((e) => { if (generation === request.current && key === context.current) setErr(e.message); });
   };
   const withAds = drr.length > 0;
-  useEffect(() => { setB(null); setPicked(new Set()); load(); }, [shop, days, many, withAds]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setB(null); setErr(""); setPicked(new Set()); load(); return () => { request.current++; }; }, [shopKey, days, withAds]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { try { localStorage.setItem("act_days", String(days)); localStorage.setItem("act_key", showKey ? "1" : "0");
     localStorage.setItem("act_scope", scope); localStorage.setItem("act_drr", drr.join(",")); } catch { /* нет хранилища */ } }, [days, showKey, scope, drr]);
+  useEffect(() => {
+    let live = true;
+    setCharts({});
+    if (showCharts) for (const id of shopKey.split(",").map(Number)) {
+      http.get<ActionChartData>(`/api/shops/${id}/manager/charts`).then(data => {
+        if (live) setCharts(old => ({ ...old, [id]: data }));
+      }).catch(e => { if (live) setCharts(old => ({ ...old, [id]: { days: [], rows: {}, price_label: "", note: "", error: e.message } })); });
+    }
+    return () => { live = false; };
+  }, [shopKey, showCharts, chartsReload]);
   const kinds = useMemo(() => Object.fromEntries((b?.kinds || []).map((k) => [k.key, k])), [b]);
   const rows = useMemo(() => {
     const ql = q.trim().toLowerCase();
@@ -179,6 +199,8 @@ export function ActionsBoard({ shop, shops }: { shop: number; shops: { id: numbe
         </select>
         <label><input type="checkbox" checked={onlyActs} onChange={(e) => setOnlyActs(e.target.checked)} /> только с действиями</label>
         <label><input type="checkbox" checked={showKey} onChange={(e) => setShowKey(e.target.checked)} /> ключевые данные</label>
+        {enableCharts && <label><input type="checkbox" checked={showCharts} onChange={e => { setShowCharts(e.target.checked); try { localStorage.setItem("act_charts", e.target.checked ? "1" : "0"); } catch { /* no storage */ } }} /> графики за 30 дней</label>}
+        {showCharts && Object.values(charts).some(c => c.error) && <button onClick={() => setChartsReload(x => x+1)}>Повторить загрузку графиков</button>}
         {!oz && <span className="hint" title="ДРР дня = расход на рекламу ÷ сумма заказов артикула за день. АРК — единая ставка, ПРК — ручная (аукцион); поиск — траты по поисковым кластерам, рекомендации — остальное (полки, каталог)">ДРР в ячейках:</span>}
         {!oz && DRR.map(([k, t]) => <label key={k}><input type="checkbox" checked={drr.includes(k)}
           onChange={(e) => setDrr((xs) => e.target.checked ? DRR.map((x) => x[0]).filter((x) => x === k || xs.includes(x)) : xs.filter((x) => x !== k))} /> {t}</label>)}
@@ -195,22 +217,15 @@ export function ActionsBoard({ shop, shops }: { shop: number; shops: { id: numbe
         {picked.size > 0 && <button className="link" onClick={() => setPicked(new Set())}>снять выбор</button>}
         <span className="hint">Клик по дню — записать действия. ⚙ — изменения, которые мы заметили сами в API {oz ? "Ozon" : "WB"}.</span>
       </div>
+      {showCharts && <div className="hint">{[...new Set(Object.values(charts).map(c => c.note).filter(Boolean))].join(" ")}</div>}
       <div className="board-wrap">
         <table className="board-t">
           <thead>
             <tr>
               <th className="sx c0">{b.can_edit && <input type="checkbox" checked={all} onChange={() => setPicked(all ? new Set() : new Set(rows.filter((r) => r.can_edit).map(keyOf)))} />}</th>
               <th className="sx c1">Артикул</th>
-              {showKey && <>
-                {oz ? <th title="Остаток на складах Ozon (FBO), доступно к продаже">Ост. FBO</th> : <th title="Остаток на складах WB">Ост. WB</th>}<th title="Остаток на своём складе (FBS)">Ост. ФБС</th><th>Ост. всего</th>
-                {oz ? <><th title="Цена продавца со скидкой (Ozon)">Цена</th><th title="Цена с акциями Ozon">Цена с акциями</th></>
-                  : <><th title="Цена со скидкой продавца (до СПП)">Цена без СПП</th><th title="Цена покупателя, последний заказ">Цена с СПП</th></>}
-                <th title="Маржа % по онлайн-цене (как лист ОнлайнЦена)">Маржа %</th><th>Рейтинг</th>
-                <th title="Средние заказы в день за 7 полных дней">Ср. заказы</th><th title="Всего остатков / средние заказы">Ост. в днях</th>
-                <th>{oz ? "Скидка Ozon %" : "СПП %"}</th><th title={`План продаж на ${month}, шт — клик, чтобы задать`}>План {month}</th>
-                <th title="ДРР от суммы заказов, 7 дней">ДРР зак.</th><th title="ДРР от суммы выкупов, 7 дней">ДРР вык.</th>
-                <th title="Конверсия в корзину, 7 дней">Конв. корз.</th><th title="Конверсия в заказ, 7 дней">Конв. зак.</th>
-              </>}
+              {showKey && <th>Ключевые данные</th>}
+              {showCharts && <th>Графики · 30 дней</th>}
               {b.days.map((d) => { const wd = new Date(d).getDay(); return <th key={d} className={"day" + (wd === 0 || wd === 6 ? " we" : "")}>{dd(d)}<br /><span className="hint">{WD[wd]}</span></th>; })}
             </tr>
           </thead>
@@ -220,20 +235,22 @@ export function ActionsBoard({ shop, shops }: { shop: number; shops: { id: numbe
                 <td className="sx c0">{r.can_edit && <input type="checkbox" checked={picked.has(keyOf(r))} onChange={() => flip(keyOf(r))} />}
                   {r.photo && <img src={r.photo} className="thumb" alt="" loading="lazy" />}</td>
                 <td className="sx c1" title={r.title || ""}><b>{r.vendor_code}</b><div className="hint">{many ? r.shop_title + " · " : ""}{r.nm_id} · {(r.title || "").slice(0, 34)}</div></td>
-                {showKey && <>
-                  <td className="n">{num(r.stock_wb)}</td><td className="n">{num(r.stock_fbs)}</td><td className="n">{num(r.stock)}</td>
-                  <td className="n">{num(r.price)}</td><td className="n">{num(r.price_spp)}</td>
-                  <td className={"n" + (r.margin_pct != null && r.margin_pct < 0 ? " down" : "")}>{pct(r.margin_pct)}</td>
-                  <td className="n">{r.rating == null ? "" : nf1.format(r.rating)}</td><td className="n">{nf1.format(r.orders_avg)}</td>
-                  <td className={"n" + (r.stock_days != null && r.stock_days < 14 ? " warn" : "")}>{r.stock_days == null ? "" : nf.format(r.stock_days)}</td>
-                  <td className="n">{pct(r.spp)}</td>
-                  <td className="n editable" onClick={() => r.can_edit && setPlanEdit(keyOf(r))}>
-                    {planEdit === keyOf(r) ? <input autoFocus defaultValue={r.plan ?? ""} onBlur={(e) => savePlan(r, e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setPlanEdit(null); }} /> : num(r.plan)}
-                  </td>
-                  <td className="n">{pct(r.drr_orders)}</td><td className="n">{pct(r.drr_buyouts)}</td>
-                  <td className="n">{pct(r.conv_cart)}</td><td className="n">{pct(r.conv_order)}</td>
-                </>}
+                {showKey && <td><div className="action-key-grid">
+                  {[
+                    [oz ? "Ост. FBO" : "Ост. WB", num(r.stock_wb)], ["Ост. ФБС", num(r.stock_fbs)], ["Ост. всего", num(r.stock)],
+                    [oz ? "Цена продавца" : "Цена без СПП", num(r.price)], [oz ? "Цена с акциями" : "Цена с СПП", num(r.price_spp)],
+                    ["Маржа %", pct(r.margin_pct)], ["Рейтинг", r.rating == null ? "" : nf1.format(r.rating)], ["Ср. заказы", nf1.format(r.orders_avg)],
+                    ["Ост. в днях", num(r.stock_days)], [oz ? "Скидка Ozon %" : "СПП %", pct(r.spp)],
+                    [`План ${month}`, planEdit === keyOf(r) ? <input key="plan" autoFocus aria-label={`План ${r.vendor_code}`} defaultValue={r.plan ?? ""}
+                      onBlur={e => savePlan(r, e.target.value)} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setPlanEdit(null); }} />
+                      : <button key="plan" className="link" disabled={!r.can_edit} title={`План продаж на ${month}, шт`} onClick={() => setPlanEdit(keyOf(r))}>{num(r.plan) || "—"}</button>],
+                    ["ДРР зак.", pct(r.drr_orders)], ["ДРР вык.", pct(r.drr_buyouts)], ["Конв. корз.", pct(r.conv_cart)], ["Конв. зак.", pct(r.conv_order)],
+                  ].map(([label, value], i) => <div className="action-key-item" key={i}
+                    title={i === 7 || i >= 11 ? "За последние 7 полных дней" : String(label)}>
+                    <span>{label}</span><b className={i === 5 && (r.margin_pct ?? 0) < 0 ? "down" : i === 8 && r.stock_days != null && r.stock_days < 14 ? "warn" : ""}>{value === "" ? "—" : value}</b>
+                  </div>)}
+                </div></td>}
+                {showCharts && <td><ActionSparks data={charts[r.shop_id!]} nm={r.nm_id} /></td>}
                 {b.days.map((d, i) => {
                   const o = r.orders[d] ?? 0;
                   const prevDay = b.days[i + 1] ?? new Date(new Date(d).getTime() - 864e5).toISOString().slice(0, 10);

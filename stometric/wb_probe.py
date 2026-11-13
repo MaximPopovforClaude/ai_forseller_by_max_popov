@@ -29,7 +29,7 @@ def check_one(item, token=None):
             response = httpx.get(url, headers={"Authorization": token.strip()} if token else {},
                                  timeout=TIMEOUT, follow_redirects=False)
         except (httpx.ConnectTimeout, httpx.ConnectError) as exc:
-
+            
             if attempt == 1 and time.monotonic() - started + RETRY_DELAY + TIMEOUT.connect <= RETRY_WINDOW:
                 time.sleep(RETRY_DELAY)
                 if time.monotonic() - started + TIMEOUT.connect <= RETRY_WINDOW:
@@ -56,7 +56,7 @@ def check_one(item, token=None):
 
 
 def checks(token=None):
-
+    
     with ThreadPoolExecutor(max_workers=len(PING)) as pool:
         futures = [pool.submit(check_one, item, token) for item in PING.items()]
         return [f.result() for f in futures]
@@ -82,7 +82,7 @@ def verify(token):
 
 
 if __name__ == "__main__":
-
+    
     print(json.dumps({"authenticated": False, "checks": checks(),
                       "note": "Без ключа: HTTP 401/403 означает, что HTTP-ответ получен, но не подтверждает доступ магазина. "
                               "timeout/connection_error — проверьте DNS, исходящий HTTPS, прокси и доступность WB."}, ensure_ascii=False, indent=2))

@@ -4,12 +4,14 @@ import { http } from "./api";
 type Item = { nm_id: number; vendor_code: string | null; title: string | null; photo: string | null; kind: "own" | "competitor";
   last_change: string | null; changes: number; has_snap: boolean };
 type Eff = { views: number; cart: number; orders: number; conv_cart: number | null; conv_order: number | null; orders_day: number };
+type Prices = { from: string; to: string; before_spp: number | null; after_spp: number | null; coverage: number };
 type Per = { from: string; to: string; days: number; views: number; cart: number; orders: number; ctr: number | null; conv_cart: number | null;
-  conv_order: number | null; orders_day: number | null };
+  conv_order: number | null; orders_day: number | null; prices?: Prices | null };
 type Ev = { day: string; summary: string; before: string[] | null; after: string[] | null; effect?: { before: Eff; after: Eff }; period?: Per; period_before?: Per | null };
 type Full = { nm_id: number; own: boolean; current: string[] | null; taken_at: string | null; events: Ev[]; current_period?: Per | null };
 
 const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
+const money = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 const pct = (v: number | null | undefined) => (v == null ? "—" : nf.format(v * 100) + " %");
 const dd = (s: string) => s.slice(0, 10).split("-").reverse().join(".");
 
@@ -86,11 +88,20 @@ function Kpi({ p }: { p?: Per | null }) {
   const d = (s: string) => `${s.slice(8, 10)}.${s.slice(5, 7)}`;
   return (
     <div className="pf-kpi" title="CTR — по рекламным показам и кликам (другие показы WB по API не отдаёт); конверсии — воронка карточки">
-      <div className="hint">{d(p.from)}–{d(p.to)} · {p.days} дн.</div>
+      <div className="hint">{d(p.from)}–{d(p.to)} · {p.days ? `${p.days} дн.` : "смена в течение дня"}</div>
       <div><span>CTR</span><b>{pc(p.ctr)}</b></div>
       <div><span>Конв. в корзину</span><b>{pc(p.conv_cart)}</b></div>
       <div><span>Конв. в заказ</span><b>{pc(p.conv_order)}</b></div>
       <div><span>Заказов в день</span><b>{p.orders_day == null ? "—" : p.orders_day.toFixed(1).replace(".", ",")}</b></div>
+      {p.prices !== undefined && <>
+        <div title="Цена со скидкой продавца, до СПП"><span>Средняя цена до СПП</span><b>{p.prices?.before_spp == null ? "—" : money.format(p.prices.before_spp) + " ₽"}</b></div>
+        <div title="Цена на витрине для гостя в Москве, без скидки кошелька"><span>Средняя цена после СПП</span><b>{p.prices?.after_spp == null ? "—" : money.format(p.prices.after_spp) + " ₽"}</b></div>
+        <details className="hint pf-price-note"><summary>Как рассчитаны показатели</summary>
+        <small title={p.prices ? `Период цен, МСК: ${new Date(p.prices.from).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} — ${new Date(p.prices.to).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })}` : undefined}>
+          {p.prices?.coverage ? `Среднее по времени · история цен покрывает ${(p.prices.coverage * 100).toFixed(1).replace(".", ",")} % периода.` : "Нет истории цен за этот период."}
+          {" "}Между замерами цена считается неизменной. Границы — зафиксированные смены фото; CTR и конверсии считаются по дням.
+        </small></details>
+      </>}
     </div>
   );
 }

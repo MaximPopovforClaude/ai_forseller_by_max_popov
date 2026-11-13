@@ -4,6 +4,7 @@ import { http } from "./api";
 import { copyCell } from "./copy";
 import { LegalAdminForm } from "./Legal";
 import { ShopArchive, type ArchiveShop } from "./ShopArchive";
+import { PasswordResetControl } from "./PasswordReset";
 
 type R = Record<string, unknown>;
 const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
@@ -64,6 +65,8 @@ export function Admin({ onShopsChanged }: { onShopsChanged: () => void }) {
       {sec === "users" && <Table rows={rows} cols={[["id", "ID"], ["email", "E-mail"], ["name", "Имя"], ["workspaces", "Кабинеты"],
         ["tg", "Telegram", (r) => (r.tg ? "✓" : "")], ["created_at", "Создан", (r) => dt(r.created_at)], ["last_login_at", "Вход", (r) => dt(r.last_login_at)],
         ["referred_by", "Пригласил"], ["invited", "Привёл"], ["bonus_balance", "Бонусы", (r) => nf.format(Number(r.bonus_balance))],
+        ["password_reset", "Пароль", r => r.is_active && !r.is_superadmin
+          ? <PasswordResetControl key={String(r.id)} id={Number(r.id)} email={String(r.email)} manual /> : "—"],
         ["is_active", "Доступ", (r) => r.is_superadmin ? "суперадмин" : <button onClick={() => {
           if (r.is_active && !confirm(`Заблокировать ${r.email}? Сессии будут закрыты.`)) return;
           http.put(`/api/admin/users/${r.id}`, { is_active: !r.is_active }).then(() => done("Сохранено")).catch(fail); }}>{r.is_active ? "Заблокировать" : "Разблокировать"}</button>]]} />}

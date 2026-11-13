@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Invite, type Member, type WorkspaceInfo } from "./api";
+import { PasswordResetControl } from "./PasswordReset";
 
 const GRANT = ["viewer", "editor", "admin"];
 const dt = (s: string | null) => (s ? new Date(s).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "—");
@@ -33,6 +34,7 @@ function Row({ w, m, onDone, setErr }: { w: WorkspaceInfo; m: Member; onDone: ()
       <td className="acts">{!owner && <>
         {dirty && <button className="pri" onClick={() => api.setMember(w.id, m.id, { role, shop_ids: shops }).then(onDone).catch((e) => setErr(e.message))}>Сохранить</button>}
         <button onClick={() => { if (confirm(`Забрать доступ у ${m.email}?`)) api.removeMember(w.id, m.id).then(onDone).catch((e) => setErr(e.message)); }}>Убрать доступ</button>
+        {w.can_reset_passwords && m.is_active && !m.is_superadmin && <PasswordResetControl key={`${w.id}:${m.id}`} id={m.id} email={m.email} workspace={w.id} />}
       </>}</td>
     </tr>
   );

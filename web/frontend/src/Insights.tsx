@@ -12,7 +12,7 @@ const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const ch = (a: number, b: number) => (b ? Math.round((a - b) / b * 100) : 0);
 
 export function Insights({ shop, staff }: { shop: number; staff?: number | null }) {
-  const y = new Date(Date.now() + 3 * 3600e3 - 864e5).toISOString().slice(0, 10);
+  const y = new Date(new Date().getTime() + 3 * 3600e3 - 864e5).toISOString().slice(0, 10);
   const [day, setDay] = useState(y);
   const [r, setR] = useState<Res | null>(null);
   const [err, setErr] = useState("");

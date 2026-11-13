@@ -29,12 +29,19 @@ let settings = {me: {tabs: wb, user: {email: 'owner@example.invalid'}, workspace
 const render = patch => {settings = {...settings, ...patch}; flushSync(() => root.render(React.createElement(mod.exports.Sidebar, settings)));};
 try {
   render({});
+  assert.equal(buttons().filter(n => props(n).title === 'Главная').length, 1);
+  assert.equal(buttons().indexOf(find('Главная')) + 1, buttons().indexOf(find('Отзывы')));
+  assert.match(props(find('Главная')).className, / on$/);
+  click(find('Главная')); assert.equal(calls.at(-1), 'home');
   const menu = walk(box).filter(n => ['BUTTON', 'A'].includes(n.tagName));
   const work = ['Действия по артикулам', 'Точки входа', 'Фотоворонка'];
   let previous = menu.indexOf(find('Реклама'));
   for(const name of work) {const b = find(name); assert.ok(menu.indexOf(b) > previous); previous = menu.indexOf(b);}
-  const compare = menu.filter(n => props(n).href === '/compare'); assert.equal(compare.length, 1);
+  const compare = menu.filter(n => props(n).title === 'Сравнение карточек'); assert.equal(compare.length, 1);
   assert.equal(menu.indexOf(compare[0]), previous + 1);
+  click(compare[0]); assert.equal(calls.at(-1), 'compare');
+  assert.equal(mod.exports.navigationGroup(tab('rnp','РНП','Version2')).group, 'Магазин');
+  assert.equal(mod.exports.navigationGroup(tab('v2_day','По дням','Version2')).group, 'Управление');
   assert.equal(menu.indexOf(find('Взаимодействия')), previous + 2);
   for(const name of work) assert.equal(buttons().filter(n => props(n).title === name).length, 1);
   assert.ok(!box.textContent.includes('Пригласить друга'));
@@ -54,7 +61,8 @@ try {
   const group = entry.parentNode; assert.ok(group.textContent.includes('Работа с кабинетом'));
   click(find('Какие вкладки показывать в меню'));
   render({me: {...settings.me, tabs: wb}, hidden: [], compareEnabled: false, open: false});
-  assert.equal(walk(box).filter(n => props(n).href === '/compare').length, 0);
+  assert.equal(buttons().filter(n => props(n).title === 'Главная').length, 1);
+  assert.equal(find('Сравнение карточек'), undefined);
   for(const name of work) {assert.ok(find(name)); assert.ok(!find(name).textContent.includes(name));}
   click(find(work[2])); assert.equal(calls.at(-1), 'photo_funnel');
   render({open: true});
@@ -67,6 +75,13 @@ try {
   assert.equal(find(work[0]),undefined,'clearing search keeps the saved collapsed preference');
   click(buttons().find(n => n.textContent.includes('Работа с кабинетом')));
   assert.ok(find(work[0]));
+  render({homeInWork: false, open: true});
+  assert.equal(buttons().filter(n => n.textContent === 'Главная').length, 1);
+  assert.ok(find('Главная').parentNode.textContent.includes('Магазин'));
+  render({homeInWork: true});
+  click(buttons().find(n => n.textContent.includes('Работа с кабинетом')));
+  flushSync(()=>props(search).onChange({target:{value:'главная'}}));
+  assert.ok(find('Главная'), 'home search reveals the collapsed work group');
   assert.deepEqual(warnings, []);
   console.log('Sidebar: order, no duplicates, real navigation, market switch, hidden preferences, compact/demo modes OK');
 } finally {flushSync(() => root.unmount()); console.error = oldError;}

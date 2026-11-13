@@ -5,6 +5,8 @@ import json
 from .. import history
 from datetime import datetime, timezone
 
+PROMO_FUTURE_DAYS = 30
+
 
 def run(ctx) -> dict:
     snap = datetime.now(timezone.utc).replace(microsecond=0)
@@ -35,23 +37,39 @@ def run_promotions(ctx) -> dict:
     from datetime import timedelta
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fmt = lambda d: d.strftime("%Y-%m-%dT%H:%M:%SZ")  
-    lst = ((ctx.wb.call("calendar", "/api/v1/calendar/promotions", params={
-        "startDateTime": fmt(now - timedelta(days=1)), "endDateTime": fmt(now + timedelta(days=30)), "allPromo": "true", "limit": 1000}) or {})
-        .get("data") or {}).get("promotions") or []
+    
+    lst, seen, offset = [], set(), 0
+    while True:
+        page = _promo_rows(ctx.wb.call("calendar", "/api/v1/calendar/promotions", params={
+            "startDateTime": fmt(now - timedelta(days=1)), "endDateTime": fmt(now + timedelta(days=PROMO_FUTURE_DAYS)),
+            "allPromo": "true", "limit": 1000, "offset": offset}), "promotions")
+        fresh = [p for p in page if p["id"] not in seen]
+        if page and not fresh:
+            from ..wb import WBError
+            raise WBError("Календарь акций WB повторил страницу без новых акций")
+        for p in fresh:
+            if p["id"] not in seen:
+                lst.append(p)
+                seen.add(p["id"])
+        if len(page) < 1000:
+            break
+        offset += len(page)
+    
+    
+    _save_promotions(ctx, lst)
     ids = [p["id"] for p in lst]
     det = {}
     for i in range(0, len(ids), 100):
-        for d in ((ctx.wb.call("calendar", "/api/v1/calendar/promotions/details", params=[("promotionIDs", x) for x in ids[i:i + 100]]) or {})
-                  .get("data") or {}).get("promotions") or []:
+        for d in _promo_rows(ctx.wb.call("calendar", "/api/v1/calendar/promotions/details",
+                                       params=[("promotionIDs", x) for x in ids[i:i + 100]]), "promotions"):
             det[d["id"]] = d
+    
+    
+    
+    lst = [{**p, **{k: v for k, v in det.get(p["id"], {}).items() if v is not None}} for p in lst]
+    _save_promotions(ctx, lst)
     items = 0
     for p in lst:
-        d = det.get(p["id"]) or p
-        ctx.c.execute("""INSERT INTO wb_promotions(account_id,promo_id,name,kind,start_at,end_at,data,updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,now())
-                         ON CONFLICT (account_id,promo_id) DO UPDATE SET name=EXCLUDED.name, kind=EXCLUDED.kind, start_at=EXCLUDED.start_at,
-                         end_at=EXCLUDED.end_at, data=EXCLUDED.data, updated_at=now()""",
-                      (ctx.acc["id"], p["id"], p.get("name"), p.get("type"), p.get("startDateTime"), p.get("endDateTime"),
-                       json.dumps(d, ensure_ascii=False)))
         if p.get("type") == "auto":
             continue
         was = {r["nm_id"]: r["in_action"] for r in ctx.c.execute(
@@ -59,8 +77,8 @@ def run_promotions(ctx) -> dict:
         for in_action in (True, False):
             off = 0
             while True:
-                r = ((ctx.wb.call("calendar", "/api/v1/calendar/promotions/nomenclatures", params={
-                    "promotionID": p["id"], "inAction": str(in_action).lower(), "limit": 1000, "offset": off}) or {}).get("data") or {}).get("nomenclatures") or []
+                r = _promo_rows(ctx.wb.call("calendar", "/api/v1/calendar/promotions/nomenclatures", params={
+                    "promotionID": p["id"], "inAction": str(in_action).lower(), "limit": 1000, "offset": off}), "nomenclatures")
                 for x in r:
                     ctx.c.execute("""INSERT INTO wb_promo_items(account_id,promo_id,nm_id,in_action,price,discount,plan_price,plan_discount,updated_at)
                                      VALUES (%s,%s,%s,%s,%s,%s,%s,%s,now()) ON CONFLICT (account_id,promo_id,nm_id) DO UPDATE SET
@@ -87,6 +105,26 @@ def run_promotions(ctx) -> dict:
     ctx.c.execute("DELETE FROM wb_promotions WHERE account_id=%s AND end_at < now() - interval '30 days'", (ctx.acc["id"],))
     ctx.c.commit()
     return {"promotions": len(lst), "items": items}
+
+
+def _save_promotions(ctx, rows):
+    for p in rows:
+        ctx.c.execute("""INSERT INTO wb_promotions(account_id,promo_id,name,kind,start_at,end_at,data,updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,now())
+                         ON CONFLICT (account_id,promo_id) DO UPDATE SET name=EXCLUDED.name, kind=EXCLUDED.kind, start_at=EXCLUDED.start_at,
+                         end_at=EXCLUDED.end_at, data=EXCLUDED.data, updated_at=now()""",
+                      (ctx.acc["id"], p["id"], p.get("name"), p.get("type"), p.get("startDateTime"), p.get("endDateTime"),
+                       json.dumps(p, ensure_ascii=False)))
+    ctx.c.commit()
+
+
+def _promo_rows(response, key: str) -> list[dict]:
+    """An invalid response must not mark a failed collection as an empty success."""
+    from ..wb import WBError
+    data = response.get("data") if isinstance(response, dict) else None
+    rows = data.get(key) if isinstance(data, dict) else None
+    if not isinstance(rows, list) or any(not isinstance(r, dict) or not isinstance(r.get("id"), int) or r["id"] <= 0 for r in rows):
+        raise WBError("Календарь акций WB вернул неожиданный формат ответа")
+    return rows
 
 
 def _running(p: dict, now) -> bool:

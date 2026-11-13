@@ -102,7 +102,12 @@ function Viewer({ id, onBack }: { id: number; onBack: () => void }) {
   const [err, setErr] = useState("");
   const [qf, setQf] = useState(""), [minFreq, setMinFreq] = useState(1000), [lose, setLose] = useState(false), [limit, setLimit] = useState(100);
   const [ai, setAi] = useState<string | null>(null), [aiBusy, setAiBusy] = useState(false), [aiErr, setAiErr] = useState("");
-  useEffect(() => { http.get<Full>(`/api/compare/${id}`).then((x) => { setC(x); setAi(x.ai_text); }).catch((e) => setErr(e.message)); }, [id]);
+  useEffect(() => {
+    let live = true;
+    setC(null); setErr(""); setAi(null);
+    http.get<Full>(`/api/compare/${id}`).then(x => { if (live) { setC(x); setAi(x.ai_text); } }).catch(e => { if (live) setErr(e.message); });
+    return () => { live = false; };
+  }, [id]);
   const pivot = useMemo(() => {
     if (!c) return [];
     const by: Record<string, { query: string; freq: number; per: Record<number, Q> }> = {};
@@ -210,7 +215,8 @@ function Viewer({ id, onBack }: { id: number; onBack: () => void }) {
   );
 }
 
-export function ComparePage() {
+export function ComparePage({ embedded = false }: { embedded?: boolean }) {
+  const wrapper = embedded ? "cmp-embedded" : "cmp-wrap";
   const [authed, setAuthed] = useState<boolean | null>(null);
   const idFromPath = () => Number(window.location.pathname.match(/^\/compare\/(\d+)/)?.[1]) || null;
   const [id, setId] = useState<number | null>(idFromPath);
@@ -223,9 +229,9 @@ export function ComparePage() {
     .catch((e) => (e.message === "401" ? setAuthed(false) : setErr(e.message)));
   useEffect(() => { load(); const f = () => setId(idFromPath()); window.addEventListener("popstate", f); return () => window.removeEventListener("popstate", f); }, []);
   const go = (x: number | null) => { window.history.pushState(null, "", x ? `/compare/${x}` : "/compare"); setId(x); if (!x) load(); };
-  if (authed === false) return <div className="cmp-wrap"><Landing /></div>;
-  if (authed === null) return <div className="center">Загрузка…</div>;
-  if (id) return <div className="cmp-wrap"><Viewer id={id} onBack={() => go(null)} /></div>;
+  if (authed === false) return <div className={wrapper}><Landing /></div>;
+  if (authed === null) return err ? <div className="err" role="alert">{err}<button className="btn" onClick={load}>Повторить</button></div> : <div className={embedded ? "hint" : "center"}>Загрузка…</div>;
+  if (id) return <div className={wrapper}><Viewer id={id} onBack={() => go(null)} /></div>;
   const upload = async (f: File) => {
     setBusy(true); setErr(""); setMsg("");
     try {
@@ -251,8 +257,8 @@ export function ComparePage() {
     </div>
   );
   return (
-    <div className="cmp-wrap"><div className="cmp">
-      <div className="board-bar"><a href="/" title="На главную"><Logo kind="horizontal" height={30} /></a><h2 style={{ margin: 0 }}>Сравнение карточек</h2></div>
+    <div className={wrapper}><div className="cmp">
+      <div className="board-bar">{!embedded && <a href="/" title="На главную"><Logo kind="horizontal" height={30} /></a>}<h2 style={{ margin: 0 }}>Сравнение карточек</h2></div>
       <label className={"cmp-drop" + (busy ? " busy" : "")} onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) upload(f); }}>
         <input type="file" accept=".xlsx,.zip" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />

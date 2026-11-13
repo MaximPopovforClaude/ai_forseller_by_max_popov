@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { http } from "./api";
+import { growthCell } from "./entryGrowth";
 
 /** Точки входа — сводные виды : воронка артикулов, источники трафика, источники по дням.
  *  Данные — дневные отчёты «Точки входа» (их качает плагин) + наши заказы (₽, средняя цена, % выкупа). */
@@ -61,7 +62,7 @@ function Spark({ vals }: { vals: (number | null)[] }) {
     {vals.map((v, i) => <div key={i} style={{ width: 4, height: `${((v || 0) / max) * 100}%`, minHeight: 1, background: "#93c5fd" }} />)}</div>;
 }
 
-export function EntryViews({ shop, nm, view }: { shop: number; nm: string; view: View }) {
+export function EntryViews({ shop, nm, view, pinPoints = false, growth = null }: { shop: number; nm: string; view: View; pinPoints?: boolean; growth?: number | null }) {
   const [days, setDays] = useState<number>(() => { try { return Number(localStorage.getItem("entry_days")) || 7; } catch { return 7; } });
   const [grain, setGrain] = useState<"day" | "week" | "month">("day");
   const [d, setD] = useState<Data | null>(null), [err, setErr] = useState("");
@@ -99,7 +100,7 @@ export function EntryViews({ shop, nm, view }: { shop: number; nm: string; view:
         <td style={{ whiteSpace: "nowrap", fontWeight: k === "views" || k === "ctr" ? 600 : undefined, paddingLeft: sub ? 18 : undefined }} className={sub ? "hint" : ""}>{t}</td>
         <td className={"n" + (sub ? " hint" : "")}>{sub ? fmt(kind, gv(cells.all, k)) : <b>{fmt(kind, gv(cells.all, k))}</b>}</td>
         {per.map((p, j) => { const a = gv(cells[p.key], k), b = j + 1 < per.length ? gv(cells[per[j + 1].key], k) : null;
-          return <td key={p.key} className={"n" + (sub ? " hint" : "")} style={{ whiteSpace: "nowrap" }}>{fmt(kind, a)}<Chg kind={kind} a={a} b={b} /></td>; })}
+          return <td key={p.key} {...growthCell(a, b, growth, "n" + (sub ? " hint" : ""))} style={{ whiteSpace: "nowrap" }}>{fmt(kind, a)}<Chg kind={kind} a={a} b={b} /></td>; })}
       </tr>));
     return (<>{bar}
       <div className="rnp-wrap"><table className="rnp-t entry-t">
@@ -131,24 +132,24 @@ export function EntryViews({ shop, nm, view }: { shop: number; nm: string; view:
       share_views: T.views ? (gv(m, p + "_views") || 0) / T.views : null, share_clicks: T.clicks ? (gv(m, p + "_clicks") || 0) / T.clicks : null,
       share_carts: T.carts ? (gv(m, p + "_carts") || 0) / T.carts : null, share_orders: T.orders ? (gv(m, p + "_orders") || 0) / T.orders : null });
     const SplitRows = ({ m }: { m: M }) => <>
-      {split.ad && <tr className="hint"><td style={{ paddingLeft: 24 }}>↳ из них реклама</td>{cols(sub(m, "ad"))}</tr>}
-      {split.org && <tr className="hint"><td style={{ paddingLeft: 24 }}>↳ органика</td>{cols(sub(m, "org"))}</tr>}</>;
+      {split.ad && <tr className="hint"><td className="entry-point-cell" style={{ paddingLeft: 24 }}>↳ из них реклама</td>{cols(sub(m, "ad"))}</tr>}
+      {split.org && <tr className="hint"><td className="entry-point-cell" style={{ paddingLeft: 24 }}>↳ органика</td>{cols(sub(m, "org"))}</tr>}</>;
     return (<>{bar}
-      <div className="rnp-wrap"><table className="rnp-t entry-t">
+      <div className="rnp-wrap"><table className={"rnp-t entry-t" + (pinPoints ? " entry-pin" : "")}>
         <thead>
-          <tr><th rowSpan={2}>Источник трафика</th><th colSpan={3}>Конверсия</th><th colSpan={5}>Трафик</th><th colSpan={3}>Корзины</th><th colSpan={3}>Заказы</th></tr>
+          <tr><th className="entry-point-cell" rowSpan={2}>Источник трафика</th><th colSpan={3}>Конверсия</th><th colSpan={5}>Трафик</th><th colSpan={3}>Корзины</th><th colSpan={3}>Заказы</th></tr>
           <tr><th>переход → заказ (CRO)</th><th>показ → заказ (CRF)</th><th>показ → корзина (CRF(L))</th><th>Показы</th><th>Доля показов</th><th>Переходы</th>
             <th>Доля переходов</th><th>CTR</th><th>Кол-во</th><th>Доля</th><th>CR в корзину</th><th>Кол-во</th><th>Доля</th><th>Корзина → заказ</th></tr></thead>
         <tbody>
           {d.sources.filter((s) => !s.ad_only || split.ad).map((s) => <Fragment key={s.section}>
-            {s.ad_only ? <tr className="hint"><td title="Реклама в полках, каталоге и на главной: WB отдаёт её одной суммой, по разделам не делит. Уже входит в разделы выше.">
+            {s.ad_only ? <tr className="hint"><td className="entry-point-cell" title="Реклама в полках, каталоге и на главной: WB отдаёт её одной суммой, по разделам не делит. Уже входит в разделы выше.">
                 <i>↳ {s.section}</i></td>{cols(s)}</tr>
               : <tr style={{ cursor: "pointer" }} onClick={() => setOpen((o) => ({ ...o, [s.section]: !o[s.section] }))}>
-                <td><b>{s.points.length ? (open[s.section] ? "▾" : "▸") : ""} {s.section}</b></td>{cols(s)}</tr>}
+                <td className="entry-point-cell"><b>{s.points.length ? (open[s.section] ? "▾" : "▸") : ""} {s.section}</b></td>{cols(s)}</tr>}
             {!s.ad_only && s.ad_views !== undefined && <SplitRows m={s} />}
-            {open[s.section] && s.points.map((p) => <tr key={p.point}><td style={{ paddingLeft: 24 }}>{p.point}</td>{cols(p)}</tr>)}
+            {open[s.section] && s.points.map((p) => <tr key={p.point}><td className="entry-point-cell" style={{ paddingLeft: 24 }}>{p.point}</td>{cols(p)}</tr>)}
           </Fragment>)}
-          <tr className="rnp-first"><td><b>Итого</b></td>{cols(T)}</tr>
+          <tr className="rnp-first"><td className="entry-point-cell"><b>Итого</b></td>{cols(T)}</tr>
           {T.ad_views !== undefined && <SplitRows m={T} />}
         </tbody></table></div>
       <div className="hint">За {d.n_days} дн. ({dd(d.d_from!)}–{dd(d.d_to!)}). Нажмите на источник — раскроются его точки входа.</div>
@@ -157,8 +158,8 @@ export function EntryViews({ shop, nm, view }: { shop: number; nm: string; view:
 
   const dl = d.days || [];
   return (<>{bar}
-    <div className="rnp-wrap"><table className="rnp-t entry-t">
-      <thead><tr><th>Источник трафика</th><th>Показатель</th><th>За период</th><th>Ср. в день</th><th>График</th>
+    <div className="rnp-wrap"><table className={"rnp-t entry-t" + (pinPoints ? " entry-pin" : "")}>
+      <thead><tr><th className="entry-point-cell">Источник трафика</th><th>Показатель</th><th>За период</th><th>Ср. в день</th><th>График</th>
         {dl.map((x) => <th key={x}>{dd(x)}</th>)}</tr></thead>
       <tbody>{d.sources_days.filter((s) => !s.ad_only || split.ad).map((s) => {
         const hasAd = s.all.ad_views !== undefined && !s.ad_only;
@@ -168,14 +169,14 @@ export function EntryViews({ shop, nm, view }: { shop: number; nm: string; view:
         return rows.map(([k, t, kind, sub], i) => {
           const vals = [...dl].reverse().map((x) => gv(s.days[x], k) ?? null);
           return <tr key={s.section + k} className={(i === 0 ? "rnp-first" : "") + (sub || s.ad_only ? " hint" : "")}>
-            {i === 0 && <td rowSpan={rows.length} style={{ verticalAlign: "middle" }} title={s.ad_only ? "Реклама в полках, каталоге и на главной: WB отдаёт её одной суммой, по разделам не делит. Уже входит в разделы выше." : ""}>
+            {i === 0 && <td className="entry-point-cell" rowSpan={rows.length} style={{ verticalAlign: "middle" }} title={s.ad_only ? "Реклама в полках, каталоге и на главной: WB отдаёт её одной суммой, по разделам не делит. Уже входит в разделы выше." : ""}>
               {s.ad_only ? <i>{s.section}</i> : <b>{s.section}</b>}</td>}
             <td style={{ whiteSpace: "nowrap", paddingLeft: sub ? 18 : undefined }}>{t}</td>
             <td className="n">{sub ? fmt(kind, gv(s.all, k)) : <b>{fmt(kind, gv(s.all, k))}</b>}</td>
             <td className="n">{kind === "n" && !sub ? fmt("n", s.all.per_day?.[k as "views"]) : ""}</td>
             <td>{!sub && <Spark vals={vals} />}</td>
             {dl.map((x, j) => { const a = gv(s.days[x], k), b = j + 1 < dl.length ? gv(s.days[dl[j + 1]], k) : null;
-              return <td key={x} className="n" style={{ whiteSpace: "nowrap" }}>{fmt(kind, a)}<Chg kind={kind} a={a} b={b} /></td>; })}
+              return <td key={x} {...growthCell(a, b, growth, "n")} style={{ whiteSpace: "nowrap" }}>{fmt(kind, a)}<Chg kind={kind} a={a} b={b} /></td>; })}
           </tr>;
         });
       })}</tbody></table></div>

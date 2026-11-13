@@ -7,7 +7,7 @@ import { ChartPanel } from "./Chart";
 import { LayoutEditor } from "./LayoutEditor";
 import { TaxForm } from "./TaxForm";
 import { Home } from "./Home";
-import { Sidebar, type Page } from "./Sidebar";
+import { Sidebar, navigationGroup, type Page } from "./Sidebar";
 import { AiLinks, OAuthConsent } from "./AiLinks";
 import { Kb } from "./Kb";
 import { AboutPage, LegalNote, LegalPage, TermsGate } from "./Legal";
@@ -16,6 +16,7 @@ import { Account } from "./Account";
 import { ArtPicker } from "./ArtPicker";
 import { InvitePage } from "./Members";
 import { MagicPage } from "./Notify";
+import { PasswordResetPage } from "./PasswordReset";
 import { ActionsBoard } from "./ActionsBoard";
 import { PriceLab } from "./PriceLab";
 import { Competitors } from "./Competitors";
@@ -217,6 +218,11 @@ function Login({ onDone }: { onDone: () => void }) {
         <input placeholder="Пароль" type="password" value={pw} onChange={(e) => setPw(e.target.value)} />
         <button>Войти</button>
         {err && <div className="err">{err}</div>}
+        <details className="hint"><summary>Забыли пароль?</summary>
+          <p>Получите ссылку в Telegram, который привязан к вашему аккаунту.</p>
+          {reg && <a href={`${reg.split("?")[0]}?start=reset`} target="_blank" rel="noreferrer">Сменить пароль через бот регистрации →</a>}
+          <p>Если Telegram не привязан или доступа к нему нет, попросите владельца сервиса передать ссылку лично.</p>
+        </details>
         {reg && <a className="reg-link" href={reg} target="_blank" rel="noreferrer">Нет аккаунта? Регистрация через Telegram →</a>}
         <LegalNote />
       </form>
@@ -235,7 +241,21 @@ export default function App() {
     const go = (e: Event) => { setCardsNm((e as CustomEvent<number>).detail); setPage("cards"); };
     window.addEventListener("ais:cards", go); return () => window.removeEventListener("ais:cards", go);
   }, []);
-  const [page, setPage] = useState<Page>(() => (new URLSearchParams(window.location.search).get("hf") ? "account" : "tab"));   // возврат со входа в Higgsfield — в настройки
+  const [page, setPage] = useState<Page>(() => {
+    if (/^\/compare(?:\/\d+)?\/?$/.test(window.location.pathname)) return "compare";
+    const p = new URLSearchParams(window.location.search);
+    return p.get('hf') ? 'account' : 'tab';
+  });
+  useEffect(() => {
+    const onPop = () => setPage(/^\/compare(?:\/\d+)?\/?$/.test(window.location.pathname) ? "compare" : "tab");
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  useEffect(() => {
+    const comparing = /^\/compare(?:\/\d+)?\/?$/.test(window.location.pathname);
+    if (page === "compare" && !comparing) window.history.pushState(null, "", "/compare");
+    else if (page !== "compare" && comparing) window.history.pushState(null, "", "/");
+  }, [page]);
   const [calendarDay, setCalendarDay] = useState<string | undefined>();
   useEffect(() => { if (page !== "cards") setCardsNm(null); }, [page]);
   useEffect(() => {
@@ -635,8 +655,9 @@ export default function App() {
   }, [data]);
   const inviteTok = window.location.pathname.match(/^\/invite\/([\w-]+)$/)?.[1];
   const magicTok = window.location.pathname.match(/^\/login\/([\w-]+)$/)?.[1];
-  if (window.location.pathname.startsWith("/compare")) return <ComparePage />;
+  if (need && page === "compare") return <ComparePage />;
   if (window.location.pathname.startsWith("/legal/")) return <LegalPage />;
+  if (window.location.pathname === "/reset-password") return <PasswordResetPage />;
   if (magicTok) return <MagicPage tok={magicTok} onDone={() => { setNeed(false); loadMe(); }} />;
   if (inviteTok) return <InvitePage tok={inviteTok} onDone={() => { setNeed(false); loadMe(); }} />;
   if (need) return <Login onDone={loadMe} />;
@@ -646,7 +667,7 @@ export default function App() {
   const shopMp = me.shops.find((s) => s.id === shop)?.marketplace || "wb";
   const isOz = shopMp === "ozon";
   const isYm = shopMp === "ym";
-  const allTabs = isOz ? me.oz_tabs : isYm ? me.ym_tabs : me.tabs;     // магазин Ozon / Маркета — свои листы
+  const allTabs = (isOz ? me.oz_tabs : isYm ? me.ym_tabs : me.tabs).map(navigationGroup);     // магазин Ozon / Маркета — свои листы
   const hiddenKeys = me.hidden_tabs?.[shopMp] || [];
   const tabsList = allTabs.filter((t) => !hiddenKeys.includes(t.key) || t.key === tab);   // скрытые — только в меню настройки
   const saveHidden = (keys: string[]) => {
@@ -654,12 +675,13 @@ export default function App() {
     setMe({ ...me, hidden_tabs: { ...(me.hidden_tabs || {}), [mp]: keys } });
     api.setHiddenTabs(mp, keys).catch((e) => setErr(e.message));
   };
-  const groups = [...new Set(tabsList.map((t) => t.group))];
+  const navTabs = tabsList.filter((t) => t.key !== "home");
+  const groups = [...new Set(navTabs.map((t) => t.group))];
   // своя панель вкладок : только выбранные и в своём порядке; остальные — в «Ещё ▾»
   const mpKey = shopMp;
-  const barKeys = me.tabbar?.[mpKey] || [];
+  const barKeys = (me.tabbar?.[mpKey] || []).filter((k) => k !== "home");
   const bar = barKeys.map((k) => allTabs.find((t) => t.key === k)).filter((t): t is Tab => !!t);
-  const rest = tabsList.filter((t) => !barKeys.includes(t.key));
+  const rest = navTabs.filter((t) => !barKeys.includes(t.key));
   const saveBar = (keys: string[]) => {
     setMe({ ...me, tabbar: { ...(me.tabbar || {}), [mpKey]: keys } }); setTbEdit(false);
     api.setTabbar(mpKey, keys).catch((e) => setErr(e.message));
@@ -680,7 +702,7 @@ export default function App() {
         </div>
       </div>}
       {me.terms_need && <TermsGate onDone={loadMe} />}
-      <Sidebar me={{ ...me, tabs: tabsList }} allTabs={allTabs} hidden={hiddenKeys} onHidden={saveHidden} ws={ws} open={sideOpen} onToggle={() => setSideOpen((x) => !x)} page={page} tab={tab} onTab={openTab}
+      <Sidebar homeInWork={true} me={{ ...me, tabs: tabsList }} allTabs={allTabs} hidden={hiddenKeys} onHidden={saveHidden} ws={ws} open={sideOpen} onToggle={() => setSideOpen((x) => !x)} page={page} tab={tab} onTab={openTab}
         onPage={(p) => { setPage(p); if (narrow()) setSideOpen(false); }} theme={theme}
         onTheme={() => setTheme(theme === "dark" ? "light" : "dark")} onLogout={() => api.logout().then(() => setNeed(true))}
         onAssistant={() => { setAsOpen((x) => !x); if (narrow()) setSideOpen(false); }} />
@@ -765,11 +787,11 @@ export default function App() {
           {bar.length ? <div className="grp">
             {bar.map((t) => (
               <button key={t.key} className={page === "tab" && t.key === tab ? "on" : ""} title={t.help || t.title} onClick={() => openTab(t.key)}>{t.title}</button>))}
-            {page === "tab" && !barKeys.includes(tab) && allTabs.some((t) => t.key === tab) &&
+            {page === "tab" && !barKeys.includes(tab) && navTabs.some((t) => t.key === tab) &&
               <button className="on" title="Открыта из «Ещё» — на панели её нет">{allTabs.find((t) => t.key === tab)!.title}</button>}
           </div> : groups.map((g) => (
             <div key={g} className="grp"><span>{g}</span>
-              {tabsList.filter((t) => t.group === g).map((t) => (
+              {navTabs.filter((t) => t.group === g).map((t) => (
                 <button key={t.key} className={page === "tab" && t.key === tab ? "on" : ""} title={t.help || t.title} onClick={() => openTab(t.key)}>{t.title}</button>
               ))}
             </div>
@@ -785,16 +807,17 @@ export default function App() {
                 onClick={() => { openTab(t.key); setMore(false); }}>{t.title}</button>)}</div>)}</div></>}
         </div>}
         <button className="tb-btn" title="Настроить панель: какие вкладки показывать и в каком порядке" onClick={() => setTbEdit(true)}>⚙</button>
-        {tbEdit && <TabBarEdit all={tabsList} keys={barKeys} onSave={saveBar} onClose={() => setTbEdit(false)} />}
+        {tbEdit && <TabBarEdit all={navTabs} keys={barKeys} onSave={saveBar} onClose={() => setTbEdit(false)} />}
       </div>
       <main>
-        {(page === "account" || page === "members") && wsId && <Account key={`account:${wsId}`} me={me} wsId={wsId} page={page} onChanged={loadMe} />}
+        {(page === "account" || page === "members") && wsId && (<Account key={`account:${wsId}`} me={me} wsId={wsId} page={page} onChanged={loadMe} />)}
         {page === "calendar" && wsId && <Calendar key={`calendar:${wsId}:${calendarDay || ''}`} wsId={wsId} workspaces={me.workspaces} initialDay={calendarDay} />}
         {page === "billing" && wsId && <Billing wsId={wsId} />}
         {page === "ai" && wsId && <AiLinks wsId={wsId} />}
         {page === "referral" && <Referral />}
-        {page === "admin" && me.user.superadmin && <Admin onShopsChanged={loadMe} />}
+        {page === "admin" && me.user.superadmin && (<Admin onShopsChanged={loadMe} />)}
         {page === "about" && <AboutPage />}
+        {page === "compare" && <ComparePage embedded />}
         {page === "service_news" && <ServiceNews tabTitle={(k) => allTabs.find((t) => t.key === k)?.title || null} onTab={openTab}
           onSeen={() => setMe((m) => m && { ...m, news_unread: 0 })} />}
         {page === "reviews" && shop && (isYm ? <div className="hint">Отзывы Яндекс Маркета — позже. Выберите магазин WB или Ozon.</div>
@@ -844,7 +867,7 @@ export default function App() {
         {tab === "home" && wsId && <HomeCalendar key={`calendar-due:${wsId}:${me.user.id}`} wsId={wsId} onOpen={day => { setCalendarDay(day); setPage("calendar"); }} />}
         {tab === "home" && data?.home && shop && <HomeAI key={`reports:${shop}`} shop={shop} />}
         {tab === "home" && data?.home && <Home data={data} hideChg={hideChg} />}
-        {shop && data?.custom === "actions" && data.key === tab && <ActionsBoard shop={shop}
+        {shop && data?.custom === "actions" && data.key === tab && <ActionsBoard enableCharts={true} shop={shop}
           shops={me.shops.filter((x) => x.workspace_id === wsId).map((x) => ({ id: x.id, title: x.title || x.name }))} />}
         {shop && data?.custom === "prices" && data.key === tab && <PriceLab shop={shop} />}
         {shop && data?.custom === "competitors" && data.key === tab && <Competitors shop={shop} />}
@@ -855,7 +878,7 @@ export default function App() {
         {shop && data?.custom === "photos" && data.key === tab && <PhotoFunnel shop={shop} />}
         {shop && data?.custom === "rnp" && data.key === tab && <Rnp shop={shop} hideChg={hideChg} nm={nm} staff={staffSel} />}
         {shop && data?.custom === "news" && data.key === tab && <News shop={shop} />}
-        {shop && data?.custom === "entry" && data.key === tab && <EntryPoints shop={shop} nm={nm} hideChg={hideChg} />}
+        {shop && data?.custom === "entry" && data.key === tab && <EntryPoints enablePin={true} enableGrowth={true} shop={shop} nm={nm} hideChg={hideChg} />}
         {shop && data?.custom === "ext_costs" && data.key === tab && <ExtCosts shop={shop} />}
         {shop && data?.custom === "mrc" && data.key === tab && <Mrc shop={shop} />}
         {shop && data?.custom === "shelves" && data.key === tab && <Shelves shop={shop} />}

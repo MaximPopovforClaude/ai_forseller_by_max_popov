@@ -1,6 +1,6 @@
 """Первые вкладки — на тех данных, что уже собираются (каркас для остальных)."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from ..config import today_msk
 
@@ -414,6 +414,8 @@ def abc(c, shop, f):
     """Сводная#ABC#ОперативныеДанные: ABC-группы артикулов по прибыли, марже и «к оплате» за 4 последних месяца."""
     from collections import defaultdict
     from ..agg import nm_day
+    from .. import xyz
+    import calendar
     end = min(f["date_to"], today_msk())
     beg = (end.replace(day=1) - timedelta(days=95)).replace(day=1)
     rows = nm_day.cached(c, shop, beg, end)
@@ -432,6 +434,14 @@ def abc(c, shop, f):
                 res[nm][f"{k}_{m}"] = letter
                 res[nm][f"v{k}_{m}"] = round(S[m][k][nm], 2)
     out = [{"vendor_code": nom.get(nm), "nm_id": nm, **v} for nm, v in res.items() if nm]
+    for m in months:
+        month = date(int(str(m)[:4]), int(str(m)[4:]), 1)
+        last = month.replace(day=calendar.monthrange(month.year, month.month)[1])
+        groups = xyz.orders(c, shop, month, min(last, end), [r["nm_id"] for r in out])
+        for r in out:
+            x = groups[r["nm_id"]]
+            r.update({f"{key}_{m}": value for key, value in x.items()})
+            r[f"abcxyz_{m}"] = (r.get(f"profit_{m}") or "") + x["xyz"] if x["xyz"] and r.get(f"profit_{m}") else None
     out.sort(key=lambda r: "".join(r.get(f"profit_{m}", "C") for m in months))
     cols = [{"field": "vendor_code", "title": "Артикул продавца", "type": "text"}, {"field": "nm_id", "title": "Артикул ВБ", "type": "int"}]
     for m in months:
@@ -439,10 +449,16 @@ def abc(c, shop, f):
         cols += [{"field": f"profit_{m}", "title": f"{lab}: ABC по прибыли", "type": "text", "group": lab},
                  {"field": f"margin_{m}", "title": "ABC по марже", "type": "text", "group": ""},
                  {"field": f"for_pay_{m}", "title": "ABC по «к оплате»", "type": "text", "group": ""},
+                 {"field": f"xyz_{m}", "title": "XYZ по заказам", "type": "text", "group": ""},
+                 {"field": f"xyz_cv_{m}", "title": "CV заказов, %", "type": "share", "group": ""},
+                 {"field": f"abcxyz_{m}", "title": "ABC прибыли × XYZ", "type": "text", "group": ""},
+                 {"field": f"xyz_days_{m}", "title": "Дней XYZ", "type": "num", "group": ""},
+                 {"field": f"xyz_status_{m}", "title": "Данные XYZ", "type": "text", "group": ""},
                  {"field": f"vprofit_{m}", "title": "Прибыль, руб", "type": "money", "group": ""},
                  {"field": f"vmargin_{m}", "title": "Маржа, руб", "type": "money", "group": ""},
                  {"field": f"vfor_pay_{m}", "title": "К оплате, руб", "type": "money", "group": ""}]
-    return {"columns": cols, "rows": out}
+    return {"columns": cols, "rows": out, "note": xyz.NOTE,
+            "cell_colors": {f"xyz_{m}": xyz.COLORS for m in months}}
 
 
 def dash_nm(c, shop, f):

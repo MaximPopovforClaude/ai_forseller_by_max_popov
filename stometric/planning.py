@@ -89,7 +89,7 @@ def table(c, shop: int) -> dict:
     nms = sorted({nm for nm, _ in cells} | {nm for nm, f in facts.items() if f["qty"] > 0},
                  key=lambda n: -(facts.get(n, {}).get("qty") or 0))
     qty_tot = {m: sum(float((cells.get((nm, m)) or {}).get("qty") or 0) for nm in nms) for m in months}
-    rows, total = [], {m: {} for m in months}
+    rows, total = [], {m: {k: 0.0 for k, _, _ in METRICS if k not in ("price", "cost", "margin_pct", "profit_pct")} for m in months}
     for nm in nms:
         p = params.get(nm) or {"commission": 0, "logistics": 0, "cost": None, "vendor_code": str(nm), "title": "", "subject": "", "photo": None}
         it = items.get(nm) or {}
