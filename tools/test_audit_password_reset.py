@@ -21,7 +21,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-import stometric.web  
+import stometric.web                                                    
 import httpx
 import psycopg
 from psycopg.rows import dict_row
@@ -197,7 +197,7 @@ class RecoveryPgTests(unittest.TestCase):
 
     def test_hourly_rate_limit_and_migration_reapply(self):
         first = self.issue()
-        
+                                                                         
         self.c.execute("UPDATE password_reset_tokens SET created_at=clock_timestamp()-interval '2 minutes'")
         for n in range(4):
             self.c.execute("""INSERT INTO password_reset_tokens(token_hash,user_id,issued_by,delivery,status,created_at,expires_at)

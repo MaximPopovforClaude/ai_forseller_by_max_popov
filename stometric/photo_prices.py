@@ -68,8 +68,8 @@ def periods(c, shop, nm, snaps, now=None):
     checked_until = max((_time(r['at']) for r in rows), default=None)
     if current and _time(current['checked_at']) <= now:
         checked_until = max(checked_until or _time(current['checked_at']), _time(current['checked_at']))
-        
-        
+                                                                                   
+                                                                                   
         rows = [r for r in rows if _time(r['at']) != _time(current['checked_at'])]
         rows.append({'at': current['checked_at'], 'price': current['price'], 'seller_price': current['seller_price']})
     return {snap['id']: average(rows, snap['taken_at'],

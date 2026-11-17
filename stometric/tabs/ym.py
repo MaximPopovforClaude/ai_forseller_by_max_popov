@@ -75,7 +75,7 @@ def home(c, shop, f):
     r = ymdash.compute(c, shop, per[2][1], t, _skus(f, c, shop), per=per)
     V = r["V"]
     rows = [{"label": lab, "fmt": fmt, "C": round(V["today"][k], 4), "D": round(V["y"][k], 4), "F": round(V["y2"][k], 4)} for lab, k, fmt in HOME_ROWS]
-    fmtd = lambda d: d.strftime("%d.%m")  
+    fmtd = lambda d: d.strftime("%d.%m")              
     cols = [{"field": "label", "title": "Ключевые показатели Яндекс Маркета", "type": "label"},
             {"field": "C", "title": f"Сегодня {fmtd(t)} (неполный)", "type": "rowfmt"},
             {"field": "D", "title": f"Вчера {fmtd(t - timedelta(days=1))}", "type": "rowfmt"},
@@ -244,7 +244,7 @@ def orders(c, shop, f):
     return {"columns": [{"field": a, "title": b, "type": t} for a, b, t in cols], "rows": rows}
 
 
-ADD = {"o_avg", "b_avg", "share", "drr", "o_profit_p", "f_profit_p", "c_share", "st_qty", "st_cost"}   
+ADD = {"o_avg", "b_avg", "share", "drr", "o_profit_p", "f_profit_p", "c_share", "st_qty", "st_cost"}                                         
 
 
 def dash5(c, shop, f):
@@ -278,9 +278,9 @@ def dash5(c, shop, f):
                 row.update(E=round(chg("C", "D", key, fmt), 4), H=round(chg("F", "G", key, fmt), 4),
                            L=round(chg("J", "K", key, fmt), 4), N=round(chg("M", "J", key, fmt), 4))
         rows.append(row)
-    fmtp = lambda a, b: f"{a:%d.%m}" + ("" if a == b else f" – {b:%d.%m}")  
+    fmtp = lambda a, b: f"{a:%d.%m}" + ("" if a == b else f" – {b:%d.%m}")              
     months = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
-    mon = lambda d: f"{months[d.month - 1]} {d.year}"  
+    mon = lambda d: f"{months[d.month - 1]} {d.year}"              
     cols = [{"field": "label", "title": f"ПОКАЗАТЕЛИ (СНО: {r['tax']})", "type": "label"},
             {"field": "C", "title": f"День {fmtp(*P['C'])}", "type": "rowfmt"}, {"field": "D", "title": fmtp(*P["D"]), "type": "rowfmt"},
             {"field": "E", "title": "изм.", "type": "change"},
@@ -394,6 +394,6 @@ def ads(c, shop, f):
             ("cr", "Конверсия клик → заказ", "share"), ("delivered", "Доставлено, шт", "int"), ("delivered_fee", "Доставлено с бустом, шт", "int"),
             ("gmv", "Выручка доставленных, ₽", "money"), ("gmv_fee", "Выручка доставленных с бустом, ₽", "money"), ("campaigns", "Кампании", "text")]
     d0 = c.execute("SELECT min(day) d, max(day) m FROM ym_boost WHERE account_id=%s", (shop,)).fetchone()
-    note = f"«Отчёт по бусту продаж» Маркета, загружено с {d0['d']:%d.%m.%Y} по {d0['m']:%d.%m.%Y}." if d0 and d0["d"] else\
+    note = f"«Отчёт по бусту продаж» Маркета, загружено с {d0['d']:%d.%m.%Y} по {d0['m']:%d.%m.%Y}." if d0 and d0["d"] else \
         "Отчёт по бусту ещё загружается."
     return {"columns": [{"field": a, "title": b, "type": t} for a, b, t in cols], "rows": ([T] if rows else []) + rows, "note": note}

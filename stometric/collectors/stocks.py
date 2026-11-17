@@ -9,7 +9,9 @@ def _pull(ctx, path, table, cols_fn):
     offset, n = 0, 0
     while True:
         data = ctx.wb.call("analytics", path, "POST", body={"limit": 250000, "offset": offset})
-        items = ((data or {}).get("data") or {}).get("items") or []
+        items = ((data or {}).get("data") or {}).get("items")
+        if not isinstance(items,list):
+            raise ValueError('Неполный ответ остатков: нет списка items')
         for it in items:
             cols, vals = cols_fn(it)
             ctx.c.execute(f"INSERT INTO {table}(account_id,snap_at,{','.join(cols)},data) VALUES ({','.join(['%s'] * (len(cols) + 3))})",
@@ -19,6 +21,10 @@ def _pull(ctx, path, table, cols_fn):
         if len(items) < 250000:
             break
         offset += 250000
+    source = {'stocks_wb_snap':'stocks_wb','stocks_seller_snap':'stocks_seller'}[table]
+    ctx.c.execute('INSERT INTO balance_stock_runs(account_id,source,snap_at,row_count) VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING',
+                  (ctx.acc['id'],source,snap,n))
+    ctx.c.commit()
     return {"rows": n, "snap_at": snap.isoformat()}
 
 

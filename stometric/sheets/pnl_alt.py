@@ -29,7 +29,7 @@ def _n(v) -> float:
 def _kind(bt: str) -> str:
     b = (bt or "").lower()
     if "продвижение" in b:
-        return "promo"          
+        return "promo"                                                    
     if "медиа" in b:
         return "media"
     if "джем" in b:
@@ -69,15 +69,15 @@ def raw(c, shop: int, d_from: date, d_to: date) -> tuple[dict, dict]:
         return cu if cu is not None else (costs[nm][0][1] if costs.get(nm) else None)
 
     tax = c.execute("SELECT * FROM tax_settings WHERE account_id=%s ORDER BY valid_from", (shop,)).fetchall()
-    
+                                                                                                    
     A = defaultdict(lambda: defaultdict(float))
     nocost = defaultdict(float)
-    
+                                                                                                                               
     n = lambda f: f"coalesce(nullif(data->>'{f}', '')::numeric, 0)"
     kind = """CASE WHEN lower(data->>'bonusTypeName') LIKE '%%продвижение%%' THEN 'promo' WHEN lower(data->>'bonusTypeName') LIKE '%%медиа%%' THEN 'media'
                    WHEN lower(data->>'bonusTypeName') LIKE '%%джем%%' THEN 'jam' WHEN lower(data->>'bonusTypeName') LIKE '%%отзыв%%' THEN 'reviews'
                    ELSE 'other' END"""
-    
+                                                                                                                                       
     sql = f"""WITH x AS MATERIALIZED (
                 SELECT coalesce((data->>'nmId')::bigint, 0) nm, left(data->>'orderDt', 10) od, left(data->>'rrDate', 10) rr,
                        CASE data->>'docTypeName' WHEN 'Продажа' THEN 1 WHEN 'Возврат' THEN -1 ELSE 0 END sg,
@@ -103,10 +103,10 @@ def raw(c, shop: int, d_from: date, d_to: date) -> tuple[dict, dict]:
             a["rev"] += f("rev")
             a["wb"] -= f("comm") + f("ds")
             a["log"] += f("ds")
-            a["acq"] -= f("acq")                      
+            a["acq"] -= f("acq")                                                                          
             a["comm"] -= f("comm") - f("acq")
-            a["paid"] += f("paid")                    
-            a["vw_vat"] += f("vwv")                   
+            a["paid"] += f("paid")                                                              
+            a["vw_vat"] += f("vwv")                                                      
             q = f("qty")
             if q:
                 a["qty"] += q
@@ -117,7 +117,7 @@ def raw(c, shop: int, d_from: date, d_to: date) -> tuple[dict, dict]:
                     a["cost"] -= q * cu
             continue
         a = A[(r["nm"], r["g"])]
-        a["wb"] -= f("ds") + f("serv")                
+        a["wb"] -= f("ds") + f("serv")                                                                                                                   
         a["log"] += f("ds")
         a["serv"] += f("serv")
         a["penalty"] -= f("pen")
@@ -132,8 +132,8 @@ def raw(c, shop: int, d_from: date, d_to: date) -> tuple[dict, dict]:
             a[k] -= pos
             if k == "jam":
                 a["serv"] += pos
-    
-    orders = defaultdict(lambda: defaultdict(float))     
+                                                                                                             
+    orders = defaultdict(lambda: defaultdict(float))                                  
     for r in c.execute("""SELECT nm_id, to_char(day,'YYYY-MM') m, sum(coalesce((data->>'ads_upd')::numeric,0)) ads,
                                  sum(coalesce((data->>'orders_sum')::numeric,0)) os, sum(coalesce((data->>'orders')::numeric,0)) o
                           FROM agg_nm_day WHERE account_id=%s AND day BETWEEN %s AND %s GROUP BY 1,2""", (shop, d_from, d_to)):
@@ -144,7 +144,7 @@ def raw(c, shop: int, d_from: date, d_to: date) -> tuple[dict, dict]:
         a["orders"] += float(r["o"])
         if r["os"] > 0:
             orders[r["m"]][r["nm_id"]] += float(r["os"])
-    
+                                                  
     for (nm, m) in [k for k in A if not k[0]]:
         w, a0 = orders.get(m), A[(0, m)]
         tw = sum(w.values()) if w else 0
@@ -174,7 +174,7 @@ def finalize(c, shop: int, cells: dict, nocost: dict, d_to: date, prior_cells: d
             tot[k] += x
     for m, a in mon.items():
         _finish(a, _tax_at(tax, f"{m}-28"))
-    cum = defaultdict(float)          
+    cum = defaultdict(float)                                                                            
     prior_months = defaultdict(lambda: defaultdict(float))
     for (_, m), cell in (prior_cells or {}).items():
         for k, x in cell.items():
@@ -195,12 +195,12 @@ def finalize(c, shop: int, cells: dict, nocost: dict, d_to: date, prior_cells: d
     for a in nm_rows.values():
         _finish(a, tx, income=False)
     _finish(tot, tx, income=False)
-    
+                                                                                    
     tot["vat"] = sum(a["vat"] for a in mon.values())
     tot["income_tax"] = sum(a["income_tax"] for a in mon.values())
     tot["profit_tax"] = tot["profit"] + tot["vat"] + tot["income_tax"]
     tot["m_tax"] = pnl_real._d(tot["profit_tax"], tot["orders_sum"])
-    
+                                                                                                                               
     nm_month = {}
     for (nm, m), a in A.items():
         nm_month[(nm, m)] = a
@@ -250,7 +250,7 @@ def vat(a: dict, tax: dict) -> float:
 
 
 def _finish(a: dict, tax: dict, income: bool = True) -> None:
-    
+                                                                                                                                                    
     a["commission"], a["acquiring"], a["logistics"] = a["comm"], a["acq"], -a["log"]
     a["services"] = a["wb"] - a["commission"] - a["acquiring"] - a["logistics"]
     a["profit"] = sum(a[k] for k in ("rev", "wb", "cost", "ads", "penalty", "reviews", "cashback", "jam", "other", "extra"))
@@ -263,7 +263,7 @@ def _finish(a: dict, tax: dict, income: bool = True) -> None:
         return
     if reg == "ОСНО":
         a["income_tax"] = -rate * max(0.0, a["profit"] + a["vat"])
-    elif reg == pnl_real.IP:          
+    elif reg == pnl_real.IP:                                                            
         a["income_tax"] = -pnl_real.ndfl(max(0.0, a["profit"] + a["vat"]))
     elif reg == "УСН доход":
         a["income_tax"] = -rate * max(0.0, a["rev"])
@@ -275,9 +275,9 @@ def _finish(a: dict, tax: dict, income: bool = True) -> None:
     a["m_tax"] = pnl_real._d(a["profit_tax"], a["orders_sum"])
 
 
-
-
-
+                                                                                                 
+                                                                                                                               
+                                                                                                                         
 import calendar
 import json as _json
 import threading
@@ -288,7 +288,7 @@ _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pnl_alt")
 _BUSY: set = set()
 _LOCK = threading.Lock()
 FRESH_MONTHS = 3
-SINCE = date(2025, 10, 1)        
+SINCE = date(2025, 10, 1)                                    
 
 
 class Pending(Exception):
@@ -375,15 +375,15 @@ def _bg(shop: int, months: list[date], edges: list[tuple[date, date]] = ()):
                 _part(c, shop, a, b, tabcache.version(c, shop))
             for m in months:
                 month_store(c, shop, m)
-    except Exception:  
+    except Exception:                                                        
         pass
     finally:
         with _LOCK:
             _BUSY.discard(shop)
 
 
-
-
+                                                                                                                                   
+                                                                    
 
 
 def _cached_raw(c, shop: int, d_from: date, d_to: date) -> tuple[dict, dict]:
@@ -403,7 +403,7 @@ def _cached_raw(c, shop: int, d_from: date, d_to: date) -> tuple[dict, dict]:
             else:
                 todo.append(m)
                 if row and _edits(row["ver"]) == _edits(ver):
-                    parts.append(_cells(row))       
+                    parts.append(_cells(row))                                                      
                 else:
                     missing += 1
         else:
@@ -431,7 +431,7 @@ def _cached_raw(c, shop: int, d_from: date, d_to: date) -> tuple[dict, dict]:
 def cached(c, shop: int, d_from: date, d_to: date) -> dict:
     """Visible rows plus cabinet YTD context; cold months are always queued, never scanned in HTTP."""
     prior = {}
-    
+                                                                                        
     if _needs_year_context(c, shop, d_from, d_to):
         prior, _ = _cached_raw(c, shop, date(d_from.year, 1, 1), d_from - timedelta(days=1))
     A, nocost = _cached_raw(c, shop, d_from, d_to)
@@ -444,7 +444,7 @@ def precompute(c, shop: int, log=print) -> None:
     from .. import tabcache
     from ..config import today_msk
     ver = tabcache.version(c, shop)
-    
+                                                                             
     m = SINCE.replace(month=1) if _needs_year_context(c, shop, SINCE, today_msk()) else SINCE
     t0, n = time.time(), 0
     while m <= today_msk():
@@ -452,9 +452,9 @@ def precompute(c, shop: int, log=print) -> None:
             month_store(c, shop, m)
             n += 1
         m = (m + timedelta(days=32)).replace(day=1)
-    d1 = today_msk()            
+    d1 = today_msk()                                                                                                          
     d0 = d1 - timedelta(days=29)
-    y = d1 - timedelta(days=1)  
+    y = d1 - timedelta(days=1)                          
     for a, b in ((d0, min(_month_end(d0), d1)), (max(d1.replace(day=1), d0), d1), (y.replace(day=1), y)):
         if not (a.day == 1 and b == _month_end(a)) and not _part_get(c, shop, a, b, ver):
             _part(c, shop, a, b, ver)

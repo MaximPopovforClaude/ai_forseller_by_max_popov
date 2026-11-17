@@ -11,8 +11,8 @@ WRITE_ROLES = ('editor', 'admin', 'owner')
 
 
 def scope(c, u, ws, write=False):
-    
-    
+                                                                            
+                                                     
     if not u or not u.get('is_active', True) or u.get('_mcp'):
         raise HTTPException(403, 'Календарь доступен участникам аккаунта на сайте')
     m = c.execute('SELECT role,shop_ids FROM memberships WHERE workspace_id=%s AND user_id=%s', (ws, u['id'])).fetchone()
@@ -121,8 +121,8 @@ def update(c, u, ws, eid, values, version):
               {**v, 'id': eid, 'bump': int(new_reminder)})
 
 
-
-
+                                                                         
+                                                                               
 ACTION_SOURCES = '''
  SELECT 'manual' source, x.id::text id,x.account_id shop_id,x.nm_id,x.day,to_jsonb(x) body
  FROM nm_actions x WHERE x.account_id=ANY(%(ids)s) AND x.day BETWEEN %(start)s AND %(end)s
@@ -229,7 +229,7 @@ def send_reminders(c, bot, now=None):
         c.commit()
         if not claim:
             continue
-        state = 'deferred'  
+        state = 'deferred'                                                          
         try:
             e = c.execute(ELIGIBLE + ' AND e.id=%(id)s AND e.reminder_version=%(rev)s FOR UPDATE OF e,m,u,ns',
                           {**params, 'tomorrow': delivery_now.date()+timedelta(days=1), 'id': key[0], 'rev': key[1]}).fetchone()

@@ -32,7 +32,7 @@ class KbError(Exception):
         self.code = code
 
 
-
+             
 def ws_role(c, u: dict, ws: int) -> str | None:
     return auth.workspace_role(c, u, ws)
 
@@ -59,7 +59,7 @@ def shops_visible(c, u: dict, ws: int) -> list[dict]:
     return [s for s in auth.shops_for(c, u) if s["workspace_id"] == ws]
 
 
-
+              
 def tree(c, u: dict, ws: int) -> list[dict]:
     """Разделы с подразделами и числом видимых материалов."""
     vis = [s["id"] for s in shops_visible(c, u, ws)]
@@ -81,7 +81,7 @@ def items(c, u: dict, ws: int, section: int | None = None, q: str = "", shop: in
     w, p = ["i.workspace_id=%(ws)s", "(i.shop_id IS NULL OR i.shop_id = ANY(%(vis)s))"], {"ws": ws, "vis": vis, "lim": limit}
     if section == 0:
         w.append("i.section_id IS NULL")
-    elif section:                                   
+    elif section:                                                                       
         w.append("(i.section_id=%(sec)s OR i.section_id IN (SELECT id FROM kb_sections WHERE parent_id=%(sec)s))")
         p["sec"] = section
     if shop:
@@ -103,7 +103,7 @@ def get(c, item_id: int) -> dict | None:
     return c.execute("SELECT * FROM kb_items WHERE id=%s", (item_id,)).fetchone()
 
 
-
+               
 def section(c, u: dict, ws: int, title: str, parent_id: int | None = None) -> int:
     """Раздел (или подраздел) по названию: есть — его id, нет — создаём."""
     title = " ".join((title or "").split())[:120]
@@ -154,7 +154,7 @@ def resolve_section(c, u: dict, ws: int, title: str | None, sub: str | None) -> 
     return section(c, u, ws, sub, sid) if (sub or "").strip() else sid
 
 
-
+                 
 def _ws_used(c, ws: int) -> int:
     return int(c.execute("SELECT coalesce(sum(size),0) s FROM kb_items WHERE workspace_id=%s", (ws,)).fetchone()["s"])
 
@@ -212,7 +212,7 @@ def update(c, u: dict, item_id: int, d: dict) -> None:
     for k in ("title", "url", "body", "description"):
         if k in d:
             v = (d[k] or "").strip()[:100000] or None
-            if k == "url" and v and not re.match(r"^https?://", v, re.I):     
+            if k == "url" and v and not re.match(r"^https?://", v, re.I):                                            
                 v = "https://" + v
             sets.append(f"{k}=%s")
             p.append(v)
@@ -246,7 +246,7 @@ def can_see(c, u: dict, it: dict) -> bool:
     return not it["shop_id"] or any(s["id"] == it["shop_id"] for s in shops_visible(c, u, it["workspace_id"]))
 
 
-
+             
 def save_file(c, ws: int, name: str, raw: bytes) -> tuple[str, str, int, str | None]:
     ext = Path(name or "").suffix.lower()
     mime = IMAGE.get(ext) or DOCS.get(ext)
@@ -264,7 +264,7 @@ def save_file(c, ws: int, name: str, raw: bytes) -> tuple[str, str, int, str | N
     p.write_bytes(raw)
     try:
         txt = extract_text(p)
-    except Exception:  
+    except Exception:                                                 
         txt = None
     return rel, mime, len(raw), txt
 
@@ -294,7 +294,7 @@ def extract_text(p: Path) -> str | None:
     return None
 
 
-
+                                     
 def _public_host(host: str) -> bool:
     try:
         for fam, *_, sa in socket.getaddrinfo(host, None):
@@ -314,7 +314,7 @@ def _wb_card(c, nm: int) -> dict | None:
     base = ph.split("/images/")[0]
     try:
         d = httpx.get(f"{base}/info/ru/card.json", timeout=10).json()
-    except Exception:  
+    except Exception:                
         return None
     opts = "; ".join(f"{o.get('name')}: {o.get('value')}" for o in (d.get("options") or [])[:15])
     return {"marketplace": "Wildberries", "nm_id": nm, "title": d.get("imt_name"), "brand": (d.get("selling") or {}).get("brand_name"),
@@ -339,7 +339,7 @@ def fetch(c, url: str) -> dict:
         return {"url": url, "kind": kind, "note": "Документ Google: содержимое без доступа не читаем — опиши по словам пользователя"}
     try:
         nxt = url
-        for _ in range(4):                     
+        for _ in range(4):                                                                                                        
             h0 = (urlparse(nxt).hostname or "").lower()
             if not h0 or not _public_host(h0):
                 return {"url": url, "error": "адрес недоступен"}
@@ -357,7 +357,7 @@ def fetch(c, url: str) -> dict:
                 break
         else:
             return {"url": url, "error": "слишком много перенаправлений"}
-    except Exception as e:  
+    except Exception as e:                
         return {"url": url, "error": f"страница не открылась: {type(e).__name__}"}
     out = {"url": url, "kind": "page", "status": status, "content_type": ct.split(";")[0]}
     if "html" not in ct:
@@ -366,7 +366,7 @@ def fetch(c, url: str) -> dict:
 
     def meta(*names):
         for n in names:
-            mm = re.search(rf'<meta[^>]+(?:property|name)=["\']{re.escape(n)}["\'][^>]+content=["\']([^"\']*)', h, re.I) or\
+            mm = re.search(rf'<meta[^>]+(?:property|name)=["\']{re.escape(n)}["\'][^>]+content=["\']([^"\']*)', h, re.I) or \
                  re.search(rf'<meta[^>]+content=["\']([^"\']*)["\'][^>]+(?:property|name)=["\']{re.escape(n)}["\']', h, re.I)
             if mm and mm.group(1).strip():
                 return unescape(mm.group(1).strip())[:500]

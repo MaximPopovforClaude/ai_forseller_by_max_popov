@@ -7,7 +7,7 @@ from .. import ozon_order_prices as order_prices
 
 
 def _skus(f):
-    return f.get("nm_ids") or None      
+    return f.get("nm_ids") or None                                                        
 
 
 def _v2(c, shop, f, kind: str):
@@ -224,7 +224,7 @@ def ads(c, shop, f):
         v, cl, sp, om = float(r["views"] or 0), float(r["clicks"] or 0), float(r["spent"] or 0), float(r["orders_money"] or 0)
         r["state"] = st.get(r["state"], r["state"])
         r["skus"] = ", ".join(str(x) for x in (r["skus"] or [])[:10]) + (" …" if len(r["skus"] or []) > 10 else "")
-        r["ctr"] = round(100 * cl / v, 2) if v else None        
+        r["ctr"] = round(100 * cl / v, 2) if v else None                                             
         r["cpc"] = sp / cl if cl else None
         r["drr"] = round(100 * sp / om, 2) if om else None
         out.append(r)
@@ -267,7 +267,7 @@ def products(c, shop, f):
     return {"columns": [{"field": a, "title": b, "type": t} for a, b, t in cols], "rows": rows}
 
 
-
+                       
 STATE_RU = {"CAMPAIGN_STATE_RUNNING": "активна", "CAMPAIGN_STATE_INACTIVE": "остановлена", "CAMPAIGN_STATE_ARCHIVED": "архив",
             "CAMPAIGN_STATE_FINISHED": "завершена", "CAMPAIGN_STATE_PLANNED": "запланирована", "CAMPAIGN_STATE_STOPPED": "остановлена",
             "CAMPAIGN_STATE_MODERATION_DRAFT": "черновик", "CAMPAIGN_STATE_MODERATION_IN_PROGRESS": "на модерации"}
@@ -438,7 +438,7 @@ OZ_HOME_ROWS = [("Заказы, ₽ (аналитика Ozon)", "ordered_sum", "
                 (order_prices.CUSTOMER_LABEL, "order_customer_sum", "money"),
                 (order_prices.COVERAGE_LABEL, "order_price_coverage", "pct"), ("Заказы, шт", "ordered", "int"), ("Расход на рекламу, ₽", "ads", "money"),
                 ("ДРР от заказов, %", "drr", "pct"), ("Продажи минус возвраты, ₽", "sold_amt", "money"), ("Продажи, шт", "sold_qty", "int"),
-                ("Себестоимость продаж, ₽", "cost", "money"),     
+                ("Себестоимость продаж, ₽", "cost", "money"),                                                            
                 ("Прибыль (после рекламы, себестоимости и налога), ₽", "profit", "money")]
 
 
@@ -458,7 +458,7 @@ def home(c, shop, f):
     rows = [{"label": lab, "fmt": fmt, "C": V["today"][k] if k in order_prices.KEYS else V["today"][k] or 0,
              "D": V["y"][k] if k in order_prices.KEYS else V["y"][k] or 0,
              "F": V["y2"][k] if k in order_prices.KEYS else V["y2"][k] or 0} for lab, k, fmt in OZ_HOME_ROWS]
-    fmtd = lambda d: d.strftime("%d.%m")  
+    fmtd = lambda d: d.strftime("%d.%m")              
     cols = [{"field": "label", "title": "Ключевые показатели Ozon", "type": "label"},
             {"field": "C", "title": f"Сегодня {fmtd(t)} (неполный)", "type": "rowfmt"},
             {"field": "D", "title": f"Вчера {fmtd(t - timedelta(days=1))}", "type": "rowfmt"},

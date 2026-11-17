@@ -31,7 +31,7 @@ def _per_nm(c, shop: int, df, dt) -> dict[int, dict]:
             if k != "cost":
                 d[k] += _f(r["data"].get(k))
         d["days"] += 1
-        if r["data"].get("orders") and not r["data"].get("cost_orders"):   
+        if r["data"].get("orders") and not r["data"].get("cost_orders"):                                                        
             d["no_cost_days"] += 1
     for nm, d in out.items():
         d['demand'] = wb_demand.finish(demand.get(nm),start,end,days)
@@ -47,13 +47,13 @@ def money_leaks(c, shop: int, days: int = 30) -> dict:
     nm = _per_nm(c, shop, df, y)
     names = {r["nm_id"]: r["vendor_code"] for r in c.execute("SELECT nm_id, vendor_code FROM nomenclature WHERE account_id=%s", (shop,))}
     st = stocks(c, shop)
-    alien = [n for n in nm if n not in names]           
+    alien = [n for n in nm if n not in names]                                                                                           
     if alien:
         for r in c.execute("""SELECT DISTINCT ON (data->>'nmId') (data->>'nmId')::bigint n, data->>'vendorCode' v, data->>'subjectName' s
                               FROM raw_rows WHERE account_id=%s AND source IN ('realization','realization_daily') AND row_date >= %s
                                 AND data->>'nmId' = ANY(%s)""", (shop, df - timedelta(days=30), [str(n) for n in alien])):
             names[r["n"]] = f"{r['n']} — нет среди карточек магазина, в отчёте WB: «{r['v'] or '—'}»" + (f" ({r['s']})" if r["s"] else "")
-    vc = lambda n: names.get(n) or f"{n} — нет среди карточек магазина"  
+    vc = lambda n: names.get(n) or f"{n} — нет среди карточек магазина"              
     tot = {k: round(sum(v[k] for v in nm.values())) for k in ("orders_sum", "buyouts_sum", "profit", "ads", "ads_upd", "ads_bonus", "storage", "logistics")}
     loss = sorted([{"vendor_code": vc(n), "profit": round(v["profit"]), "buyouts": v["buyouts"], "ads": round(v["ads"]),
                     "storage": round(v["storage"]), "logistics": round(v["logistics"])}
@@ -126,7 +126,7 @@ def cabinet_issues(c, shop: int) -> dict:
            AND day >= %s ORDER BY nm_id, day DESC""", (shop, y - timedelta(days=30)))}
     st = stocks(c, shop)
     top = sorted(w1, key=lambda n: -(w1[n]['demand']['orders_sum'] or 0))[:20]
-    vc = lambda n: (names.get(n) or {}).get("vendor_code") or str(n)  
+    vc = lambda n: (names.get(n) or {}).get("vendor_code") or str(n)              
     conv, drops, cards, low_rating, low_stock = [], [], [], [], []
     for n in top:
         a, b = w1[n], w0.get(n) or {}
@@ -154,7 +154,7 @@ def cabinet_issues(c, shop: int) -> dict:
            WHERE x.account_id=%s AND x.source='adverts' AND (x.data->>'status')::int = 11""", (shop,))]
     paused = [{"campaign": p["campaign"], "vendor_code": vc(p["nm_id"])} for p in paused if p["nm_id"] in top][:10]
     f = insights.findings(c, shop, y)
-    
+                                                                                                 
     d1, d0, d7 = (_per_nm(c, shop, d, d) for d in (y, y - timedelta(days=1), y - timedelta(days=7)))
     top_d = sorted(set(d0) | set(d7), key=lambda n: -sum(((d.get(n) or {}).get('demand') or {}).get('orders_sum') or 0 for d in (d0,d7)))[:20]
     zero = {"orders": 0.0, "orders_sum": 0.0, "f_open": 0.0, "f_cart": 0.0, "ads": 0.0}
@@ -220,7 +220,7 @@ def ad_keywords(c, shop: int, y) -> dict:
     waste = sorted(((k, r) for k, r in w1.items() if not r["orders"] and float(r["spend"]) >= 300), key=lambda x: -float(x[1]["spend"]))
     orders_all = sum(int(r["orders"]) for r in w1.values())
     avg_cpo = total / orders_all if orders_all else None
-    camp_sp, camp_o = defaultdict(float), defaultdict(int)       
+    camp_sp, camp_o = defaultdict(float), defaultdict(int)                                                                     
     for k, r in w1.items():
         camp_sp[k[0]] += float(r["spend"])
         camp_o[k[0]] += int(r["orders"])
@@ -229,7 +229,7 @@ def ad_keywords(c, shop: int, y) -> dict:
     pos_drop = []
     for k, r in w1.items():
         p0 = w0.get(k)
-        if p0 and r["pos"] and p0["pos"] and int(r["clicks"]) + int(p0["clicks"]) >= 50 and float(r["pos"]) - float(p0["pos"]) >= 5\
+        if p0 and r["pos"] and p0["pos"] and int(r["clicks"]) + int(p0["clicks"]) >= 50 and float(r["pos"]) - float(p0["pos"]) >= 5 \
                 and float(r["pos"]) >= 1.5 * float(p0["pos"]):
             pos_drop.append((k, r, float(p0["pos"])))
     pos_drop.sort(key=lambda x: -(float(x[1]["pos"]) - x[2]))
@@ -273,17 +273,17 @@ def market_pack(c, tok: str, shop: int, n_articles: int = 3, call=None, only: li
         def med(pos):
             p = sorted(x for x in pos if x)
             return p[len(p) // 2] if p else 10 ** 6
-        
+                                                                                                                           
         subj = (c.execute("SELECT subject FROM nomenclature WHERE account_id=%s AND nm_id=%s", (shop, art["nm_id"])).fetchone() or {}).get("subject")
         rel = [x for x in item["queries"] if med(x["our_positions_7d"]) <= 100]
-        item["organic_weak"] = not rel            
+        item["organic_weak"] = not rel                                                                                                
         stem = (subj or "")[:4].lower()
         rel = rel or [x for x in item["queries"] if stem and stem in x["query"].lower()] or item["queries"]
         q = rel[0]["query"]
         top = call("get_external_analytics", schema_name="external.products.top", extra_fields="proceeds,orders,price,rating,reviews,subject",
                    params={"wb_search": q, "period": 30}, max_rows=20) or {}
         rows = [r for r in top.get("rows") or [] if int(r["id"]) not in own]
-        rows = [r for r in rows if stem and str(r.get("subject") or "").lower().startswith(stem)]   
+        rows = [r for r in rows if stem and str(r.get("subject") or "").lower().startswith(stem)]                                           
         item["subject"] = subj
         item["main_query"] = q
         item["search_top_by_revenue"] = [{"nm_id": r["id"], "name": (r.get("name") or "")[:60], "proceeds_30d": r.get("proceeds"),

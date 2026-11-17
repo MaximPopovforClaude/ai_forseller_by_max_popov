@@ -126,7 +126,7 @@ def t_propose(c, shop: int, uid: int, a: dict) -> dict:
     vf = date.fromisoformat(a["valid_from"]) if a.get("valid_from") else today_msk()
     kinds = ["nm", "vc"] if a.get("key", "auto") == "auto" else [a["key"]]
     best = None
-    for kind in kinds:      
+    for kind in kinds:                                                                            
         res = cost_import.match(c, shop, kind, items, vf)
         if best is None or len(res["write"]) + res["same"] > len(best[1]["write"]) + best[1]["same"]:
             best = (kind, res)
@@ -141,7 +141,7 @@ def t_propose(c, shop: int, uid: int, a: dict) -> dict:
                        "new_cost_for_empty": sum(1 for p in prev if p["old"] is None), "big_changes_over_30pct": len(big),
                        "not_found": res["unknown"], "not_found_examples": res["unknown_list"][:10], "bad_values": res["bad"],
                        "valid_from": str(vf), "how_to_apply": "пользователь нажимает «Применить» под таблицей черновика"},
-            
+                                                                                                                     
             "draft": {"kind": kind, "items": items, "valid_from": vf, "source": f"Стометрик, файл {f['name'][:80]}"},
             "table": {"title": "Черновик себестоимости: что изменится",
                       "columns": [{"field": "vc", "title": "Артикул продавца", "type": "text"}, {"field": "nm", "title": "Артикул", "type": "int"},

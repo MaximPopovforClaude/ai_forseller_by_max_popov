@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { http } from "./api";
 import { describeAiAccess, type AiAccess } from "./aiAccess";
 
@@ -11,17 +11,19 @@ type Res = AiAccess & { findings: F; ai_text: string | null; ai_model: string | 
 const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const ch = (a: number, b: number) => (b ? Math.round((a - b) / b * 100) : 0);
 
-export function Insights({ shop, staff }: { shop: number; staff?: number | null }) {
+export function Insights({ shop, staff }: { shop: number; staff?: number | string | null }) {
   const y = new Date(new Date().getTime() + 3 * 3600e3 - 864e5).toISOString().slice(0, 10);
   const [day, setDay] = useState(y);
   const [r, setR] = useState<Res | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const request = useRef(0);
   const load = (rebuild = false) => {
+    const stamp=++request.current;
     setBusy(true); setErr("");
-    http.get<Res>(`/api/shops/${shop}/insights?day=${day}${rebuild ? "&rebuild=true" : ""}${staff ? `&staff=${staff}` : ""}`).then(setR).catch((e) => setErr(e.message)).finally(() => setBusy(false));
+    http.get<Res>(`/api/shops/${shop}/insights?day=${day}${rebuild ? "&rebuild=true" : ""}${staff ? `&staff=${staff}` : ""}`).then(value => {if(stamp===request.current)setR(value)}).catch((e) => {if(stamp===request.current)setErr(e.message)}).finally(() => {if(stamp===request.current)setBusy(false)});
   };
-  useEffect(() => { setR(null); load(); }, [shop, day, staff]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setR(null); load(); return () => { ++request.current; }; }, [shop, day, staff]); // eslint-disable-line react-hooks/exhaustive-deps
   const f = r?.findings;
   const card = (t: string, a: number | null, b: number | null, unit = "") => {
     if (a == null || b == null) return <div><span>{t}</span><b>{a == null ? "—" : nf.format(a) + unit}</b><div className="hint">Недостаточно данных воронки для сравнения</div></div>;

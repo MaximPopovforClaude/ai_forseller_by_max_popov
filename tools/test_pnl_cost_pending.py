@@ -34,7 +34,7 @@ class PendingTabs(unittest.TestCase):
         calculate = Mock(return_value={'columns':[{'field':'profit','title':'Прибыль','type':'money'}], 'rows':[{'profit':500}]})
         def cached(c,key,shop,filters):
             return tabcache.get(c,shop,key,{},calculate)
-        with patch.object(web,'_cached',side_effect=cached),patch.object(tabcache,'version',return_value='fixture'),\
+        with patch.object(web,'_cached',side_effect=cached),patch.object(tabcache,'version',return_value='fixture'), \
              patch.object(tabcache,'compute_store',side_effect=lambda c,*args:calculate(c)):
             for key in KEYS:
                 with self.subTest(key=key):
@@ -45,7 +45,7 @@ class PendingTabs(unittest.TestCase):
                     self.assertIn('автоматически',waiting['note'])
                     self.assertNotIn('profit',waiting['rows'][0])
             calculate.assert_not_called()
-            self.c.dirty=None  
+            self.c.dirty=None                                                                 
             for key in KEYS:
                 ready=self.request(key)
                 self.assertNotIn('retry',ready)

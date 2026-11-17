@@ -53,7 +53,7 @@ def check_token(tok: str) -> str | None:
         return None
     except WildboxError as e:
         return "Wildbox не принял ключ" + (" (неверный ключ)" if "401" in str(e) or "403" in str(e) else f": {e}")
-    except Exception as e:  
+    except Exception as e:                
         return f"Wildbox не ответил: {str(e)[:120]}"
 
 
@@ -118,7 +118,7 @@ def _call(tok: str, tool: str, **args):
             c.execute("SELECT pg_advisory_unlock(%s)", (lock,))
 
 
-_BG = ThreadPoolExecutor(max_workers=1, thread_name_prefix="wildbox")   
+_BG = ThreadPoolExecutor(max_workers=1, thread_name_prefix="wildbox")                                                                 
 _BG_KEYS: set = set()
 _BG_LOCK = threading.Lock()
 
@@ -127,7 +127,7 @@ def _bg_fetch(tok, params, fields, ttl_h, max_rows, key):
     try:
         with db.connect() as c:
             products(c, tok, params, fields, ttl_h, max_rows)
-    except Exception:  
+    except Exception:                                                        
         pass
     finally:
         with _BG_LOCK:
@@ -219,7 +219,7 @@ def suggest(c, shop: int, nm: int) -> dict:
     return {"rows": rows, "error": None}
 
 
-
+                             
 def _events(prev: dict, cur: dict, hist: list[dict]) -> list[tuple[str, dict | None, dict | None]]:
     ev = []
     p0, p1 = prev.get("price"), cur.get("price")

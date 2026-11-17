@@ -1,5 +1,5 @@
-"""WB dashboard presentation and financial invariants on artificial data only."""
-import stometric.web  
+"""WB dashboard funnel finance and actual-sale invariants on artificial data only."""
+import stometric.web              
 import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
@@ -41,29 +41,31 @@ class DashboardSources(unittest.TestCase):
                 with self.subTest(tab=name):
                     report = getattr(basic, name)(self.db, 1, {**self.filters(), 'group': 'test'})
                     rows = [r for r in report['rows'] if r['fmt'] != 'h']
-                    self.assertTrue(all('воронки WB' in r['label'] for r in rows[:2]))
-                    self.assertTrue(all('статистики WB' in r['label'] for r in rows[2:4]))
+                    self.assertTrue(all('воронки WB' in r['label'] for r in rows[:3]))
+                    self.assertTrue(all('статистики WB' in r['label'] for r in rows[3:5]))
                     indexed = {r['row']: r for r in rows}
                     col = DAY.isoformat() if name == 'by_days' else 'd0' if name == 'dash_nm_days' else 'C'
                     fqty, fsum, sqty, ssum = (11, 12, 3, 4) if name == 'by_days' else (13, 12, 8, 7)
                     self.assertEqual([indexed[n][col] for n in (fqty, fsum, sqty, ssum)], [5, 2000, 3, 1200])
-                    self.assertIn('ДРР и прибыль', report['note'])
+                    self.assertEqual(indexed[121][col],1500)
+                    self.assertIn('оценка', report['note'])
 
-    def test_same_financial_cells_with_new_order_and_very_different_funnel(self):
+    def test_actual_sales_keep_financial_cells_while_order_bases_change(self):
         before = dash5.compute(self.db, 1, DAY)
         self.rows[0].update(f_orders=900, f_orders_sum=987654)
         after = basic.dash5(self.db, 1, self.filters())
         by_id = {r['row']: r for r in after['rows']}
+        actual = set(range(38,68)) | set(range(69,85)) | {7,8,9,90,91}
         for old in before['rows']:
-            if old['row'] in (12, 13):
+            if old['row'] not in actual or old['fmt']=='h':
                 continue
             for col, value in old.items():
                 if col not in ('label', 'row', 'fmt'):
                     self.assertEqual(by_id[old['row']][col], value, (old['row'], col))
         by_id = {r['row']: r for r in basic.by_days(self.db, 1, self.filters())['rows']}
-        self.assertEqual(by_id[27][DAY.isoformat()], .1)  
-        self.assertEqual(by_id[8][DAY.isoformat()], .3333)  
-        self.assertEqual(by_id[32][DAY.isoformat()], 144)  
+        self.assertEqual(by_id[27][DAY.isoformat()], round(120/987654,4))
+        self.assertEqual(by_id[8][DAY.isoformat()], round(1/900,4))
+        self.assertEqual(by_id[32][DAY.isoformat()], 144)                           
 
     def test_missing_funnel_is_null_even_if_statistics_exist_and_zero_is_real(self):
         self.rows[0].pop('f_orders'); self.rows[0]['f_orders_sum'] = None
@@ -87,21 +89,24 @@ class DashboardSources(unittest.TestCase):
                       dict(day=DAY-timedelta(days=2), orders=1, f_orders=2, f_orders_sum=600)]
         report = basic.by_days(self.db, 1, {**self.filters(), 'date_from': DAY-timedelta(days=2)})
         rows = {r['row']: r for r in report['rows']}
-        self.assertEqual(rows[11]['2026-11'], 7)
-        self.assertEqual(rows[12]['2026-11'], 2600)
+        self.assertIsNone(rows[11]['2026-11'])                                          
+        self.assertIsNone(rows[12]['2026-11'])
         self.assertEqual(rows[3]['2026-11'], 13)
         self.assertIsNone(rows[11][str(DAY-timedelta(days=1))])
         rows = {r['row']: r for r in basic.dash5(self.db, 1, self.filters())['rows']}
-        self.assertEqual(rows[13]['I'], 7)
+        self.assertIsNone(rows[13]['I'])
         a, b = dash5.periods(DAY)['M']
-        self.assertEqual(rows[13]['M'], round(7 * 30 / ((b-a).days+1), 2))
+        self.assertIsNone(rows[13]['M'])
+        self.rows[1].update(f_orders=0,f_orders_sum=0)
+        rows = {r['row']: r for r in basic.dash5(self.db,1,self.filters())['rows']}
+        self.assertEqual(rows[13]['M'],round(7*30/((b-a).days+1),2))
 
     def test_only_dashboard_cache_revisions_and_no_selection_guard(self):
         affected = ('dash5', 'dash_nm', 'dash_nm_days', 'dash_group', 'by_days')
         for tab in affected:
-            self.assertIn('wb-dashboard-funnel-first:', tabcache.calculation_version(tab, 'v'))
+            self.assertIn('wb-dashboard-funnel-finance:', tabcache.calculation_version(tab, 'v'))
         for tab in ('home', 'pnl_real_w', 'pnl_alt_m', 'svodwb', 'oz_dash', 'ym_dash'):
-            self.assertNotIn('wb-dashboard-funnel-first:', tabcache.calculation_version(tab, 'v'))
+            self.assertNotIn('wb-dashboard-funnel-finance:', tabcache.calculation_version(tab, 'v'))
         for fn in (basic.dash_nm, basic.dash_nm_days):
             self.assertIn('msg', fn(self.db, 1, {})['rows'][0])
 
@@ -111,7 +116,10 @@ class DashboardSources(unittest.TestCase):
         self.assertEqual(read.call_args.args[-1], [101])
         old = dash5.compute(self.db, 1, DAY, custom={'day': (DAY, DAY)})
         new = dash5.compute(self.db, 1, DAY, custom={'day': (DAY, DAY)}, funnel_first=True)
-        self.assertEqual(old, new)
+        self.assertEqual(old['values']['day'][15],900)
+        self.assertEqual(new['values']['day'][15],1500)
+        self.assertEqual(old['values']['day'][63],new['values']['day'][63])
+        self.assertNotIn(121,old['values']['day'])
         self.assertEqual(basic.HOME_ROWS[0][1], 7)
 
 

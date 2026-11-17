@@ -9,7 +9,7 @@ from datetime import datetime
 from ..wb import WBError
 
 PAGE = 5000
-WINDOW = 10000          
+WINDOW = 10000                                               
 
 
 def put(c, acc: int, q: dict, answered: bool) -> bool:
@@ -65,9 +65,9 @@ def _pages(ctx, params: dict):
         if got < WINDOW or not oldest:
             return
         nxt = _unix(oldest)
-        if date_to and nxt >= date_to:          
+        if date_to and nxt >= date_to:                                                                                
             return
-        date_to = nxt                           
+        date_to = nxt                                                                       
 
 
 def run(ctx) -> dict:
@@ -86,7 +86,7 @@ def run(ctx) -> dict:
                     open_ids.append(q["id"])
             n += len(items)
             ctx.c.commit()
-    
+                                                                                                  
     still = set(open_ids)
     done = [r["id"] for r in ctx.c.execute("SELECT id FROM wb_questions WHERE account_id=%s AND NOT answered", (acc,)).fetchall()
             if r["id"] not in still]
@@ -94,12 +94,12 @@ def run(ctx) -> dict:
         ctx.c.execute("UPDATE wb_questions SET answered=true, updated_at=now() WHERE account_id=%s AND id = ANY(%s)", (acc, done))
     ctx.c.commit()
     res = {"questions": n, "new": new, "unanswered": len(still), "cursor": {"backfilled": True}}
-    try:                                       
+    try:                                                                                                                
         from .. import questions
         from ..private_ai import scheduled_ai
         with scheduled_ai(ctx.c):
             res["auto"] = questions.process(ctx.c, acc)
-    except Exception as e:  
+    except Exception as e:                                                                
         ctx.c.rollback()
         res["auto_error"] = str(e)[:200]
     return res

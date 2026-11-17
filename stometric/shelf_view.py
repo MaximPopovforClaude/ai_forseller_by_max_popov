@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 TOP = 100
-BACK = 7          
+BACK = 7                                                                    
 
 
 def _days(c) -> tuple:
@@ -70,7 +70,7 @@ def detail(c, shop: int, nm: int, shops: list[int] | None = None) -> dict:
         r = c.execute("SELECT nms, total FROM shelf_snap WHERE nm_id=%s AND kind=1 AND day<=%s ORDER BY day DESC LIMIT 1", (nm, day)).fetchone() if day else None
         return r
     cur, old = snap(d), snap(p)
-    
+                                                                              
     def where(day):
         if not day:
             return {}

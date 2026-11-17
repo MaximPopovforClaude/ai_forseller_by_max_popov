@@ -11,13 +11,13 @@ import re
 from collections import defaultdict
 from datetime import date, timedelta
 
-BUYOUT_LAG = (15, 60)       
+BUYOUT_LAG = (15, 60)                                                                                  
 DONE = ("DELIVERED", "PARTIALLY_DELIVERED", "PARTIALLY_RETURNED")
 RETURNED = ("RETURNED",)
 CANCEL = ("CANCELLED_BEFORE_PROCESSING", "CANCELLED_IN_PROCESSING", "CANCELLED_IN_DELIVERY", "LOST")
 FINAL = DONE + RETURNED + CANCEL
 
-COMM = [   
+COMM = [                                 
     ("x_fee", ("FEE",)),
     ("x_deliv", ("DELIVERY_TO_CUSTOMER", "EXPRESS_DELIVERY_TO_CUSTOMER", "CROSSREGIONAL_DELIVERY", "AGENCY_COMMISSION_3PL")),
     ("x_pay", ("AGENCY", "PAYMENT_TRANSFER", "INSTALLMENT")),
@@ -26,7 +26,7 @@ COMM = [
     ("x_proc", ("SORTING", "INTAKE_SORTING", "RETURN_PROCESSING", "RETURNED_ORDERS_STORAGE", "FULFILLMENT", "FULFILLMENT_WITHDRAW")),
 ]
 COMM_KEY = {t: k for k, ts in COMM for t in ts}
-SVC = [   
+SVC = [                                                                
     ("x_fee", r"размещени"),
     ("x_proc", r"невыкуп|сортиров|обработк|хранени|возврат(ов|а) "),
     ("x_deliv", r"доставк|средняя миля|населённый пункт|населенный пункт"),
@@ -56,7 +56,7 @@ class Services:
                                   WHERE account_id=%s AND order_id = ANY(%s) AND kind IN ('serv','serv_pts') GROUP BY 1,2,3,4""",
                                (shop, ids[i:i + 5000])):
                 self.net[r["order_id"]].append((r["shop_sku"], svc_key(r["service"]), r["kind"] == "serv_pts", float(r["a"])))
-        
+                                                                                                                             
         x = c.execute("""SELECT sum(amount) FILTER (WHERE kind IN ('serv','serv_pts')) a, sum(amount) FILTER (WHERE kind='serv') m
                          FROM ym_netting WHERE account_id=%s AND tx_day >= current_date - 60""", (shop,)).fetchone()
         self.factor = float(x["a"]) / float(x["m"]) if x and x["m"] else 1.0
@@ -130,7 +130,7 @@ def costs(c, shop: int) -> dict:
 
 
 def tax_of(c, shop: int, d: date) -> tuple[str, float]:
-    t = c.execute("SELECT * FROM tax_settings WHERE account_id=%s AND valid_from<=%s ORDER BY valid_from DESC LIMIT 1", (shop, d)).fetchone()\
+    t = c.execute("SELECT * FROM tax_settings WHERE account_id=%s AND valid_from<=%s ORDER BY valid_from DESC LIMIT 1", (shop, d)).fetchone() \
         or {"regime": "Другая СНО", "rate": 0}
     rate = float(t["rate"] or 0)
     return t["regime"], rate / 100 if rate > 1 else rate
@@ -151,7 +151,7 @@ def items(c, shop: int, a: date, b: date, by: str = "order_day") -> list[dict]:
     for r in rows:
         ot = float(r["order_total"] or 0)
         r["w"] = float(r["total"]) / ot if ot else 1 / max(1, r["n_lines"])
-        
+                                                                                               
         q = int(r["qty"] or 0)
         r["unit"] = float(r["total"]) / q if q else None
     return rows
@@ -183,13 +183,13 @@ def compute(c, shop: int, d_from: date, d_to: date, skus: list[int] | None = Non
     uprice = _unit_prices(c, shop)
     flt = (lambda s: skus is None or s in skus)
     V = defaultdict(lambda: defaultdict(float))
-    Dd = defaultdict(lambda: defaultdict(float))       
+    Dd = defaultdict(lambda: defaultdict(float))                                                                  
     by_order = items(c, shop, lo - timedelta(days=BUYOUT_LAG[1]), hi, "order_day")
     by_status = items(c, shop, lo, hi, "status_day")
     svc = Services(c, shop, {r["order_id"] for r in by_order if r["status"] in DONE} | {r["order_id"] for r in by_status})
 
-    
-    fin = defaultdict(lambda: [0.0, 0.0, 0.0, 0.0])    
+                                                                       
+    fin = defaultdict(lambda: [0.0, 0.0, 0.0, 0.0])                                                                           
     for r in by_order:
         if not flt(r["sku"]):
             continue
@@ -215,11 +215,11 @@ def compute(c, shop: int, d_from: date, d_to: date, skus: list[int] | None = Non
         if r["status"] in CANCEL:
             v["c_qty"] += q0
             v["c_sum"] += s0
-        elif r["qty"] is not None and q0 > float(r["qty"] or 0):     
+        elif r["qty"] is not None and q0 > float(r["qty"] or 0):                                                    
             v["c_qty"] += q0 - float(r["qty"])
             v["c_sum"] += unit * (q0 - float(r["qty"]))
 
-    
+                                              
     for r in by_status:
         if not flt(r["sku"]) or r["status"] not in DONE + RETURNED:
             continue
@@ -259,14 +259,14 @@ def compute(c, shop: int, d_from: date, d_to: date, skus: list[int] | None = Non
         tot = sum(x[0] for d, x in fin.items() if lo_d <= d <= hi_d)
         bought = sum(x[1] for d, x in fin.items() if lo_d <= d <= hi_d)
         share = bought / tot if tot else 1.0
-        
+                                                                                                                        
         sv = [x for d, x in fin.items() if lo_d <= d <= hi_d and x[2]] or [x for x in fin.values() if x[2]]
         v["_serv_rate"] = sum(x[3] for x in sv) / sum(x[2] for x in sv) if sv else 0
         v["share"] = share
         v["o_avg"] = v["o_sum"] / v["o_qty"] if v["o_qty"] else 0
         v["ob_sum"] = v["o_sum"] * share
         v["ob_qty"] = v["o_qty"] * share
-        
+                                                                                                                                          
         v["o_serv"] = v["_serv_rate"] * v["ob_sum"]
         v["o_cost"] = v["_cost"] * share
         v["drr"] = -v["o_boost"] / v["o_sum"] if v["o_sum"] else 0

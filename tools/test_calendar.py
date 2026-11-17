@@ -18,7 +18,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
 
-import stometric.web  
+import stometric.web                                                
 from fastapi import HTTPException
 import httpx
 from psycopg import sql
@@ -108,7 +108,7 @@ class Standalone:
             return Cursor([])
         out = self.raw(f"COPY ({wrapper}) TO STDOUT;")
         payload = next(line[line.index('{"rows"'):] for line in out.splitlines() if '{"rows"' in line)
-        
+                                                                             
         payload = re.sub(r'\\([\\ntbrfv])', lambda m: {'\\': '\\', 'n':'\n', 't':'\t','b':'\b','r':'\r','f':'\f','v':'\v'}[m[1]], payload)
         rows = json.loads(payload)['rows']
         for row in rows:
@@ -307,7 +307,7 @@ class CalendarSqlTests(unittest.TestCase):
         self.add(day=DAY+timedelta(days=2))
         self.c.raw("UPDATE notify_settings SET send_from='23:00',send_to='02:00' WHERE user_id=2;")
         bot=SimpleNamespace(token='TEST ONLY',send=Mock(return_value=True))
-        utc=datetime(2026,11,4,22,tzinfo=timezone.utc) 
+        utc=datetime(2026,11,4,22,tzinfo=timezone.utc)                                  
         self.assertEqual(cal.send_reminders(self.c,bot,utc),1)
         self.assertIn('Срок завтра: 06.11.2026',bot.send.call_args.args[1])
 
@@ -333,8 +333,8 @@ class CalendarSqlTests(unittest.TestCase):
                 self.assertEqual((await client.get('/api/workspaces/1/calendar/due')).json()['items'],[])
                 self.assertEqual(self.c.execute("SELECT count(*) n FROM audit_log WHERE workspace_id=1").fetchone()['n'],2)
         try:
-            
-            
+                                                                                
+                                                                                
             with patch('fastapi.routing.run_in_threadpool',inline), patch('fastapi.dependencies.utils.run_in_threadpool',inline):
                 asyncio.run(requests())
         finally: app.dependency_overrides.clear()

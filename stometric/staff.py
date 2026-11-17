@@ -3,19 +3,32 @@
 from .cost_import import NM_HEAD, VC_HEAD, CostImportError, _find, _num, _rows_of
 
 STAFF_HEAD = ("менеджер", "ответственный", "manager", "сотрудник", "фио")
-NONE = [0]       
+NONE = [0]                                                                   
 
 
-def nms(c, shop: int, staff_id: int) -> list[int]:
-    return [r["nm_id"] for r in c.execute("SELECT nm_id FROM staff_articles WHERE account_id=%s AND staff_id=%s", (shop, staff_id))]
+def selected_ids(value) -> list[int]:
+    """Canonical union; malformed selection must never turn into all products."""
+    from fastapi import HTTPException
+    if value is None or value == "":
+        return []
+    parts = value if isinstance(value, (list, tuple)) else str(value).split(",")
+    if len(parts) > 200 or any(not str(x).strip().isdigit() or not 0 < int(x) < 2**31 for x in parts):
+        raise HTTPException(400, "Выберите корректный список менеджеров (до 200)")
+    return sorted({int(x) for x in parts})
 
 
-def narrow(c, shop: int, staff_id: int | None, nm_ids: list[int] | None) -> list[int] | None:
-    """Фильтр артикулов вкладки с учётом менеджера: его артикулы магазина (∩ выбранные вручную)."""
-    if not staff_id:
+def nms(c, shop: int, staff_id) -> list[int]:
+    ids = selected_ids(staff_id)
+    return [r["nm_id"] for r in c.execute(
+        "SELECT DISTINCT nm_id FROM staff_articles WHERE account_id=%s AND staff_id=ANY(%s) ORDER BY nm_id", (shop, ids))]
+
+
+def narrow(c, shop: int, staff_id, nm_ids: list[int] | None) -> list[int] | None:
+    """Union of managers intersected with product selection, within this shop."""
+    if not selected_ids(staff_id):
         return nm_ids
     own = set(nms(c, shop, staff_id))
-    out = sorted(own & set(nm_ids)) if nm_ids else sorted(own)
+    out = sorted(own & set(nm_ids)) if nm_ids is not None else sorted(own)
     return out or NONE
 
 
@@ -74,7 +87,7 @@ def match(c, shops: list[dict], items: list[tuple[str, str, str]]) -> dict:
     write, unknown, same, seen = [], [], 0, set()
     for kind, key, who in items:
         who = " ".join(who.split())[:100]
-        who = canon.setdefault(who.lower(), who) if who else ""       
+        who = canon.setdefault(who.lower(), who) if who else ""                                        
         hits = (by_nm if kind == "nm" else by_vc).get(key)
         if not hits:
             unknown.append(key)

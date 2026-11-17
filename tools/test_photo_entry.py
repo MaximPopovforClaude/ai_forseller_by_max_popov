@@ -119,8 +119,8 @@ class Boundaries(unittest.TestCase):
                 if 'FROM photo_events' in sql:return Cursor([{'day':date(2026,11,4),'snap_id':2,'prev_id':1,'summary':'test','detail':{}}])
                 raise AssertionError(sql)
         c=Db()
-        with patch.object(api_manager,'_role') as role, patch.object(photos,'effect',return_value={}),\
-             patch.object(photos,'period_stats',side_effect=lambda *args:{}), patch.object(photo_prices,'periods',return_value={}),\
+        with patch.object(api_manager,'_role') as role, patch.object(photos,'effect',return_value={}), \
+             patch.object(photos,'period_stats',side_effect=lambda *args:{}), patch.object(photo_prices,'periods',return_value={}), \
              patch.object(photo_entry,'periods',return_value={1:{'ctr':.1},2:{'ctr':.2}}) as read:
             value=api_manager.pf_item(7,77,u={'id':4},c=c)
             role.assert_called_once_with(c,{'id':4},7,'viewer')

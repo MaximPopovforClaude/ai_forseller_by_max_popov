@@ -5,7 +5,7 @@ from collections import defaultdict
 from ..agg import real_week
 
 
-
+                                                                                                                      
 EXPENSE_ITEMS = [
     ("Реклама", "", "Продвижение"), ("Медиа", "", "Медиа"), ("Джем", "", "Джем"), ("Витрина Магазина", "", "Витрина"),
     ("Списания за отзыв", "", "Списание за отзыв"),
@@ -37,8 +37,8 @@ def _d(a, b):
     return a / b if b else 0
 
 
-IP = "ОСНО ИП (НДФЛ)"      
-NDFL_SCALE = [(2_400_000, 0.13), (5_000_000, 0.15), (20_000_000, 0.18), (50_000_000, 0.20), (float("inf"), 0.22)]   
+IP = "ОСНО ИП (НДФЛ)"                                                                                                              
+NDFL_SCALE = [(2_400_000, 0.13), (5_000_000, 0.15), (20_000_000, 0.18), (50_000_000, 0.20), (float("inf"), 0.22)]         
 
 
 def ndfl(base: float) -> float:
@@ -109,7 +109,7 @@ def accumulate(a: dict, g: dict) -> str:
     if "Продвижение" in bt or "Медиа" in bt:
         a["ads"] += g["deduction"]
         if "Медиа" in bt:
-            a["media"] += g["deduction"]      
+            a["media"] += g["deduction"]                                                                                  
     else:
         a["deduction"] += g["deduction"]
         if g["deduction"] < 0:
@@ -141,17 +141,17 @@ def calc(a: dict, tax: dict) -> dict:
     vat_rate, vat_wb = float(tax["vat_rate"]), float(tax["vat_deduct_wb"])
     r55 = -(r10 + r12) * vat_rate / (1 + vat_rate) if vat_rate else 0.0
     base = r5 + r55 + r18 + r20 + (r23 if r23 > 0 else 0)
-    r56 = 0.0 if "УСН" in reg else vat_wb / (1 + vat_wb) * (r23 + r28 + r39 + r40 + r41 + r45 + r46) * -1   
-    if tax.get("cost_vat") and "УСН" not in reg and vat_rate:     
+    r56 = 0.0 if "УСН" in reg else vat_wb / (1 + vat_wb) * (r23 + r28 + r39 + r40 + r41 + r45 + r46) * -1                                                          
+    if tax.get("cost_vat") and "УСН" not in reg and vat_rate:                                                                    
         r56 += r47 * vat_rate / (1 + vat_rate)
     if reg == "УСН доход":
         r54 = -rate * base
     elif reg == "УСН доходы-расходы":
         prof = r51 + r55
         r54 = -(max(rate * prof, base * 0.01) if prof > 0 else 0)
-    elif reg == "ОСНО":         
+    elif reg == "ОСНО":                                                                                      
         r54 = -rate * max(0.0, r51 + r55 + r56)
-    elif reg == IP:             
+    elif reg == IP:                                                                                                 
         r54 = -ndfl(max(0.0, r51 + r55 + r56))
     else:
         r54 = -rate * (max(r5, r15 - r25) + r55)
@@ -182,18 +182,18 @@ def days_sum(day: dict[str, float], a: str, b: str) -> float:
 def compute(c, shop: int, weeks: int = 12, monthly: bool = False, ads_mode: str = "deduct") -> dict:
     """ads_mode: deduct — реклама = удержания «Продвижение»/«Медиа» в отчёте реализации (как в эталоне); fact — по факту открутки (УПД)."""
     groups = real_week.cached(c, shop)
-    tax = c.execute("SELECT * FROM tax_settings WHERE account_id=%s ORDER BY valid_from DESC LIMIT 1", (shop,)).fetchone()\
+    tax = c.execute("SELECT * FROM tax_settings WHERE account_id=%s ORDER BY valid_from DESC LIMIT 1", (shop,)).fetchone() \
         or {"regime": "Другая СНО", "rate": 0, "vat_rate": 0, "vat_deduct_wb": 0}
     key = (lambda g: g["date_from"][:7]) if monthly else (lambda g: g["date_from"])
     periods = {key(g) for g in groups if g["date_from"]}
     per = sorted(periods, reverse=True)[:weeks]
     shown = list(per)
     years_needed = {p[:4] for p in shown}
-    
+                                                                                  
     per = sorted({p for p in periods if p[:4] in years_needed}, reverse=True)
     included = set(per)
     A = defaultdict(lambda: defaultdict(float))
-    WK = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))     
+    WK = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))                                                    
     wk_to = {}
     items = defaultdict(lambda: defaultdict(float))
     expense_names = {}
@@ -215,8 +215,8 @@ def compute(c, shop: int, weeks: int = 12, monthly: bool = False, ads_mode: str 
             if g[fld]:
                 items[art][p] += g[fld]
     if not monthly:
-        
-        
+                                                                              
+                                                             
         for p, amounts in A.items():
             WK[p][p] = amounts.copy()
     rows = []
@@ -233,7 +233,7 @@ def compute(c, shop: int, weeks: int = 12, monthly: bool = False, ads_mode: str 
             for w in WK[p]:
                 WK[p][w]["ads"] = days_sum(day, w, wk_to[w]) + WK[p][w]["media"]
                 A[p]["ads"] += WK[p][w]["ads"]
-    elif wk_to:     
+    elif wk_to:                                                                                                                            
         day = ads_fact(c, shop, min(wk_to), max(wk_to.values()), only="Счет")
         for p in per:
             for w in WK[p]:
@@ -254,13 +254,13 @@ def compute(c, shop: int, weeks: int = 12, monthly: bool = False, ads_mode: str 
     for p in per:
         taxes = {w: tax_at(wk_to[w]) for w in WK[p]}
         R[p] = calc(A[p], next(iter(taxes.values())) if taxes else tax)
-        if len({id(t) for t in taxes.values()}) > 1:      
+        if len({id(t) for t in taxes.values()}) > 1:                                                                          
             for n in (53, 54, 55, 56):
                 R[p][n] = sum(calc(WK[p][w], t)[n] for w, t in taxes.items())
             R[p][57] = R[p][51] + R[p][53]
             R[p][58] = _d(R[p][57], R[p][4])
-    
-    
+                                                                               
+                                                                              
     weekly = {w: calc(a, tax_at(wk_to[w])) for weeks_ in WK.values() for w, a in weeks_.items()}
     ytd_ndfl(weekly, list(weekly), lambda w: tax_at(wk_to[w])["regime"] == IP)
     for p in per:
@@ -271,7 +271,7 @@ def compute(c, shop: int, weeks: int = 12, monthly: bool = False, ads_mode: str 
             R[p][58] = _d(R[p][57], R[p][4])
     per = shown
     years = []
-    if monthly:      
+    if monthly:                                                                                                                                             
         for y in sorted({p[:4] for p in per}, reverse=True):
             ms = [p for p in per if p[:4] == y]
             Y = f"Y{y}"
@@ -312,7 +312,7 @@ def compute(c, shop: int, weeks: int = 12, monthly: bool = False, ads_mode: str 
         rows.append({"row": n, "label": lab, "fmt": fmt, **{p: R[p].get(n, 0) for p in [*per, *(y for y, _ in years)]}})
     rows.append({"row": 62, "label": "РАСШИФРОВКА РАСХОДОВ (удержания, штрафы, доплаты по статьям)", "fmt": "h"})
     order = list(dict.fromkeys(n for n, _, _ in EXPENSE_ITEMS))
-    for art in order + sorted(a for a in items if a not in order):     
+    for art in order + sorted(a for a in items if a not in order):                                               
         vals = items.get(art, {})
         rows.append({"row": None, "label": art, "fmt": "money", **{p: vals.get(p, 0) for p in [*per, *(y for y, _ in years)]}})
     return {"periods": per, "years": years, "rows": rows, "tax": tax["regime"]}

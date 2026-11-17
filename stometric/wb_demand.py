@@ -52,7 +52,7 @@ def summary(c, shop, start, end, nms=None):
     start, end, days = window(start, end)
     if not days or nms == []:
         return {}
-    
+                                                                                
     fields = ','.join(f"CASE WHEN jsonb_typeof(data->'{key}')='number' THEN (data->>'{key}')::numeric END {alias}"
                       for key, alias in [('f_orders','z'),('f_orders_sum','s'),('f_open','o'),('f_cart','k')])
     valid = "z>=0 AND z<'Infinity'::numeric"

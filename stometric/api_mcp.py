@@ -103,7 +103,7 @@ def _catalog(g: dict, q: str) -> str:
                 try:
                     props = r.body_field.field_info.annotation.model_json_schema().get("properties", {})
                     body = " body{" + ", ".join(f"{k}: {v.get('type') or 'any'}" for k, v in props.items()) + "}"
-                except Exception:  
+                except Exception:                
                     body = " body{…}"
             lines.append(f"{m} {r.path}" + (f" ?{'&'.join(qp)}" if qp else "") + body + (f" — {doc}" if doc else ""))
     return "\n".join(lines) or "ничего не нашлось (для изменений нужны права - см. shops)"
@@ -152,7 +152,7 @@ def _gnome(g: dict, name: str, args: dict) -> tuple[bool, str]:
                 res = assistant.TOOL_FN[name](ro, sid, g["user_id"], args)
         except tabcache.ReadOnly:
             return False, "вкладка сейчас пересчитывается - попробуй через минуту"
-        except Exception as e:  
+        except Exception as e:                
             return False, f"{type(e).__name__}: {str(e)[:300]}"
         finally:
             ro.rollback()
@@ -193,7 +193,7 @@ def _rpc_err(i, code, msg):
 
 async def _one(g: dict, tok: str, m: dict):
     i, method, p = m.get("id"), m.get("method"), m.get("params") or {}
-    if i is None:                                       
+    if i is None:                                                                 
         return None
     if method == "initialize":
         v = p.get("protocolVersion")
@@ -215,7 +215,7 @@ async def _one(g: dict, tok: str, m: dict):
     elif name == "api_catalog":
         ok, text = True, _catalog(g, args.get("query") or "")
     elif name == "api_call":
-        ok, text = await _api_call(tok, args)         
+        ok, text = await _api_call(tok, args)                                                   
     elif name in READ_TOOLS:
         ok, text = await run_in_threadpool(_gnome, g, name, args)
     else:
@@ -264,7 +264,7 @@ def mcp_delete():
     return Response(status_code=405, headers={"Allow": "POST"})
 
 
-
+                                                    
 class GrantIn(BaseModel):
     workspace_id: int
     name: str
@@ -358,7 +358,7 @@ def grants_log(gid: int, u=Depends(current_user), c=Depends(conn)):
                                                   ORDER BY id DESC LIMIT 200""", (gid,)).fetchall()})
 
 
-
+                                                                                               
 @router.get("/.well-known/oauth-protected-resource")
 @router.get("/.well-known/oauth-protected-resource/mcp")
 def oauth_resource():

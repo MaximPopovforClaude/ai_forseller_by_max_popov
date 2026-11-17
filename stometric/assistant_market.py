@@ -114,7 +114,7 @@ def t_call(c, shop: int, uid: int, a: dict) -> dict:
     if not isinstance(args, dict):
         return {"error": "args - объект с аргументами инструмента"}
     if tool == "get_external_analytics" and a.get("new_days") and not args.get("max_rows"):
-        args = {**args, "max_rows": 100}         
+        args = {**args, "max_rows": 100}                                                                             
     try:
         res, cached = _call_cached(tok, tool, args)
     except market.WildboxError as e:

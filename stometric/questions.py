@@ -20,7 +20,7 @@ SYSTEM = ("Ты пишешь ответ продавца на вопрос по�
           "остального. Не обещай скидок, подарков и компенсаций, если этого нет в правилах. Не упоминай, что ты нейросеть. "
           "Не используй длинное тире: только дефис «-». Эмодзи - только если это есть в правилах ответов. Не используй ссылки, телефоны, "
           "e-mail и призывы связаться вне маркетплейса. Длина ответа - до 900 знаков. Верни ТОЛЬКО текст ответа.")
-
+                                                                             
 TONES_Q = {k: v for k, v in TONES.items() if k not in ("name", "thanks")}
 TONES_Q["deep"] = "Вникать в суть: отвечать именно на то, что спросили"
 TONES_Q["emoji"] = "Смайлики по смыслу: 1-2 уместных эмодзи на ответ"
@@ -28,7 +28,7 @@ _BUSY: set = set()
 _LOCK = threading.Lock()
 
 
-
+               
 def rules(c, shop: int, nm: int = 0) -> dict:
     r = c.execute("SELECT tones, text, updated_at FROM question_rules WHERE account_id=%s AND nm_id=%s", (shop, nm)).fetchone()
     return {"nm_id": nm, "tones": (r or {}).get("tones") or ([] if nm else ["friendly", "deep"]), "text": (r or {}).get("text") or "",
@@ -42,7 +42,7 @@ def save_rules(c, shop: int, nm: int, tones: list, text: str, uid: int):
                    updated_at=now()""", (shop, nm, json.dumps(tones), (text or "")[:4000], uid))
 
 
-
+                       
 def context(c, shop: int, q: dict) -> str:
     nm = q["nm_id"]
     shop_r, nm_r = rules(c, shop, 0), rules(c, shop, nm)
@@ -86,7 +86,7 @@ def ai_draft(c, shop: int, qid: str, uid: int | None) -> dict:
     prompt = context(c, shop, q) + f"\n\nВОПРОС ПОКУПАТЕЛЯ:\n{q['text'] or ''}"
     rec = []
     st = actions.block(c, shop, "questions")["settings"]
-    if q["nm_id"] and "cross" in rules(c, shop, 0)["tones"] + rules(c, shop, q["nm_id"])["tones"]\
+    if q["nm_id"] and "cross" in rules(c, shop, 0)["tones"] + rules(c, shop, q["nm_id"])["tones"] \
             and reco.due(c, shop, "question_answers", int(st.get("reco_every") or 3)):
         rec = reco.pick(c, shop, q["nm_id"], acc["key"])
         if rec:
@@ -117,7 +117,7 @@ def draft_async(shop: int, qid: str, uid: int | None) -> bool:
             with db.connect() as c2:
                 try:
                     ai_draft(c2, shop, qid, uid)
-                except Exception as e:  
+                except Exception as e:                
                     c2.rollback()
                     c2.execute("""INSERT INTO question_answers(account_id,question_id,text,source,status,created_by,error)
                                   VALUES (%s,%s,'-','ai','error',%s,%s)""", (shop, qid, uid, str(e)[:300]))
@@ -150,7 +150,7 @@ def send(c, shop: int, qid: str, text: str, uid: int | None, answer_id: int | No
     if answer_id:
         a = c.execute("SELECT * FROM question_answers WHERE id=%s AND account_id=%s AND question_id=%s", (answer_id, shop, qid)).fetchone()
         if a and a["source"] == "ai" and a["text"].strip() == text:
-            src = "ai"                                  
+            src = "ai"                                                                    
     try:
         actions.wb_write(c, shop, "questions", "PATCH", "feedbacks", "/api/v1/questions",
                          {"id": qid, "answer": {"text": text}, "state": "wbRu"}, uid=uid, by_ai=auto,
@@ -181,7 +181,7 @@ def comment(c, shop: int, aid: int, text: str, uid: int):
               ((text or "").strip()[:2000] or None, uid, aid, shop))
 
 
-
+                                        
 MAX_PER_RUN = 5
 
 
@@ -208,7 +208,7 @@ def process(c, shop: int) -> dict:
     since = st.get("mode_since")
     out = {"drafts": 0, "sent": 0, "errors": 0}
     for q in todo:
-        auto = mode == "auto" and since and q["created_at"] > datetime.fromisoformat(since) and sent_today < int(st.get("auto_limit") or 0)\
+        auto = mode == "auto" and since and q["created_at"] > datetime.fromisoformat(since) and sent_today < int(st.get("auto_limit") or 0) \
             and not actions.can_write(c, shop, "questions")
         try:
             d = ai_draft(c, shop, q["id"], None)
@@ -217,7 +217,7 @@ def process(c, shop: int) -> dict:
                 send(c, shop, q["id"], d["text"], None, answer_id=d["id"], auto=True)
                 sent_today += 1
                 out["sent"] += 1
-        except Exception as e:  
+        except Exception as e:                
             c.rollback()
             out["errors"] += 1
             c.execute("""INSERT INTO question_answers(account_id,question_id,nm_id,text,source,status,error)

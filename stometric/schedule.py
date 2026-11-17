@@ -8,14 +8,16 @@ from datetime import datetime, timedelta, timezone
 EVERY_MIN = {
     "orders": 30, "sales": 30, "stocks_wb": 60, "stocks_seller": 60, "stocks_wh": 60, "stocks_report": 12 * 60, "prices": 120,
     "funnel": 120, "funnel_days": 120, "adverts": 60, "ad_stats": 60, "ad_upd": 6 * 60, "ad_kw": 60, "ad_kw_lists": 6 * 60, "nomenclature": 3 * 60, "tariffs": 24 * 60, "realization": 12 * 60, "realization_daily": 3 * 60, "paid_storage": 12 * 60, "acceptance": 12 * 60,
-    "feedbacks": 10,   
-    "questions": 10,   
-    "promotions": 6 * 60,   
-    "item_rating": 3 * 60,   
+    "feedbacks": 10,                                                          
+    "questions": 10,                                                                
+    "promotions": 6 * 60,                                   
+    "ad_settings": 6 * 60,                                                        
+    "item_rating": 3 * 60,                                                                              
+    "jam_daily": 24 * 60,                                                                        
 }
 
 
-BACKFILL = {"funnel_days", "paid_storage", "acceptance", "ad_kw"}
+BACKFILL = {"funnel_days", "paid_storage", "acceptance", "ad_kw", "jam_daily"}
 
 
 def due(c, account_id: int) -> list[str]:
@@ -28,9 +30,16 @@ def due(c, account_id: int) -> list[str]:
     for name, mins in EVERY_MIN.items():
         last = st.get(name, {}).get("last_run_at")
         cur = st.get(name, {}).get("cursor") or {}
+        if name == 'jam_daily' and cur.get('retry_after'):
+            try:
+                resume = datetime.fromisoformat(cur['retry_after'])
+                if resume.tzinfo is not None and resume > now:
+                    continue
+            except (TypeError, ValueError):
+                pass                                                 
         if name == "ad_stats":
-            
-            
+                                                                                 
+                                                                                    
             if cur.get("fresh") or (cur.get("stats_version") == 2 and not cur.get("backfilled") and (not big or loadplan.night())):
                 out.append(name)
                 continue
@@ -39,17 +48,17 @@ def due(c, account_id: int) -> list[str]:
                     out.append(name)
                 continue
         if big and cur.get("deep_running") and not loadplan.night():
-            continue                  
+            continue                                                                                    
         if big and cur.get("deep_pending") and loadplan.night():
-            out.append(name)          
+            out.append(name)                                                
             continue
         if big and cur.get("deep_running"):
             out.append(name)
             continue
-        if name in BACKFILL and not cur.get("backfilled"):   
+        if name in BACKFILL and not cur.get("backfilled"):                                                 
             out.append(name)
             continue
-        if cur.get("offset"):         
+        if cur.get("offset"):                                                                                          
             out.append(name)
             continue
         if last is None or now - last >= timedelta(minutes=mins) - timedelta(minutes=2):

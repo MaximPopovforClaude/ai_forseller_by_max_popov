@@ -29,7 +29,13 @@ export type TabData = {
   current?: Record<string, unknown>;
   regimes?: string[];
   heat?: string[][];
-  custom?: "actions" | "prices" | "competitors" | "insights" | "planning" | "exclusions" | "staff" | "photos" | "rnp" | "news" | "entry" | "ext_costs" | "promo" | "hypotheses" | "seo" | "mrc" | "shelves";
+  custom?: "query_heatmap" | "jam_deep" | "actions" | "prices" | "competitors" | "insights" | "planning" | "exclusions" | "staff" | "photos" | "rnp" | "news" | "entry" | "ext_costs" | "promo" | "hypotheses" | "seo" | "mrc" | "shelves";
+  loading_status?: string;
+  jam_deep?: { nm_id: number; from: string; to: string; days: string[]; missing_days: string[];
+    period_from?: string; period_to?: string; daily_note?: string;
+    daily_revision?: string; summary_source?: "period" | "daily_preview";
+    loaded_days: number; expected_days: number; access: string | null; last_run_at: string | null;
+    collection_error: boolean; metrics: Col[] };
   empty?: string;
   unit?: { p1_from: string; p1_to: string; p2_from: string; p2_to: string; per_unit: boolean };   // Юнитка: периоды, которые реально посчитаны
   total_row?: Record<string, unknown>;   // своя строка «ИТОГО» с бэкенда (доли — по формулам, а не суммой)
@@ -152,10 +158,11 @@ export const api = {
 };
 
 export type TabQ = { from: string; to: string; nm: string; group?: string; p1from?: string; p1to?: string; perUnit?: boolean; campaign?: string;
-  limit?: number; sort?: string; desc?: boolean; staff?: number | null };
+  limit?: number; sort?: string; desc?: boolean; staff?: number | string | null; orderSource?: "funnel" | "statistics" };
 
 function tabQ(p: TabQ) {
     const q = new URLSearchParams({ date_from: p.from, date_to: p.to });
+    if (p.orderSource) q.set("order_source", p.orderSource);
     if (p.group) q.set("group", p.group);
     if (p.p1from && p.p1to) { q.set("p1_from", p.p1from); q.set("p1_to", p.p1to); }
     if (p.perUnit) q.set("per_unit", "true");

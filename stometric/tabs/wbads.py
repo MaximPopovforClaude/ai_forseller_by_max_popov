@@ -110,7 +110,7 @@ def ads_campaigns(c, shop, f):
                           FROM raw_rows WHERE account_id=%s AND source='ad_stats' AND row_date BETWEEN %s AND %s GROUP BY 1""", (shop, a, b)):
         st[r["id"]].update({k: float(r[k] or 0) for k in ("views", "clicks", "atbs", "orders", "spend", "sum_price")})
     assoc = _by_nm(c, shop, a, b)
-    upd = defaultdict(lambda: [0.0, 0.0])       
+    upd = defaultdict(lambda: [0.0, 0.0])                                                                               
     for r in c.execute("""SELECT (data->>'advertId')::bigint id, data->>'paymentType'='Кэшбэк' b, sum((data->>'updSum')::numeric) s FROM raw_rows
                           WHERE account_id=%s AND source='ad_upd' AND row_date BETWEEN %s AND %s GROUP BY 1,2""", (shop, a, b)):
         upd[r["id"]][1 if r["b"] else 0] += float(r["s"] or 0)
@@ -203,7 +203,7 @@ def ads_keys(c, shop, f):
                     "cpo": round(sp / o, 2) if o else None, "avg_pos": round(float(r["avg_pos"]), 1) if r["avg_pos"] is not None else None,
                     "days": r["days"]})
     off = [r for r in out if r["state"] in (STATE["minus"], STATE["excluded"])]
-    if off:                  
+    if off:                                                                                                        
         from ..ads_ai import _m, economics, kw_history, kw_merge, kw_verdict
         hist = kw_history(c, shop, sorted({int(r["nm_id"]) for r in off}), sorted({r["query"] for r in off}))
         eco = economics(c, shop)

@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timedelta
 
 OVERLAP_DAYS = 3
-FIRST_FROM = "2019-06-20"   
+FIRST_FROM = "2019-06-20"                                                                                
 
 
 def _ts(s):
@@ -34,7 +34,7 @@ def _pull(ctx, name, path, upsert) -> dict:
         pages += 1
         if rows:
             newest = max(newest or "", rows[-1]["lastChangeDate"])
-            ctx.save_state(name, {"last_change": newest})       
+            ctx.save_state(name, {"last_change": newest})                                                        
         if len(rows) < 80000:
             break
         frm = rows[-1]["lastChangeDate"]

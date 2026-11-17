@@ -22,8 +22,8 @@ from .api_log_params import encode as log_params
 HOST = "https://api-performance.ozon.ru"
 TOKEN_PATH = "/api/client/token"
 READ_PATHS = re.compile(r"^/api/client/(campaign|campaign/\d+/objects|statistics/(daily|expense)(/json)?|statistics/[0-9a-f-]{36}|statistics/report)$")
-REPORT_PATH = "/api/client/statistics"      
-PHRASES_PATH = "/api/client/statistics/phrases"   
+REPORT_PATH = "/api/client/statistics"                                                                   
+PHRASES_PATH = "/api/client/statistics/phrases"                                                              
 INTERVAL = 1.0
 
 
@@ -93,7 +93,7 @@ def rows(data, header_hint: str = "") -> list[dict]:
         return []
     start = next((i for i, ln in enumerate(lines) if ";" in ln and header_hint.lower() in ln.lower()), None)
     if start is None:
-        start = next((i for i, ln in enumerate(lines) if ";" in ln), 0)    
+        start = next((i for i, ln in enumerate(lines) if ";" in ln), 0)                                           
     return list(csv.DictReader(io.StringIO("\n".join(lines[start:])), delimiter=";"))
 
 
@@ -175,7 +175,7 @@ class OzonPerf:
                 if status == 200:
                     data = r.json() if "json" in r.headers.get("content-type", "") else r.text
                 elif status == 401 and attempt == 0:
-                    self.tok = None                  
+                    self.tok = None                                                             
                 else:
                     err = r.text[:500]
             except httpx.HTTPError as e:

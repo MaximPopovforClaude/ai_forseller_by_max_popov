@@ -16,7 +16,7 @@ KIND = "openai_images"
 MODEL_ID = "openai_gpt_image"
 MODEL = "gpt-image-2.5-sunburst-2026-09-08"
 TITLE = "GPT Image 2.5 Sunburst · OpenAI API"
-SIZE = "1152x1536"  
+SIZE = "1152x1536"                                   
 API = "https://api.openai.com/v1"
 MAX_IMAGE = 30 * 1024 * 1024
 MAX_RESPONSE = 42 * 1024 * 1024
@@ -86,7 +86,7 @@ def generate(token: str, prompt: str, refs: list[bytes], uid: int) -> bytes:
              for i, raw in enumerate(refs) for mime in [validate_image(raw)]]
     body = {"model": MODEL, "prompt": prompt, "n": "1", "size": SIZE, "quality": "high", "output_format": "png",
             "safety_identifier": hashlib.sha256(f"seller-analytics:visual:user:{uid}".encode()).hexdigest()}
-    
+                                                                                  
     try:
         deadline = time.monotonic() + 600
         with httpx.Client(timeout=httpx.Timeout(600, connect=15), follow_redirects=False) as cl:
@@ -107,5 +107,5 @@ def generate(token: str, prompt: str, refs: list[bytes], uid: int) -> bytes:
     except ImageError:
         raise
     except Exception:
-        
+                                                                          
         raise ImageError(UNCERTAIN) from None

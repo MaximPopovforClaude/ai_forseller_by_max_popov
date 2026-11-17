@@ -30,8 +30,8 @@ def connection(url, database=None):
             fd, name = tempfile.mkstemp(prefix='ais-pgpass-')
             path = Path(name)
             os.fchmod(fd, 0o600)
-            
-            
+                                                                                               
+                                                                                          
             with os.fdopen(fd, 'w') as stream:
                 stream.write('*:*:*:*:' + _escape(password) + '\n')
             env['PGPASSFILE'] = str(path)

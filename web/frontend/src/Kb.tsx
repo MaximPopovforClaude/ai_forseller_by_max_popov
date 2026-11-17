@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Slides } from "./PhotoFunnel";
 import { http } from "./api";
 
 type Sub = { id: number; title: string; n: number };
@@ -21,9 +22,10 @@ export function Kb({ wsId }: { wsId: number }) {
   const [err, setErr] = useState("");
   const [edit, setEdit] = useState<Partial<Item> | null>(null);       // форма материала (новый — без id)
   const [open, setOpen] = useState<Item | null>(null);               // заметка целиком / фото крупно
-  const load = () => http.get<Res>(`/api/workspaces/${wsId}/kb?${sec != null ? `section=${sec}&` : ""}q=${encodeURIComponent(q)}`)
-    .then((x) => { setR(x); setErr(""); }).catch((e) => setErr(e.message));
-  useEffect(() => { load(); }, [wsId, sec]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const request = useRef(0);
+  const load = () => { const stamp = ++request.current; return http.get<Res>(`/api/workspaces/${wsId}/kb?${sec != null ? `section=${sec}&` : ""}q=${encodeURIComponent(q)}`)
+    .then((x) => { if (stamp === request.current) { setR(x); setErr(""); } }).catch((e) => { if (stamp === request.current) setErr(e.message); }); };
+  useEffect(() => { setR(null); setOpen(null); setEdit(null); load(); return () => { ++request.current; }; }, [wsId, sec]);  // eslint-disable-line react-hooks/exhaustive-deps
   const flat = useMemo(() => (r?.tree || []).filter((s) => s.id).flatMap((s) => [{ id: s.id, title: s.title }, ...s.subs.map((x) => ({ id: x.id, title: `${s.title} → ${x.title}` }))]), [r]);
   const cur = r?.tree.find((s) => s.id === sec) || r?.tree.flatMap((s) => s.subs).find((x) => x.id === sec);
   const curTop = r?.tree.find((s) => s.id === sec);
@@ -72,6 +74,7 @@ export function Kb({ wsId }: { wsId: number }) {
                   {it.file_name && <span className="hint"> · {it.file_name} {kbSize(it.size)} · <a href={fileUrl(it.id, true)}>скачать</a></span>}
                 </div>
                 {it.description && <div>{it.description}</div>}
+                {it.kind === "link" && /^https?:\/\/(www\.)?wildberries\.ru\/catalog\/[1-9][0-9]*\/detail\.aspx(?:[?#/]|$)/i.test(it.url || "") && <CardSlides key={`${wsId}:${it.id}:${it.url}`} item={it} />}
                 {it.kind === "note" && it.body && <div className="hint kb-note">{it.body.slice(0, 220)}{it.body.length > 220 ? "…" : ""}</div>}
                 <div className="hint">{[it.parent, it.section].filter(Boolean).join(" → ") || "без раздела"}{it.shop ? ` · 🔒 только ${it.shop}` : ""}
                   {" · "}{it.author || "—"}{it.source === "assistant" ? " через гномика" : ""}, {dt(it.created_at)}
@@ -151,4 +154,27 @@ function ItemForm({ wsId, it, sections, shops, onClose, onSaved }: { wsId: numbe
       </div>
     </div>
   );
+}
+
+function CardSlides({ item }: { item: Item }) {
+  const [data, setData] = useState<{status:string; hashes:string[]; captured_at?:string} | null>(null);
+  const [error, setError] = useState("");
+  const [rev, setRev] = useState(0);
+  useEffect(() => {
+    let live=true, timer:ReturnType<typeof setTimeout>;
+    const read = () => http.get<{status:string;hashes:string[];captured_at?:string}>(`/api/kb/items/${item.id}/slides`).then(r => {
+      if (!live) return; setData(r); setError("");
+      if (["empty","queued","running"].includes(r.status)) timer=setTimeout(read,3000);
+    }).catch(e => { if(live) setError(e.message); });
+    read(); return () => { live=false; clearTimeout(timer); };
+  },[item.id,rev]);
+  return <div className="kb-card-slides"><Slides hashes={data?.hashes} small />
+    {data?.captured_at && <small className="hint">Слайды сохранены {new Date(data.captured_at).toLocaleString("ru-RU")}. До 30 слайдов.</small>}
+    {(!data || ["empty","queued","running"].includes(data.status)) && <span className="hint">Загружаем слайды карточки…</span>}
+    {(data?.status === "failed" || data?.status === "interrupted") && <span className="hint">Не удалось получить слайды. Сохранённые изображения и ссылка доступны.</span>}
+    {error && <span className="err">{error}</span>}
+    {item.can_change && data && !["queued","running"].includes(data.status) && <button className="link" onClick={() => {
+      http.post(`/api/kb/items/${item.id}/slides`).then(() => setRev(x=>x+1)).catch(e=>setError(e.message));
+    }}>Обновить слайды</button>}
+  </div>;
 }

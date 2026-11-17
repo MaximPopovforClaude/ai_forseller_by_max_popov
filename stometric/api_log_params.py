@@ -6,8 +6,8 @@ def encode(params, limit=2000):
     text = json.dumps(params, ensure_ascii=False, default=str)
     if len(text) <= limit:
         return text
-    
-    
+                                                                                
+                                                                            
     summary = {"_truncated": True, "_characters": len(text),
                "_type": type(params).__name__}
     if isinstance(params, dict):

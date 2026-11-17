@@ -43,7 +43,7 @@ def parse(raw: bytes, name: str = "") -> dict:
                 m = re.findall(r"\d{4}-\d{2}-\d{2}", str(row[1]))
                 if len(m) == 2:
                     period = (date.fromisoformat(m[0]), date.fromisoformat(m[1]))
-    if not period:   
+    if not period:                                                 
         m = re.findall(r"(\d{2})[-.](\d{2})[-.](\d{4})", name)
         if len(m) >= 2:
             period = tuple(date(int(y), int(mo), int(d)) for d, mo, y in m[-2:])
@@ -56,11 +56,11 @@ def parse(raw: bytes, name: str = "") -> dict:
             if row and "Точка входа" in row and "Артикул ВБ" in row:
                 head = {v: i for i, v in enumerate(row) if v}
             continue
-        g = lambda k: row[head[k]] if k in head and head[k] < len(row) else None  
+        g = lambda k: row[head[k]] if k in head and head[k] < len(row) else None              
         nm = g("Артикул ВБ")
         if not nm or not str(nm).strip().isdigit():
             continue
-        num = lambda k: float(g(k) or 0)  
+        num = lambda k: float(g(k) or 0)              
         rows.append({"section": str(g("Раздел") or "").strip(), "point": str(g("Точка входа") or "").strip(), "nm_id": int(nm),
                      "views": num("Показы"), "clicks": num("Переходы в карточку"), "carts": num("Добавления в корзину"), "orders": num("Заказы")})
     if head is None:
@@ -81,7 +81,7 @@ def save(c, shop: int, user_id: int, raw: bytes, name: str) -> dict:
                        uploaded_at=now() RETURNING id""", (shop, p["d_from"], p["d_to"], name[:200], user_id)).fetchone()["id"]
     c.execute("DELETE FROM entry_rows WHERE report_id=%s", (rep,))
     agg: dict = {}
-    for r in p["rows"]:   
+    for r in p["rows"]:                                                              
         k = (r["section"], r["point"], r["nm_id"])
         a = agg.setdefault(k, {"views": 0.0, "clicks": 0.0, "carts": 0.0, "orders": 0.0})
         for f in a:
@@ -89,7 +89,7 @@ def save(c, shop: int, user_id: int, raw: bytes, name: str) -> dict:
     with c.cursor() as cur:
         cur.executemany("INSERT INTO entry_rows(report_id,section,point,nm_id,views,clicks,carts,orders) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
                         [(rep, s, pt, nm, v["views"], v["clicks"], v["carts"], v["orders"]) for (s, pt, nm), v in agg.items()])
-    if p["d_from"] == p["d_to"]:            
+    if p["d_from"] == p["d_to"]:                                                                                       
         refresh_alerts(c, shop, p["d_from"])
         notify_fresh(c, shop, p["d_from"])
     c.commit()
@@ -97,7 +97,7 @@ def save(c, shop: int, user_id: int, raw: bytes, name: str) -> dict:
 
 
 def _m(v, cl, k, o) -> dict:
-    f = lambda a, b: a / b if b else None  
+    f = lambda a, b: a / b if b else None              
     return {"views": v, "clicks": cl, "carts": k, "orders": o, "ctr": f(cl, v), "conv_cart": f(k, cl), "conv_order": f(o, k)}
 
 
@@ -129,12 +129,12 @@ def view(c, shop: int, nms: list[int] | None = None, reports: list[int] | None =
     pers = _periods(reps, mode, reports)
     if not pers:
         return {"reports": reps, "periods": [], "points": [], "articles": [], "has_daily": any(r["d_from"] == r["d_to"] for r in reps)}
-    of = {i: p["id"] for p in pers for i in p["ids"]}           
+    of = {i: p["id"] for p in pers for i in p["ids"]}                            
     ids = list(of)
     pids = [p["id"] for p in pers]
     from .exclusions import excluded
-    w, p = "report_id = ANY(%(ids)s) AND nm_id NOT IN (SELECT unnest(%(ex)s::bigint[]))", {"ids": ids, "ex": list(excluded(c, shop))}   
-    if nms:
+    w, p = "report_id = ANY(%(ids)s) AND nm_id NOT IN (SELECT unnest(%(ex)s::bigint[]))", {"ids": ids, "ex": list(excluded(c, shop))}                           
+    if nms is not None:
         w += " AND nm_id = ANY(%(nm)s)"; p["nm"] = nms
     data: dict = {}
     tot = {i: [0.0, 0.0, 0.0, 0.0] for i in pids}
@@ -163,29 +163,27 @@ def view(c, shop: int, nms: list[int] | None = None, reports: list[int] | None =
     arts = [{"nm_id": r["nm_id"], "vendor_code": r["vendor_code"], "title": r["title"], "clicks": float(r["cl"] or 0)} for r in c.execute(
         """SELECT e.nm_id, n.vendor_code, n.title, sum(e.clicks) cl FROM entry_rows e LEFT JOIN nomenclature n ON n.account_id=%s AND n.nm_id=e.nm_id
            WHERE e.report_id = ANY(%s) AND e.nm_id NOT IN (SELECT unnest(%s::bigint[])) GROUP BY 1, 2, 3 ORDER BY 4 DESC""", (shop, pers[0]["ids"], p["ex"]))]
-    
+                                                                                  
+    from . import entry_ads
+    from datetime import timedelta
+    reader = entry_ads.load(c, shop, nms, p['ex'], min(x['d_from'] for x in pers), max(x['d_to'] for x in pers))
+    by_id = {r['id']: r for r in reps}
     ads = {}
     for x in pers:
-        q = {"a": shop, "f": x["d_from"], "t": x["d_to"], "ex": p["ex"], "nm": nms}
-        flt = "nm_id NOT IN (SELECT unnest(%(ex)s::bigint[])) AND (%(nm)s::bigint[] IS NULL OR nm_id = ANY(%(nm)s::bigint[]))"
-        t = c.execute(f"""SELECT sum((data->>'ad_views')::numeric) v, sum((data->>'ad_clicks')::numeric) cl, sum((data->>'ad_carts')::numeric) k,
-                                 sum((data->>'ad_orders')::numeric) o FROM agg_nm_day WHERE account_id=%(a)s AND day BETWEEN %(f)s AND %(t)s AND {flt}""", q).fetchone()
-        sr = c.execute(f"""SELECT sum(coalesce(views, 0)) v, sum(clicks) cl, sum(atbs) k, sum(orders) o FROM wb_ad_kw_daily
-                           WHERE account_id=%(a)s AND day BETWEEN %(f)s AND %(t)s AND {flt}""", q).fetchone()
-        tv = [float(t[k] or 0) for k in ("v", "cl", "k", "o")]
-        sv = [float(sr[k] or 0) for k in ("v", "cl", "k", "o")]
-        allv = tot[x["id"]]
-        ads[x["id"]] = {"total": _m(*tv), "search": _m(*sv), "rest": _m(*[max(0.0, a - b) for a, b in zip(tv, sv)]),
-                        "organic": _m(*[max(0.0, a - b) for a, b in zip(allv, tv)])}
+        observed = {by_id[i]['d_from']+timedelta(days=j) for i in x['ids']
+                    for j in range((by_id[i]['d_to']-by_id[i]['d_from']).days+1)}
+        values = reader.period(observed)
+        values['organic'] = entry_ads.metrics(entry_ads.difference(dict(zip(entry_ads.FIELDS, tot[x['id']])), values['total']))
+        ads[x['id']] = values
     return {"reports": reps, "periods": [{k: x[k] for k in ("id", "d_from", "d_to", "n_days")} for x in pers],
-            "points": points, "total": {i: _m(*tot[i]) for i in pids}, "articles": arts, "ads": ads,
+            "points": points, "total": {i: _m(*tot[i]) for i in pids}, "articles": arts, "ads": ads, "ad_note": entry_ads.NOTE,
             "has_daily": any(r["d_from"] == r["d_to"] for r in reps)}
 
 
-
-MIN_AVG, MIN_DAY = 20, 40        
-STEP_PCT, STEP_ABS = 0.5, 20     
-SHOP_PCT, SHOP_ABS = 0.25, 50    
+                                                                                                              
+MIN_AVG, MIN_DAY = 20, 40                                                                                             
+STEP_PCT, STEP_ABS = 0.5, 20                                                                                                             
+SHOP_PCT, SHOP_ABS = 0.25, 50                                                          
 
 
 def analyze(c, shop: int, day: date | None = None, nms: list[int] | None = None, full: bool = False) -> dict | None:

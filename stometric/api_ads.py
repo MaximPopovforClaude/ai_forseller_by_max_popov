@@ -46,7 +46,7 @@ def ads_get(shop_id: int, u=Depends(current_user), c=Depends(conn)):
                       "status_t": ads_ai.STATUS_T.get(cp["status"], str(cp["status"])), "nms": nms,
                       "spend_7d": sum(x["spend_7d"] for x in nms), "orders_7d": sum(x["orders_7d"] for x in nms),
                       "carts_7d": sum(x["carts_7d"] for x in nms)})
-    fb = {}                                  
+    fb = {}                                                                                             
     for f in c.execute("""SELECT proposal_id, user_id, rating, comment FROM ad_feedback
                           WHERE account_id=%s AND proposal_id = ANY(%s)""", (shop_id, [r["id"] for r in rows])):
         x = fb.setdefault(f["proposal_id"], {"mine": None, "up": 0, "down": 0, "comments": 0})
@@ -62,10 +62,15 @@ def ads_get(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     props = [{**{k: r[k] for k in ("id", "kind", "advert_id", "nm_id", "query", "params", "reason", "effect_week", "metrics", "priority",
                                    "source", "status", "decided_at", "error", "batch_at")},
               "kind_t": ads_ai.KIND_T.get(r["kind"], r["kind"]), "vc": nom.get(r["nm_id"]), "who": r["who"],
-              
+                                                                                                    
               "photo": photo.get(r["nm_id"] or next(iter((camps.get(r["advert_id"]) or {}).get("nms") or {}), None)),
               "outcome": {"verdict": r["verdict"], "delta": r["delta_profit"], "before": r["o_before"], "after": r["o_after"]} if r["verdict"] else None,
               "feedback": fb.get(r["id"]), "camp": (camps.get(r["advert_id"]) or {}).get("name")} for r in rows]
+    from .ai_readability import display_text
+    for p in props:
+        p['reason'] = display_text(p['reason'], protected=(p.get('vc'), p.get('query'), p.get('camp')))
+    if note:
+        note = {**note, 'body': display_text(note['body'])}
     return jsonable_encoder({
         "proposals": props, "campaigns": out_c, "note": note, "last_run": last, "can_edit": auth.can(role, "editor"),
         "can_admin": auth.can(role, "admin"), "settings": blk["settings"], "enabled": blk["enabled"],
@@ -99,7 +104,7 @@ def ads_decide(shop_id: int, body: DecideIn, u=Depends(current_user), c=Depends(
             if not body.apply:
                 continue
             if "Стоп" in str(e) or "ключ" in str(e).lower() or "выключен" in str(e):
-                break                       
+                break                                                                                        
     return out
 
 
@@ -108,7 +113,7 @@ class ManualIn(BaseModel):
     advert_id: int
     nm_id: int | None = None
     query: str | None = None
-    after: dict | int | None = None        
+    after: dict | int | None = None                                                                            
 
 
 @router.post("/api/shops/{shop_id}/ads/manual")
@@ -131,7 +136,7 @@ def ads_keywords(shop_id: int, advert_id: int, nm_id: int, u=Depends(current_use
                      (shop_id, advert_id, nm_id, d)).fetchall()
     minus = [r["query"] for r in c.execute("SELECT query FROM wb_ad_kw_lists WHERE account_id=%s AND advert_id=%s AND nm_id=%s AND state='minus' ORDER BY query",
                                            (shop_id, advert_id, nm_id))]
-    hist = ads_ai.kw_history(c, shop_id, [nm_id], minus) if minus else {}     
+    hist = ads_ai.kw_history(c, shop_id, [nm_id], minus) if minus else {}                                                          
     mh = {}
     eco = ads_ai.economics(c, shop_id) if minus else None
     for q in minus:
@@ -142,7 +147,7 @@ def ads_keywords(shop_id: int, advert_id: int, nm_id: int, u=Depends(current_use
 
 class FeedbackIn(BaseModel):
     id: int
-    rating: int | None = None              
+    rating: int | None = None                             
     comment: str | None = None
 
 

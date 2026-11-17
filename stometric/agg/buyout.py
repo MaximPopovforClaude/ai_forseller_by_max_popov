@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from ..config import today_msk
 
-WINDOW = (42, 14)            
+WINDOW = (42, 14)                                 
 MIN_ORDERS = 5
 _CACHE: dict = {}
 TTL = 3600

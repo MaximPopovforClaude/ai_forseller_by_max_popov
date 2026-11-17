@@ -98,16 +98,17 @@ def board(c, shop: int, days: int = 14, date_to: date | None = None) -> dict:
                           AND status <> 'cancelled' GROUP BY 1, 2""", (shop, df, dt)):
         orders.setdefault(r["sku"], {})[r["d"].isoformat()] = int(r["n"])
     acts: dict = {}
-    for r in c.execute("""SELECT a.id, a.nm_id, a.day, a.kind, a.value, a.note, a.user_id, coalesce(u.name, u.email) who
+    for r in c.execute("""SELECT a.id, a.nm_id, a.day, a.kind, a.value, a.note, a.user_id, coalesce(u.name, u.email) who, a.created_at
                           FROM nm_actions a LEFT JOIN users u ON u.id=a.user_id
                           WHERE a.account_id=%s AND a.day BETWEEN %s AND %s ORDER BY a.created_at""", (shop, df, dt)):
         acts.setdefault(r["nm_id"], {}).setdefault(r["day"].isoformat(), []).append(
-            {"id": r["id"], "kind": r["kind"], "value": r["value"], "note": r["note"], "who": r["who"], "user_id": r["user_id"]})
-    for r in c.execute("""SELECT id, nm_id, (detected_at AT TIME ZONE 'Europe/Moscow')::date d, kind, field, old_value, new_value
+            {"id": r["id"], "kind": r["kind"], "value": r["value"], "note": r["note"], "who": r["who"], "user_id": r["user_id"], "created_at": r.get("created_at")})
+    for r in c.execute("""SELECT id, nm_id, (detected_at AT TIME ZONE 'Europe/Moscow')::date d, kind, field, old_value, new_value, detected_at, wb_updated_at
                           FROM card_changes WHERE account_id=%s AND (detected_at AT TIME ZONE 'Europe/Moscow')::date BETWEEN %s AND %s
                           ORDER BY detected_at""", (shop, df, dt)):
         acts.setdefault(r["nm_id"], {}).setdefault(r["d"].isoformat(), []).append(
-            {"id": f"c{r['id']}", "kind": "auto:" + r["kind"], "value": change_label(r), "auto": True})
+            {"id": f"c{r['id']}", "kind": "auto:" + r["kind"], "value": change_label(r), "auto": True,
+             "detected_at": r.get("detected_at"), "wb_updated_at": r.get("wb_updated_at")})
     out = []
     for nm, u in units.items():
         k = k7.get(nm) or {}

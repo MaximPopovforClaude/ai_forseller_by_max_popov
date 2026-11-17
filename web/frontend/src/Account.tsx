@@ -84,7 +84,8 @@ export function Account({ me, wsId, page, onChanged }: { me: Me; wsId: number; p
       <div className="acc-box">
         <b>Тариф</b>
         <div className="acc-row"><span>Сейчас</span>{w.plans[w.plan]?.title || w.plan}</div>
-        <div className="hint">Сменить тариф, оплатить, ввести промокод — в разделе «Тариф и оплата» (меню слева).</div>
+        <div className="hint">Смена тарифа, оплата и промокоды — в разделе «Тариф и оплата» этих настроек.</div>
+        <button onClick={() => window.dispatchEvent(new CustomEvent("ais:page", { detail: "billing" }))}>Открыть тариф и оплату</button>
       </div>
       <Shops w={w} reload={load} onShopsChanged={onChanged} />
       <SecretKey wsId={w.id} kind="wildbox" />

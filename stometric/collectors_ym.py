@@ -12,9 +12,9 @@ from .config import today_msk
 from .ym import YM
 
 MSK = timezone(timedelta(hours=3))
-HISTORY_DAYS = 120          
-REFRESH_DAYS = 3            
-TAIL_DAYS = 45              
+HISTORY_DAYS = 120                           
+REFRESH_DAYS = 3                                                                                          
+TAIL_DAYS = 45                                                                                                               
 
 
 def _f(v):
@@ -39,7 +39,7 @@ def campaigns(c, acc_id: int) -> list[dict]:
                      "ORDER BY campaign_id", (acc_id,)).fetchall()
 
 
-
+                         
 def run_campaigns(ctx: Ctx) -> dict:
     ym: YM = ctx.wb
     n = 0
@@ -53,7 +53,7 @@ def run_campaigns(ctx: Ctx) -> dict:
                        json.dumps(x, ensure_ascii=False)))
         n += 1
     ctx.c.commit()
-    
+                                                                   
     def wh(x, own):
         a = x.get("address") or {}
         ctx.c.execute("""INSERT INTO ym_warehouses(warehouse_id,name,city,own,updated_at) VALUES (%s,%s,%s,%s,now())
@@ -72,7 +72,7 @@ def run_campaigns(ctx: Ctx) -> dict:
     return {"rows": n}
 
 
-
+               
 def run_offers(ctx: Ctx) -> dict:
     ym: YM = ctx.wb
     n = 0
@@ -98,7 +98,7 @@ def run_offers(ctx: Ctx) -> dict:
     return {"rows": n}
 
 
-
+            
 def run_prices(ctx: Ctx) -> dict:
     ym: YM = ctx.wb
     n = 0
@@ -116,7 +116,7 @@ def run_prices(ctx: Ctx) -> dict:
     return {"rows": n}
 
 
-
+               
 def run_stocks(ctx: Ctx) -> dict:
     ym: YM = ctx.wb
     snap = datetime.now(timezone.utc)
@@ -141,7 +141,7 @@ def run_stocks(ctx: Ctx) -> dict:
     return {"rows": n}
 
 
-
+              
 def _save_order(ctx, cp: dict, o: dict) -> int:
     created = o.get("creationDate")
     try:
@@ -172,7 +172,7 @@ def _save_order(ctx, cp: dict, o: dict) -> int:
         init[k] = init.get(k, 0) + int(it.get("initialCount") or it.get("count") or 0)
     for i, it in enumerate(o.get("items") or []):
         if it.get("shopServiceType"):
-            continue                    
+            continue                                                                    
         pr = {p.get("type"): p for p in it.get("prices") or []}
         qty = int(it.get("count") or 0)
         k = it.get("shopSku") or it.get("marketSku")
@@ -221,9 +221,9 @@ def run_orders(ctx: Ctx) -> dict:
     return {"rows": n, "cursor": {"loaded": True, "tail_at": tail_at if not first else datetime.now(timezone.utc).isoformat()}}
 
 
-
-NET_DAYS = 20               
-NET_TAIL_DAYS = 92          
+                                                                       
+NET_DAYS = 20                                                           
+NET_TAIL_DAYS = 92                                                                                            
 
 
 def net_kind(source: str) -> str:
@@ -233,7 +233,7 @@ def net_kind(source: str) -> str:
     if "балл" in s:
         return "points"
     if "совместных акциях" in s:
-        return "serv_pts"               
+        return "serv_pts"                                                                     
     if "услуг" in s:
         return "serv"
     return "other"
@@ -252,7 +252,7 @@ def _report(ym: YM, kind: str, body: dict, wait_s: int = 900) -> bytes | None:
             raise RuntimeError(f"отчёт {kind}: Маркет не смог его построить ({st.get('subStatus')})")
         if st.get("status") == "DONE":
             if not st.get("file"):
-                return None             
+                return None                      
             return httpx.get(st["file"], timeout=300, follow_redirects=True).content
     raise RuntimeError(f"отчёт {kind}: Маркет строит дольше {wait_s // 60} мин — заберём в следующий круг")
 
@@ -310,9 +310,9 @@ def run_netting(ctx: Ctx) -> dict:
     return {"rows": n, "since": str(since), "cursor": {"loaded": True, "tail_at": tail_at}}
 
 
-
-BOOST_DAYS = 45             
-BOOST_PER_RUN = 12          
+                                                    
+BOOST_DAYS = 45                              
+BOOST_PER_RUN = 12                                                 
 
 
 def _boost_rows(raw: bytes):
@@ -343,7 +343,7 @@ def run_boost(ctx: Ctx) -> dict:
         rows = list(_boost_rows(raw)) if raw else []
         ctx.c.execute("DELETE FROM ym_boost WHERE account_id=%s AND day=%s", (ctx.acc["id"], d))
         for r in rows:
-            g = lambda k: _f((r.get(k) or "").replace(",", ".").replace(" ", ""))  
+            g = lambda k: _f((r.get(k) or "").replace(",", ".").replace(" ", ""))              
             ctx.c.execute("""INSERT INTO ym_boost(account_id,day,shop_sku,shows_fee,shows,clicks_fee,clicks,orders_fee,orders,delivered_fee,delivered,
                                                   billed,bonuses,gmv_fee,gmv,campaigns) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                              ON CONFLICT (account_id,day,shop_sku) DO NOTHING""",

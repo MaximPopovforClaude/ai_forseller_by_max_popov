@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, http } from "./api";
 
 /** РНП — «рука на пульсе» (Version2 WB, по видео «Системы 10X»): итог кабинета и блок по каждому артикулу,
@@ -58,10 +58,11 @@ function Spark({ vals, color, kind = "bar", w = 128, h = 40 }: { vals: (number |
 const zone = (v: number | null | undefined, good: number, mid: number) =>
   v == null ? "" : v >= good ? "z-good" : v >= mid ? "z-mid" : "z-bad";
 
-export function Rnp({ shop, hideChg = false, nm = "", staff = null }: { shop: number; hideChg?: boolean; nm?: string; staff?: number | null }) {
+export function Rnp({ shop, hideChg = false, nm = "", staff = null }: { shop: number; hideChg?: boolean; nm?: string; staff?: number | string | null }) {
+  const context = useRef("");
   const now = new Date();
   const [groups, setGroups] = useState<{ key: string; title: string }[]>([]);
-  useEffect(() => { api.groups(shop).then(setGroups).catch(() => setGroups([])); }, [shop]);
+  useEffect(() => { let live=true; setGroups([]); api.groups(shop).then(x=>{if(live)setGroups(x)}).catch(() => {if(live)setGroups([])}); return()=>{live=false}; }, [shop]);
   const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
   const [sort, setSort] = useState("orders_sum");
   const [brand, setBrand] = useState(""); const [subject, setSubject] = useState(""); const [group, setGroup] = useState("");
@@ -75,9 +76,10 @@ export function Rnp({ shop, hideChg = false, nm = "", staff = null }: { shop: nu
   const q = (off: number) => `/api/shops/${shop}/rnp?month=${month}&sort=${sort}&offset=${off}&brand=${encodeURIComponent(brand)}` +
     `&subject=${encodeURIComponent(subject)}&group=${encodeURIComponent(group)}` +
     (nm.trim() ? `&nm_ids=${nm.replace(/\s+/g, "")}` : "") + (staff ? `&staff=${staff}` : "");   // артикулы и менеджер — из шапки
+  context.current = JSON.stringify([shop, month, sort, brand, subject, group, nm, staff]);
   useEffect(() => {
     let live = true;
-    setBusy(true); setErr(""); setMore([]);
+    setData(null); setBusy(true); setErr(""); setMore([]);
     http.get<Data>(q(0)).then((d) => { if (live) { setData(d); if (d.error) setErr(d.error); } })
       .catch((e) => live && setErr(e.message)).finally(() => live && setBusy(false));
     return () => { live = false; };
@@ -85,8 +87,8 @@ export function Rnp({ shop, hideChg = false, nm = "", staff = null }: { shop: nu
   const blocks = useMemo(() => [...(data?.blocks || []), ...more], [data, more]);
   const loadMore = () => {
     if (!data) return;
-    setBusy(true);
-    http.get<Data>(q(blocks.length)).then((d) => setMore((m) => [...m, ...(d.blocks || [])])).catch((e) => setErr(e.message)).finally(() => setBusy(false));
+    const stamp=context.current; setBusy(true);
+    http.get<Data>(q(blocks.length)).then((d) => {if(stamp===context.current)setMore((m) => [...m, ...(d.blocks || [])]);}).catch((e) => {if(stamp===context.current)setErr(e.message);}).finally(() => {if(stamp===context.current)setBusy(false);});
   };
   const months = useMemo(() => {
     const out: string[] = [];
@@ -102,9 +104,8 @@ export function Rnp({ shop, hideChg = false, nm = "", staff = null }: { shop: nu
       {showLeft && <th>Графики 30Д</th>}
       <th colSpan={2} className="rnp-month">{MON[Number(month.slice(5, 7)) - 1]} {month.slice(0, 4)}</th>
       <th>План день</th><th>План мес.</th><th colSpan={2}>Прогноз мес.</th><th>Факт мес.</th><th>Графики 30Д</th>
-      <th title={data ? `${dd(data.weeks[0][0])}–${dd(data.weeks[0][1])}` : ""}>3 Нед</th>
-      <th title={data ? `${dd(data.weeks[1][0])}–${dd(data.weeks[1][1])}` : ""}>2 Нед</th>
-      <th title={data ? `${dd(data.weeks[2][0])}–${dd(data.weeks[2][1])}` : ""}>1 Нед</th>{!hideChg && <th>Дин. Нед.</th>}
+      {[0, 1, 2].map(i => <th key={`week-${i}`}>{i + 1} Нед{i === 2 && data?.current ? " · текущая" : ""}
+        {data && <small>{dd(data.weeks[i][0])}–{dd(data.weeks[i][1])}</small>}</th>)}{!hideChg && <th>Дин. Нед.</th>}
       {showDays && days.map((d) => <th key={d}>{dd(d)}</th>)}
     </tr>
   );

@@ -20,15 +20,15 @@ def compute(c, shop: int, d_from: date, d_to: date) -> dict:
             continue
         bt = g["bonus_type"] or ""
         nm = g["nm_id"] or 0
-        if "Продвижение" in bt or "Медиа" in bt:     
+        if "Продвижение" in bt or "Медиа" in bt:                                                          
             continue
         if has_ip:
             ends[g["date_from"]] = g["date_to"]
             pnl_real.accumulate(W[g["date_from"]][nm], g)
         if g["date_to"] >= d_from.isoformat():
             pnl_real.accumulate(A[nm], g)
-    
-    
+                                                                                
+                                                                              
     ip_tax = defaultdict(float)
     if has_ip:
         from .pnl_nm import _tax_at
@@ -75,7 +75,7 @@ def compute(c, shop: int, d_from: date, d_to: date) -> dict:
                      "commission": -R[23], "cost": cost, "give": give, "ads_ext": ad_ext, "ads_in": ad_in,
                      "to_pay": R[14] - ad_in, "tax": -R[53], "profit": profit,
                      "ros": pnl_real._d(profit, R[4]), "roi": pnl_real._d(profit, cost) if cost > 0 else None,
-                     
+                                                                                                                             
                      "ads_bonus": bonus.get(nm) or None})
     rows.sort(key=lambda r: (r["nm_id"] is None, -(r["buyouts"] or 0)))
     return {"rows": rows}

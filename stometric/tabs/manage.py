@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from ..config import today_msk
 from ..manager import change_label
+from .. import ad_history
 
 
 def actions(c, shop, f):
@@ -19,19 +20,25 @@ def prices(c, shop, f):
 
 
 KIND_TITLE = {"content": "Контент", "photo": "Фото", "price": "Цена", "size": "Размеры", "ad_status": "Реклама", "ad_bid": "Ставка"}
+KIND_TITLE.update(ad_history.TITLES)
+KIND_TITLE.update(ad_kw_bid='Ставка ключа', ad_kw_minus='Минус-фразы', ad_kw_status='Ключ рекламы')
 
 
 def changes(c, shop, f):
     """Журнал изменений карточек: что поменялось в карточке (название, описание, характеристики, фото, размеры), цене и скидке —
-    замечаем сами при сборе из API WB (карточки — раз в 3 часа, цены — раз в 2 часа, реклама: запуск/пауза и ставки — раз в час). Было → стало."""
+    замечаем при сборе API WB: реклама — раз в час, ключи/ставки ключей/минус-фразы — раз в 6 часов.
+    Бюджеты/дневные лимиты CPC — раз в 6 часов. Команды через сайт и настройки блока записываются сразу.
+    Команда и последующий снимок — разные подтверждения, не два действия. Внешние промежуточные изменения могут не попасть в снимки.
+    Время наблюдения не равно времени действия; первый снимок исходный, автора внешних изменений API не сообщает."""
     w, p = "", {}
     if f.get("nm_ids"):
         w, p = " AND ch.nm_id = ANY(%(nm)s)", {"nm": f["nm_ids"]}
     rows = c.execute(
         f"""SELECT ch.id, ch.detected_at, ch.nm_id, coalesce(n.vendor_code, op.offer_id) vendor_code, coalesce(n.title, op.name) title,
-                   coalesce(n.data->'photos'->0->>'tm', op.photo) photo, ch.kind, ch.field, ch.old_value, ch.new_value
+                   coalesce(n.data->'photos'->0->>'tm', op.photo) photo, ch.kind, ch.field, ch.old_value, ch.new_value, coalesce(u.name,u.email) actor
             FROM card_changes ch LEFT JOIN nomenclature n ON n.account_id=ch.account_id AND n.nm_id=ch.nm_id
             LEFT JOIN oz_products op ON op.account_id=ch.account_id AND op.sku=ch.nm_id
+            LEFT JOIN users u ON u.id::text=ch.new_value->>'actor_id'
             WHERE ch.account_id=%(a)s AND (ch.detected_at AT TIME ZONE 'Europe/Moscow')::date BETWEEN %(df)s AND %(dt)s {w}
             ORDER BY ch.detected_at DESC LIMIT 5000""", {"a": shop, "df": f["date_from"], "dt": f["date_to"], **p}).fetchall()
 
@@ -43,13 +50,31 @@ def changes(c, shop, f):
         if isinstance(v, dict):
             return ", ".join(f"{k}: {x}" for k, x in v.items())[:300]
         return str(v)[:300]
+    def side(r, key):
+        if r['kind'] in ('ad_kw_bid', 'ad_kw_minus', 'ad_kw_status'):
+            from ..ad_keyword_history import value_label
+            return value_label(r['kind'], (r[key] or {}).get('value'))
+        if r['kind'] in ad_history.KINDS:
+            v = r[key] or {}
+            if r['kind'] == 'ad_command' and key == 'new_value':
+                return ad_history.command_details(v.get('parameter',''), (r['old_value'] or {}).get('value'), v.get('value'), v.get('currency')) or 'WB принял команду'
+            if r['kind'] == 'ad_command' and key == 'old_value' and v.get('parameter') == '/api/advert/v1/bids' and isinstance(v.get('value'), dict):
+                return '; '.join(ad_history.setting_label(place) + ': ' + ad_history.value_label(ad_history.number(amount) / 100, 'total', v.get('currency', 'RUB')) for place, amount in v['value'].items())
+            return ad_history.value_label(v.get('value'), v.get('parameter', ''), v.get('currency'))
+        return short(r[key])
+
     out = [{"detected_at": r["detected_at"], "photo": r["photo"], "nm_id": r["nm_id"], "vendor_code": r["vendor_code"], "title": r["title"],
-            "kind": KIND_TITLE.get(r["kind"], r["kind"]), "what": change_label(r), "old": short(r["old_value"]), "new": short(r["new_value"])}
+            "campaign": (r['new_value'] or {}).get('campaign') if isinstance(r['new_value'], dict) else None,
+            "evidence": 'WB принял команду' if r['kind'] == 'ad_command' else 'Настройка платформы' if r['kind'] == 'ad_config' else 'Снимки API',
+            "actor": r.get('actor') or '',
+            "kind": KIND_TITLE.get(r["kind"], r["kind"]), "what": change_label(r), "old": side(r, 'old_value'), "new": side(r, 'new_value')}
            for r in rows]
     oz = c.execute("SELECT marketplace FROM accounts WHERE id=%s", (shop,)).fetchone()["marketplace"] == "ozon"
-    cols = [{"field": "detected_at", "title": "Когда заметили", "type": "datetime"}, {"field": "photo", "title": "Фото", "type": "image"},
+    cols = [{"field": "detected_at", "title": "Время записи", "type": "datetime"}, {"field": "photo", "title": "Фото", "type": "image"},
             {"field": "nm_id", "title": "SKU Ozon" if oz else "Артикул WB", "type": "int"}, {"field": "vendor_code", "title": "Артикул продавца", "type": "text"},
             {"field": "title", "title": "Название", "type": "text"}, {"field": "kind", "title": "Что", "type": "text"},
+            {"field": "campaign", "title": "Кампания", "type": "text"},
+            {"field": "evidence", "title": "Источник записи", "type": "text"}, {"field": "actor", "title": "Кто отправил", "type": "text"},
             {"field": "what", "title": "Изменение", "type": "text"}, {"field": "old", "title": "Было", "type": "text"},
             {"field": "new", "title": "Стало", "type": "text"}]
     return {"columns": cols, "rows": out, "empty": "Изменений за период нет. Журнал ведётся с подключения магазина: первый сбор — исходное состояние, дальше — каждое изменение."}
@@ -143,14 +168,14 @@ def checklist(c, shop, f):
                 "rows": [{"msg": "Выберите один артикул вверху страницы — чек-лист строится по одному товару"}]}
     nm = f["nm_ids"][0]
     res = ck.compute(c, shop, nm, f["date_from"], f["date_to"])
-    cols = [{"field": k, "title": t, "type": "share" if ty == "pct" else ty, "group": g} for g, items in ck.GROUPS for k, t, ty in items]   
-    if not any(r.get("bonus") for r in res["rows"]):        
+    cols = [{"field": k, "title": t, "type": "share" if ty == "pct" else ty, "group": g} for g, items in ck.GROUPS for k, t, ty in items]                                    
+    if not any(r.get("bonus") for r in res["rows"]):                                                         
         cols = [x for x in cols if x["field"] not in ck.BONUS_FIELDS]
     n = c.execute("SELECT vendor_code, title FROM nomenclature WHERE account_id=%s AND nm_id=%s", (shop, nm)).fetchone() or {}
     mx = {r["field"]: float(r["value"]) for r in c.execute("SELECT field, value FROM checklist_max WHERE account_id=%s AND nm_id=%s", (shop, nm))}
     y = (today_msk() - timedelta(days=1)).isoformat()
-    last3 = [r for r in res["rows"] if r["day"] <= y][:3]               
-    auto = ck.auto_max(ck.total(res["rows"]))          
+    last3 = [r for r in res["rows"] if r["day"] <= y][:3]                                     
+    auto = ck.auto_max(ck.total(res["rows"]))                                                                            
     dz = ck.dangers(ck.total(last3), {**auto, **mx}) if len(last3) == 3 else []
     return {"columns": cols, "rows": res["rows"], "total_row": ck.total(res["rows"]), "heat": [[k] for k in ck.HEAT],
             "dangers": dz, "max_editor": {"nm_id": nm, "fields": [{"key": k, "title": tt, "value": mx.get(k), "auto": auto.get(k)} for k, tt in ck.MAX_FIELDS]},
@@ -251,3 +276,7 @@ def item_rating(c, shop, f):
             ("day", "Данные на", "date")]
     note = None if rows else "Отчёт «Оценка товара» ещё не загружен: появится после ближайшего сбора (раз в 3 часа)."
     return {"columns": [{"field": a, "title": b, "type": t} for a, b, t in cols], "rows": rows, **({"note": note} if note else {})}
+
+
+def query_heatmap(c, shop, f):
+    return {"custom": "query_heatmap", "columns": [], "rows": []}

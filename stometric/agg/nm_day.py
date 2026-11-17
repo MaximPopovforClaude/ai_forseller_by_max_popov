@@ -3,7 +3,7 @@
 from collections import defaultdict
 from datetime import date, timedelta
 
-
+                                
 COLS = [
     ("nm_id", "Артикул WB", "int"), ("seller", "Продавец", "text"), ("day", "Дата", "date"),
     ("year_week", "Год/Неделя", "int"), ("year_month", "Год/месяц", "int"),
@@ -77,8 +77,8 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
     def put(nm, day, **kw):
         rows[(nm, day)].update(kw)
 
-    
-    
+                                                                                                                   
+                                                                                                                         
     vat_rate = {}
     tx = c.execute("SELECT vat_rate FROM tax_settings WHERE account_id=%(a)s ORDER BY valid_from DESC LIMIT 1", P).fetchone()
     for r in ([] if not tx or not float(tx["vat_rate"] or 0) else c.execute("""SELECT nm_id, x->'value'->>0 v FROM nomenclature,
@@ -88,7 +88,7 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
         except ValueError:
             pass
 
-    
+                                                                                                
     for r in c.execute("""
         SELECT nm_id, order_dt::date d, count(*) n, sum(price_with_disc) s, sum(finished_price) ss,
                count(*) FILTER (WHERE NOT is_cancel) okn, sum(price_with_disc) FILTER (WHERE NOT is_cancel) oks,
@@ -98,9 +98,9 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
         FROM orders WHERE account_id=%(a)s AND order_dt::date BETWEEN %(df)s AND %(dt)s GROUP BY 1,2""", P):
         put(r["nm_id"], r["d"], orders=r["n"], orders_sum=r["s"], orders_sum_spp=r["ss"], ok_orders=r["okn"], ok_orders_sum=r["oks"] or 0,
             ok_orders_sum_spp=r["okss"] or 0, cx_orders=r["cxn"], cx_orders_sum=r["cxs"] or 0, cx_orders_sum_spp=r["cxss"] or 0)
-    
-    
-    
+                                                                                                                     
+                                                                                                                         
+                                                                                                                                    
     tariffs: dict[int, list] = {}
     for r in c.execute("""SELECT DISTINCT ON ((data->>'subjectID')::int, row_date) (data->>'subjectID')::int sid, row_date td,
                                  (data->>'paidStorageKgvp')::numeric fbw
@@ -112,7 +112,7 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
         if not snaps:
             return None
         best = None
-        for td, fbw in snaps:          
+        for td, fbw in snaps:                                                                                         
             if td <= d:
                 best = fbw
             else:
@@ -128,12 +128,12 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
         com[(r["nm_id"], r["d"])] = com.get((r["nm_id"], r["d"]), 0.0) + float(r["s"]) * float(k) / 100
     for (nm, d), v in com.items():
         put(nm, d, commission_offer_orders=round(v, 2))
-    
+                          
     for r in c.execute("""
         SELECT nm_id, cancel_dt::date d, count(*) n, sum(price_with_disc) s, sum(finished_price) ss
         FROM orders WHERE account_id=%(a)s AND is_cancel AND cancel_dt::date BETWEEN %(df)s AND %(dt)s GROUP BY 1,2""", P):
         put(r["nm_id"], r["d"], cxd_orders=r["n"], cxd_sum=r["s"], cxd_sum_spp=r["ss"])
-    
+                                                 
     for r in c.execute("""
         SELECT nm_id, sale_dt::date d,
                count(*) FILTER (WHERE sale_id LIKE 'S%%') n, sum(finished_price) FILTER (WHERE sale_id LIKE 'S%%') s,
@@ -141,8 +141,8 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
                count(*) FILTER (WHERE sale_id LIKE 'R%%') rn, sum(for_pay) FILTER (WHERE sale_id LIKE 'R%%') rfp
         FROM sales WHERE account_id=%(a)s AND sale_dt::date BETWEEN %(df)s AND %(dt)s GROUP BY 1,2""", P):
         put(r["nm_id"], r["d"], buyouts=r["n"], buyouts_sum=r["s"] or 0, buyouts_sum_before_spp=r["sb"] or 0, for_pay=r["fp"] or 0,
-            returns=-(r["rn"] or 0), returns_for_pay=-abs(r["rfp"] or 0))  
-    
+            returns=-(r["rn"] or 0), returns_for_pay=-abs(r["rfp"] or 0))                                      
+                                                                                       
     for r in c.execute("""
         SELECT (nm->>'nmId')::bigint nm, row_date d, sum((nm->>'views')::numeric) v, sum((nm->>'clicks')::numeric) cl,
                sum((nm->>'atbs')::numeric) atbs, sum((nm->>'orders')::numeric) o, sum((nm->>'shks')::numeric) shks,
@@ -151,11 +151,11 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
         WHERE account_id=%(a)s AND source='ad_stats' AND row_date BETWEEN %(df)s AND %(dt)s GROUP BY 1,2""", P):
         put(r["nm"], r["d"], ad_views=r["v"], ad_clicks=r["cl"], ad_carts=r["atbs"], ad_orders=r["o"], ad_shks=r["shks"],
             ad_orders_sum=r["sp"], ads=r["spend"])
-    
-    
-    
-    
-    
+                                                                                                                                 
+                                                                                                                
+                                                                             
+                                                                                                                   
+                                                                                                             
     for fld, pay in (("ads_upd", "<> 'Кэшбэк'"), ("ads_bonus", "= 'Кэшбэк'")):
       for r in c.execute(f"""
         WITH upd AS (SELECT (data->>'advertId')::bigint adv, row_date d, sum((data->>'updSum')::numeric) s
@@ -175,9 +175,9 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
             WHERE NOT EXISTS (SELECT 1 FROM tot WHERE tot.adv=u.adv AND tot.d=u.d)
         ) x GROUP BY 1,2""", P):
         put(r["nm"], r["d"], **{fld: round(r["v"], 2)})
-    
-    
-    
+                                                                                                                                                                  
+                                                                                                        
+                                                                                          
     real_days = set()
     real_sale = {}
     for r in c.execute("""
@@ -199,9 +199,9 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
         real_days.add(r["d"])
         put(r["nm"], r["d"], logistics=round(r["lg"], 2), acquiring=round(r["aq"], 2))
         real_sale[(r["nm"], r["d"])] = r
-    
-    
-    
+                                                                                                                        
+                                                                                                                   
+                                                                        
     for (nm, d), row in rows.items():
         if d not in real_days:
             continue
@@ -212,15 +212,15 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
             continue
         row.update(buyouts=int(r["bn"] or 0), buyouts_sum=r["bs"] or 0, buyouts_sum_before_spp=r["bsb"] or 0, for_pay=r["fp"] or 0,
                    returns=-int(r["rn"] or 0), returns_for_pay=-abs(r["rfp"] or 0))
-    
-    
+                                                                                                    
+                                                                                                                        
     wk = c.execute("""
         SELECT (data->>'nmId')::bigint nm, date_trunc('week', (data->>'rrDate')::date)::date w,
                sum((data->>'deliveryService')::numeric) lg, sum((data->>'deliveryAmount')::numeric) n
         FROM raw_rows WHERE account_id=%(a)s AND source='realization' AND row_date BETWEEN %(df)s::date - 70 AND %(dt)s
           AND (data->>'rrDate')::date BETWEEN %(df)s::date - 70 AND %(dt)s
           AND coalesce((data->>'nmId')::bigint, 0) <> 0 AND data->>'bonusTypeName' ILIKE 'К клиенту%%' GROUP BY 1,2""", P).fetchall()
-    acq_hist = defaultdict(dict)   
+    acq_hist = defaultdict(dict)                                                                              
     for r in c.execute("""
         SELECT (data->>'nmId')::bigint nm, date_trunc('week', (data->>'rrDate')::date)::date w,
                sum((data->>'acquiringFee')::numeric) a, sum((data->>'retailAmount')::numeric) s
@@ -235,14 +235,14 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
             log_hist[r["nm"]][r["w"]] = float(r["lg"]) / float(r["n"])
     last_real = max(real_days) if real_days else None
 
-    
+                                                                                                                                      
     shop_wk = defaultdict(list)
     for nm_, ws in log_hist.items():
         for w, val in ws.items():
             shop_wk[w].append(val)
 
-    
-    
+                                                                                                                                 
+                                                                                                                                        
     alt_nm, alt_shop = {}, None
     if not log_hist:
         tot_l = tot_q = 0.0
@@ -266,13 +266,13 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
         if sw:
             return sum(shop_wk[max(sw)]) / len(shop_wk[max(sw)])
         return alt_nm.get(nm, alt_shop)
-    
+                                                                         
     for r in c.execute("""
         SELECT (data->>'nmId')::bigint nm, row_date d, sum((data->>'warehousePrice')::numeric) s, sum((data->>'barcodesCount')::numeric) n
         FROM raw_rows WHERE account_id=%(a)s AND source='paid_storage' AND row_date BETWEEN %(df)s AND %(dt)s GROUP BY 1,2""", P):
         put(r["nm"], r["d"], storage=round(r["s"], 2), storage_units=r["n"])
-    
-    for src in ("funnel", "funnel_day"):   
+                                                                                                                                
+    for src in ("funnel", "funnel_day"):                                    
         for r in c.execute("""
             SELECT (data->>'nmId')::bigint nm, row_date d, data FROM raw_rows
             WHERE account_id=%(a)s AND source=%(src)s AND row_date BETWEEN %(df)s AND %(dt)s""", {**P, "src": src}):
@@ -284,10 +284,10 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
                 ttr = x.get("timeToReady") or {}
                 put(r["nm"], r["d"], f_open=x.get("openCount"), f_cart=x.get("cartCount"), f_orders=x.get("orderCount"),
                     f_orders_sum=x.get("orderSum"), f_wishlist=x.get("addToWishlist"), rating=x.get("feedbackRating"),
-                    local_share=(x.get("localizationPercent") or 0) / 100,   
+                    local_share=(x.get("localizationPercent") or 0) / 100,                                          
                     delivery_hours=(ttr.get("days", 0) * 24 + ttr.get("hours", 0)) if ttr else None)
 
-    
+                                                            
     costs = defaultdict(list)
     for r in c.execute("SELECT nm_id, valid_from, cost FROM cost_price WHERE account_id=%(a)s ORDER BY nm_id, valid_from", P):
         costs[r["nm_id"]].append((r["valid_from"], r["cost"]))
@@ -321,7 +321,7 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
             row["f_to_order"] = _div(row["f_orders"], row["f_cart"])
         al = avg_log(nm, day)
         if row["logistics"] is None and (last_real is None or day > last_real) and row["buyouts"]:
-            row["logistics"] = round(al * row["buyouts"], 2) if al is not None else None   
+            row["logistics"] = round(al * row["buyouts"], 2) if al is not None else None                                
         if row["acquiring"] is None and (last_real is None or day > last_real) and row["buyouts"]:
             cw = day - timedelta(days=day.isoweekday() - 1)
             prev = [w for w in acq_hist.get(nm, {}) if w < cw]
@@ -331,13 +331,13 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
             row["logistics_unit"] = round(row["logistics"] / row["buyouts"], 2)
         if o and al is not None:
             row["logistics_avg_orders"] = round(al, 2)
-            row["logistics_orders"] = round(round(al, 2) * o, 2)   
+            row["logistics_orders"] = round(round(al, 2) * o, 2)                                                          
         cu = cost_at(nm, day)
         if cu is not None:
             row["cost"] = round(cu * (row["buyouts"] or 0), 2)
             row["cost_orders"] = round(cu * o, 2)
             row["returns_cost"] = round(cu * (row["returns"] or 0), 2)
-        z = lambda k: float(row.get(k) or 0)  
+        z = lambda k: float(row.get(k) or 0)              
         if any(row.get(k) for k in ("buyouts", "for_pay", "logistics", "cost")):
             row["margin"] = round(z("for_pay") - z("cost") - z("logistics"), 2)
             row["margin_share"] = _div(row["margin"], row["buyouts_sum_before_spp"]) if row["buyouts_sum_before_spp"] else 0
@@ -348,8 +348,8 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
         if o or row.get("ads_upd") or row.get("storage"):
             row["margin_orders"] = round(z("orders_sum") - z("commission_offer_orders") - z("cost_orders") - z("logistics_orders"), 2)
             row["profit_orders"] = round(row["margin_orders"] - z("ads_upd") - z("storage") - z("acceptance_sum"), 2)
-        
-        
+                                                                                                                                           
+                                                                                                                                        
         r_ = vat_rate.get(nm, 0.0)
         k_ = r_ / (100 + r_)
         row["vat_orders"] = round(z("orders_sum_spp") * k_, 2)
@@ -362,7 +362,7 @@ def compute(c, acc_id: int, date_from: date, date_to: date) -> list[dict]:
             row["drr_buyouts"] = _div(row["ads"], row["buyouts_sum_before_spp"]) if row["buyouts_sum_before_spp"] else None
         out.append(row)
     from ..exclusions import drop, excluded
-    return drop(out, excluded(c, acc_id))     
+    return drop(out, excluded(c, acc_id))                                                               
 
 
 def cached(c, acc_id: int, date_from: date, date_to: date, nm_ids: list[int] | None = None) -> list[dict]:
@@ -373,7 +373,7 @@ def cached(c, acc_id: int, date_from: date, date_to: date, nm_ids: list[int] | N
     st = c.execute("SELECT covered_from, covered_to FROM agg_state WHERE account_id=%s AND name='nm_day'", (acc_id,)).fetchone()
     if not st or not st["covered_from"] or date_from < st["covered_from"] or date_from > st["covered_to"]:
         from ..materialize import ensure_ready
-        ensure_ready(c, acc_id, False)       
+        ensure_ready(c, acc_id, False)                                                                                     
         return _only(compute(c, acc_id, date_from, date_to), nm_ids)
     out = []
     flt = " AND nm_id = ANY(%s)" if nm_ids else ""
@@ -382,11 +382,11 @@ def cached(c, acc_id: int, date_from: date, date_to: date, nm_ids: list[int] | N
         d = r["data"]
         d["day"] = date.fromisoformat(d["day"])
         out.append(d)
-    if date_to > st["covered_to"]:   
+    if date_to > st["covered_to"]:                                                                               
         from datetime import timedelta
         out += _only(compute(c, acc_id, st["covered_to"] + timedelta(days=1), date_to), nm_ids)
     from ..exclusions import drop, excluded
-    return drop(out, excluded(c, acc_id))     
+    return drop(out, excluded(c, acc_id))                                                                          
 
 
 def _only(rows: list[dict], nm_ids) -> list[dict]:
@@ -406,8 +406,8 @@ def iter_cached(c, acc_id: int, date_from: date, date_to: date, nm_ids: list[int
         return
     ex = excluded(c, acc_id)
     flt = " AND nm_id = ANY(%s)" if nm_ids else ""
-    
-    
+                                                                                           
+                                                                                                     
     with c.transaction(), c.cursor(name="dash_nm_day_" + uuid4().hex) as cur:
         cur.itersize = 256
         cur.execute("SELECT data FROM agg_nm_day WHERE account_id=%s AND day BETWEEN %s AND %s" + flt + " ORDER BY day, nm_id",

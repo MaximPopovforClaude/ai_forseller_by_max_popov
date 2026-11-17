@@ -11,14 +11,15 @@ from . import raw
 from .. import history
 
 OVERLAP_DAYS = 7
-SHORT_DAYS = 1          
+SHORT_DAYS = 1                                                    
 BACKFILL_DAYS = 400
-STAT_STATUSES = {7, 9, 11}   
+STAT_STATUSES = {7, 9, 11}                                                         
 
 
 def run_adverts(ctx) -> dict:
     """Self-hosted application component."""
-    from .. import loadplan
+    from .. import loadplan, ad_history
+    from datetime import datetime, timezone
     cnt = ctx.wb.call("advert", "/adv/v1/promotion/count") or {}
     all_ids = []
     for grp in cnt.get("adverts") or []:
@@ -33,24 +34,56 @@ def run_adverts(ctx) -> dict:
             """SELECT row_key k, data->>'changeTime' ct, (data->>'status')::int st FROM raw_rows WHERE account_id=%s AND source='adverts'""",
             (ctx.acc["id"],)).fetchall()}
         ids = [x for x in all_ids if known.get(str(x[0])) != (x[3], x[2])]
+    seeded = ctx.c.execute("SELECT 1 FROM raw_rows WHERE account_id=%s AND source='adverts' LIMIT 1", (ctx.acc["id"],)).fetchone()
     for i in range(0, len(ids), 50):
         chunk = ids[i:i + 50]
+        observed_at = datetime.now(timezone.utc)
         info = ctx.wb.call("advert", "/api/advert/v2/adverts", params={"ids": ",".join(str(x[0]) for x in chunk)}) or {}
-        by_id = {a["id"]: a for a in info.get("adverts") or []}
-        seeded = ctx.c.execute("SELECT 1 FROM raw_rows WHERE account_id=%s AND source='adverts' LIMIT 1", (ctx.acc["id"],)).fetchone()
+        if (not isinstance(info.get('adverts'), list) or any(info.get(k) for k in ('error', 'errors', 'next', 'failed'))):
+            raise ValueError('Incomplete campaign detail response')
+        by_id = {a["id"]: a for a in info['adverts']}
+        if len(by_id) != len(info['adverts']) or set(by_id) - {x[0] for x in chunk}:
+            raise ValueError('Unexpected or duplicate campaign detail identity')
+        missing = []
         for aid, typ, status, changed in chunk:
             new = {"advertId": aid, "type": typ, "status": status, "changeTime": changed, "info": by_id.get(aid)}
-            prev = ctx.c.execute("SELECT data FROM raw_rows WHERE account_id=%s AND source='adverts' AND row_key=%s",
-                                 (ctx.acc["id"], str(aid))).fetchone()
-            if seeded and new["info"]:   
-                history.ad_diff(ctx.c, ctx.acc["id"], prev["data"] if prev else None, new)
-            raw.put(ctx, "adverts", str(aid), None, new)
+            if not new["info"]:
+                                                                                    
+                                                                                  
+                if status in (-1, 7, 8):
+                    with ctx.c.transaction():
+                        prev = ctx.c.execute("SELECT data FROM raw_rows WHERE account_id=%s AND source='adverts' AND row_key=%s",
+                                             (ctx.acc['id'], str(aid))).fetchone()
+                        prior = (prev or {}).get('data')
+                        if prior and prior.get('info'):
+                            fields, nms = ad_history.campaign_fields(prior)
+                            accepted, _ = ad_history.observe(ctx.c, ctx.acc['id'], aid, 'campaign', {'status': status, 'type': typ},
+                                                           None, observed_at, initial={'fields': fields, 'nms': nms})
+                            if accepted:
+                                raw.put(ctx, 'adverts', str(aid), None, {**new, 'info': prior['info'], 'details_missing': True})
+                    ctx.c.commit()
+                    if prior and prior.get('info'):
+                        continue
+                missing.append(aid)
+                continue                                                                          
+            ad_history.require_complete_detail(new['info'])
+            new['status'] = new['info']['status']                               
+            with ctx.c.transaction():
+                prev = ctx.c.execute("SELECT data FROM raw_rows WHERE account_id=%s AND source='adverts' AND row_key=%s",
+                                     (ctx.acc["id"], str(aid))).fetchone()
+                accepted, _ = ad_history.observe_campaign(ctx.c, ctx.acc["id"], new, observed_at, (prev or {}).get("data"))
+                if accepted:
+                    if seeded and not prev:
+                        history.ad_diff(ctx.c, ctx.acc["id"], None, new)
+                    raw.put(ctx, "adverts", str(aid), None, new)
         ctx.c.commit()
+        if missing:
+            raise ValueError("WB omitted requested campaign details; previous data retained")
     return {"campaigns": len(all_ids), "fetched": len(ids), "full": full,
             "cursor": {"full_on": str(today_msk()) if full else st.get("full_on")}}
 
 
-STATS_REQUESTS_PER_RUN = 15  
+STATS_REQUESTS_PER_RUN = 15                                                          
 
 
 def run_stats(ctx) -> dict:
@@ -71,8 +104,8 @@ def run_stats(ctx) -> dict:
     big = loadplan.is_big(ctx.c, ctx.acc["id"])
     historical_allowed = not big or loadplan.night()
     if cur.get("stats_version") != 2:
-        
-        
+                                                                              
+                                                                             
         complete = bool(cur.get("backfilled") and not cur.get("deep_pending") and not cur.get("deep_running"))
         cur = {"stats_version": 2, "backfilled": complete, "tail_at": cur.get("tail_at")}
     cur.pop("deep_pending", None)
@@ -81,7 +114,7 @@ def run_stats(ctx) -> dict:
     def checkpoint():
         cur["deep_running"] = not cur.get("backfilled", False)
         if cur.get("fresh"):
-            cur["offset"] = 1  
+            cur["offset"] = 1                                                       
         else:
             cur.pop("offset", None)
         ctx.save_state("ad_stats", cur, ok=False)
@@ -123,7 +156,7 @@ def run_stats(ctx) -> dict:
         cur.pop("fresh")
         checkpoint()
 
-    
+                                                                                  
     stop = today - timedelta(days=ctx.depth(BACKFILL_DAYS))
     while historical_allowed and not cur.get("backfilled") and not cur.get("fresh") and requests < STATS_REQUESTS_PER_RUN:
         if not cur.get("history"):
@@ -137,8 +170,8 @@ def run_stats(ctx) -> dict:
             break
         completed = cur.pop("history")
         cur["history_end"] = str(date.fromisoformat(completed["begin"]) - timedelta(days=1))
-        
-        
+                                                                               
+                                                                                  
         checkpoint()
     checkpoint()
     return {"requests": requests, "day_rows": n_rows, "backfill_complete": bool(cur.get("backfilled")), "cursor": cur}
@@ -159,7 +192,7 @@ def run_upd(ctx) -> dict:
         rows = ctx.wb.call("advert", "/adv/v1/upd", params={"from": cur.isoformat(), "to": end.isoformat()}) or []
         for r in rows:
             d = str(r.get("updTime") or "")[:10]
-            
+                                                                                                              
             raw.put(ctx, "ad_upd", upd_key(r), d or None, r)
         ctx.c.commit()
         n += len(rows)
@@ -167,9 +200,9 @@ def run_upd(ctx) -> dict:
     return {"rows": n, "cursor": {"backfilled": True}}
 
 
-
+                                                                                                           
 KW_BACKFILL_DAYS = 180
-KW_REQ_PER_RUN = 25          
+KW_REQ_PER_RUN = 25                                                                                        
 
 
 def _kw_pairs(ctx, beg: date | None = None) -> list[tuple[int, int]]:
@@ -178,7 +211,7 @@ def _kw_pairs(ctx, beg: date | None = None) -> list[tuple[int, int]]:
     for r in ctx.c.execute("SELECT data FROM raw_rows WHERE account_id=%s AND source='adverts'", (ctx.acc["id"],)):
         d = r["data"]
         st, info = d.get("status"), d.get("info") or {}
-        if st not in STAT_STATUSES:
+        if st not in (STAT_STATUSES | {4} if beg is None else STAT_STATUSES):
             continue
         if st == 7 and (beg is None or (d.get("changeTime") or "")[:10] < beg.isoformat()):
             continue
@@ -243,33 +276,70 @@ def run_kw(ctx) -> dict:
 
 def run_kw_lists(ctx) -> dict:
     """Списки кластеров (активные / исключённые / архив), минус-фразы и свои ставки кластеров — снимок по активным кампаниям."""
+    from datetime import datetime, timezone
+    from .. import ad_keyword_history as keywords
     pairs = [(a, n) for a, n, _ in _kw_pairs(ctx)]
     acc = ctx.acc["id"]
-    got: dict[tuple[int, int], list] = {}
+    names = {int(r['row_key']): (((r['data'].get('info') or {}).get('settings') or {}).get('name'))
+             for r in ctx.c.execute("SELECT row_key,data FROM raw_rows WHERE account_id=%s AND source='adverts'", (acc,))}
+    changed = incomplete = observed = 0
     for i in range(0, len(pairs), 100):
         chunk = pairs[i:i + 100]
-        lst = ctx.wb.call("advert", "/adv/v0/normquery/list", "POST", body={"items": [{"advertId": a, "nmId": n} for a, n in chunk]}) or {}
-        for it in lst.get("items") or []:
-            rows = got.setdefault((it["advertId"], it["nmId"]), [])
-            for state, qs in ((it.get("normQueries") or {}).items()):
-                if state in ("active", "excluded", "archived"):
-                    rows += [(q, state, None) for q in qs or []]
+        at = datetime.now(timezone.utc)
+        lst = ctx.wb.call("advert", "/adv/v0/normquery/list", "POST", body={"items": [{"advertId": a, "nmId": n} for a, n in chunk]})
         body = {"items": [{"advert_id": a, "nm_id": n} for a, n in chunk]}
-        for it in (ctx.wb.call("advert", "/adv/v0/normquery/get-minus", "POST", body=body) or {}).get("items") or []:
-            got.setdefault((it["advert_id"], it["nm_id"]), []).extend((q, "minus", None) for q in it.get("norm_queries") or [])
-        bids = {(b["advert_id"], b["nm_id"], b["norm_query"]): b["bid_kopecks"] / 100
-                for b in (ctx.wb.call("advert", "/adv/v0/normquery/get-bids", "POST", body=body) or {}).get("bids") or []}
-        for (a, n, q), bid in bids.items():
-            rows = got.setdefault((a, n), [])
-            hit = [k for k, x in enumerate(rows) if x[0] == q and x[1] == "active"]
-            if hit:
-                rows[hit[0]] = (q, "active", bid)
-            else:
-                rows.append((q, "active", bid))
-    for (a, n), rows in got.items():
-        ctx.c.execute("DELETE FROM wb_ad_kw_lists WHERE account_id=%s AND advert_id=%s AND nm_id=%s", (acc, a, n))
-        for q, state, bid in {(q, s): (q, s, b) for q, s, b in rows}.values():
-            ctx.c.execute("""INSERT INTO wb_ad_kw_lists(account_id,advert_id,nm_id,query,state,bid) VALUES (%s,%s,%s,%s,%s,%s)
-                             ON CONFLICT DO NOTHING""", (acc, a, n, q[:300], state, bid))
-    ctx.c.commit()
-    return {"pairs": len(pairs), "with_lists": len(got)}
+        minus = ctx.wb.call("advert", "/adv/v0/normquery/get-minus", "POST", body=body)
+        bids = ctx.wb.call("advert", "/adv/v0/normquery/get-bids", "POST", body=body)
+                                                                               
+                                                                                      
+        parsed = keywords.parse_chunk(chunk, lst, minus, bids)
+        with ctx.c.transaction():
+            for (a, n), parts in sorted(parsed.items()):
+                changed += keywords.save(ctx.c, acc, a, n, parts, at, names.get(a))
+                incomplete += len(parts) < 3
+                observed += 'lists' in parts
+        ctx.c.commit()
+    return {"pairs": len(pairs), "with_lists": observed, "incomplete_pairs": incomplete, "changes": changed}
+
+
+def run_settings(ctx) -> dict:
+    """Budget/limits every six hours, max 10 requests per pass. No writes to WB.
+
+    Cursor contains stable IDs; completed chunks survive API failures.
+    Budget consumption and CPC limit configuration have different meanings.
+    """
+    from datetime import datetime, timezone
+    from .. import ad_history as ah
+    current = {int(r['row_key']): r['data'] for r in ctx.c.execute(
+        "SELECT row_key,data FROM raw_rows WHERE account_id=%s AND source='adverts'", (ctx.acc['id'],))}
+    state = dict(ctx.state('ad_settings'))
+    pending = state.get('pending')
+    if pending is None:
+        pending = sorted(a for a, d in current.items() if d.get('status') in (4, 9, 11))
+    calls = saved = 0
+    while pending and calls < 9:
+        chunk, pending_rest = pending[:50], pending[50:]
+        ids = [a for a in chunk if a in current and current[a].get('status') in (4, 9, 11)]
+        if ids:
+            observed = datetime.now(timezone.utc)
+            budget = ah.parse_finance(ctx.wb.call('advert', '/api/advert/v2/budget', 'POST', body={'advertIds': ids}), ids, 'budget')
+            calls += 1
+            cpc = [a for a in ids if ((current[a].get('info') or {}).get('settings') or {}).get('payment_type') == 'cpc']
+            limits = {}
+            if cpc:
+                limits = ah.parse_finance(ctx.wb.call('advert', '/api/advert/v0/daily-limits', params={'advertIds': ','.join(map(str, cpc))}), cpc, 'limits')
+                calls += 1
+            with ctx.c.transaction():
+                for a in ids:
+                    info = current[a].get('info') or {}
+                    nms = [x['nm_id'] for x in info.get('nm_settings') or []]
+                    name = (info.get('settings') or {}).get('name') or str(a)
+                    for source, fields in (('budget', budget[a]), ('limits', limits.get(a))):
+                        if fields is not None:
+                            _, n = ah.observe(ctx.c, ctx.acc['id'], a, source, fields, nms, observed, campaign=name)
+                            saved += n
+            ctx.c.commit()
+        pending = pending_rest
+        ctx.save_state('ad_settings', {'pending': pending, 'offset': 1} if pending else {}, ok=False)
+    return {'requests': calls, 'changes': saved, 'remaining': len(pending),
+            'cursor': {'pending': pending, 'offset': 1} if pending else {}}

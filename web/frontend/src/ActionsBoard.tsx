@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { http } from "./api";
 import { ActionSparks, type ActionChartData } from "./ActionSparks";
+import { ActionDayContent, DRR, AD_GROUPS, AD_NOTE, AD_ORDER_NOTE, AD_CLASS_NOTE, PRICE_NOTE, visibleAct, chip, nf1, pct, num,
+  type Kind, type Act, type AdMetric } from "./ActionDayCell";
 
-type Kind = { key: string; title: string; color: string; unit?: string };
-type Act = { id: number | string; kind: string; value: string | null; note?: string | null; who?: string; user_id?: number; auto?: boolean; color?: string | null };
 type Row = {
   nm_id: number; vendor_code: string | null; title: string | null; subject: string | null; photo: string | null;
   stock_wb: number | null; stock_fbs: number | null; stock: number | null; price: number | null; price_spp: number | null;
@@ -11,46 +11,18 @@ type Row = {
   orders_source?: string; demand?: { covered_days: number; expected_days: number };
   drr_orders: number | null; drr_buyouts: number | null; conv_cart: number | null; conv_order: number | null;
   orders: Record<string, number>; actions: Record<string, Act[]>;
+  price_spp_days?: Record<string, number | null>;
+  ad_metrics?: Record<string, Record<string, AdMetric>>;
   ads?: Record<string, { all: number; ark: number; prk: number; search: number; rec: number; osum: number | null }>;
-  shop_id?: number; shop_title?: string; can_edit?: boolean;
+  shop_id?: number; shop_title?: string; can_edit?: boolean; mp?: string;
 };
 type Target = { shop: number; nm: number };
 const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const keyOf = (r: { shop_id?: number; nm_id: number }) => `${r.shop_id}:${r.nm_id}`;
-type Board = { days: string[]; kinds: Kind[]; rows: Row[]; month: string; me: number; can_edit: boolean; mp?: string; demand_note?: string };
+type Board = { days: string[]; kinds: Kind[]; rows: Row[]; month: string; me: number; can_edit: boolean; mp?: string; demand_note?: string; ad_metrics_note?: string; stale?: boolean };
 
-const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
-const nf1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
-const pct = (v: number | null) => (v == null ? "" : nf1.format(v * 100) + " %");
-const num = (v: number | null) => (v == null ? "" : nf.format(v));
-// ДРР в ячейках дня : общий, по виду рекламы (АРК / ПРК) и по направлению (поиск / рекомендации)
-const DRR: [string, string, string][] = [["all", "общий", "ДРР"], ["ark", "АРК", "АРК"], ["prk", "ПРК", "ПРК"], ["search", "поиск", "Поиск"], ["rec", "рекомендации", "Реком."]];
 const dd = (s: string) => s.slice(8, 10) + "." + s.slice(5, 7);
 const WD = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
-
-const AUTO: Record<string, { title: string; color: string }> = {
-  // цвета : цена ↑ зелёный / ↓ красный (приходит с сервера), акции розовый, фото и карточка синий, реклама жёлтый,
-  // характеристики бирюзовый (с сервера), прочее — свои цвета
-  "auto:price": { title: "Цена", color: "#16a34a" }, "auto:content": { title: "Карточка", color: "#2563eb" },
-  "auto:photo": { title: "Фото", color: "#2563eb" }, "auto:size": { title: "Размеры", color: "#f97316" },
-  "auto:ad_status": { title: "Реклама", color: "#ca8a04" }, "auto:ad_bid": { title: "Ставка", color: "#ca8a04" },
-  "auto:promo": { title: "Акция", color: "#db2777" }, "auto:promo_day": { title: "В акции", color: "#f472b6" },
-  "auto:entry": { title: "Точка входа", color: "#dc2626" },   // цвет с сервера: рост зелёный, просадка красный
-};
-
-function chip(a: Act, kinds: Record<string, Kind>) {
-  const k = kinds[a.kind];
-  const au = AUTO[a.kind];
-  const title = k?.title || au?.title || a.kind.replace(/^custom:/, "");
-  const color = a.color || k?.color || au?.color || "#6b7280";
-  const label = a.auto ? a.value || title : title + (a.value ? " " + a.value + (k?.unit && !/[₽шт%]/.test(a.value) ? " " + k.unit : "") : "");
-  return (
-    <span key={a.id} className={"chip" + (a.auto ? " auto" : "")} style={{ borderColor: color, color }}
-      title={(a.auto ? "Заметили сами (API): " : (a.who ? a.who + ": " : "")) + label + (a.note ? "\n" + a.note : "")}>
-      {a.auto ? "⚙ " : ""}{label}
-    </span>
-  );
-}
 
 function Editor({ targets, kinds, label, day0, existing, me, onClose, onSaved }: {
   targets: Target[]; kinds: Kind[]; label: string; day0: string; existing: Act[]; me: number;
@@ -87,7 +59,7 @@ function Editor({ targets, kinds, label, day0, existing, me, onClose, onSaved }:
           <div className="ex">
             {have.map((a) => (
               <div key={a.id} className="ex-row">
-                {chip(a, Object.fromEntries(kinds.map((k) => [k.key, k])))}
+                {chip(a, Object.fromEntries(kinds.map((k) => [k.key, k])), day0)}
                 {a.note && <span className="hint">{a.note}</span>}
                 {!a.auto && a.who && <span className="hint">· {a.who}</span>}
                 {!a.auto && a.user_id === me && (
@@ -129,7 +101,9 @@ function Editor({ targets, kinds, label, day0, existing, me, onClose, onSaved }:
   );
 }
 
-export function ActionsBoard({ shop, shops, enableCharts = true }: { shop: number; shops: { id: number; title: string }[]; enableCharts?: boolean }) {
+export function ActionsBoard({ shop, shops, enableCharts = true, nm = "", only = null }: {
+  shop: number; shops: { id: number; title: string }[]; enableCharts?: boolean; nm?: string; only?: Set<number> | null;
+}) {
   const [scope, setScope] = useState<"one" | "all">(() => (lsGet("act_scope") === "all" ? "all" : "one"));
   const [days, setDays] = useState<number>(() => Number(lsGet("act_days") || 14) || 14);
   const [b, setB] = useState<Board | null>(null);
@@ -142,57 +116,82 @@ export function ActionsBoard({ shop, shops, enableCharts = true }: { shop: numbe
   const [chartsReload, setChartsReload] = useState(0);
   const request = useRef(0);
   const context = useRef("");
+  const loadedContext = useRef("");
+  const metricsAttempted = useRef("");
+  const [page, setPage] = useState(0);
   const [showKey, setShowKey] = useState(() => lsGet("act_key") !== "0");
   const [drr, setDrr] = useState<string[]>(() => (lsGet("act_drr") || "").split(",").filter(Boolean));
+  const [deepAds, setDeepAds] = useState(() => lsGet("act_deep_ads") === "1");
+  const [dayPrices, setDayPrices] = useState(() => lsGet("act_day_prices") === "1");
+  const [adStats, setAdStats] = useState(() => lsGet("act_ad_stats") === "1");
+  const [adGroups, setAdGroups] = useState(() => (lsGet("act_ad_groups") ?? "all").split(",").filter(k => AD_GROUPS.some(([v]) => v === k)));
+  const [adBasis, setAdBasis] = useState<"limit" | "balance">(() => lsGet("act_ad_basis") === "balance" ? "balance" : "limit");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [edit, setEdit] = useState<{ t: Target[]; label: string; day: string; existing: Act[] } | null>(null);
   const [planEdit, setPlanEdit] = useState<string | null>(null);
   const many = scope === "all" && shops.length > 1;
   const shopKey = (many ? shops.map(s => s.id) : [shop]).join(",");
-  context.current = `${shopKey}:${days}:${drr.length > 0}`;
-  const load = () => {
+  context.current = `${shopKey}:${days}`;
+  const load = (withMetrics = adStats) => {
     const generation = ++request.current, key = context.current;
+    if (withMetrics) metricsAttempted.current = key;
     const list = many ? shops : [{ id: shop, title: "" }];
-    Promise.all(list.map((s) => http.get<Board>(`/api/shops/${s.id}/manager/board?days=${days}${drr.length ? "&ads=true" : ""}`)
-      .then((x) => ({ ...x, rows: x.rows.map((r) => ({ ...r, shop_id: s.id, shop_title: s.title, can_edit: x.can_edit })) }))))
-      .then((bs) => { if (generation !== request.current || key !== context.current) return; setB({ ...bs[0], can_edit: bs.some((x) => x.can_edit), rows: bs.flatMap((x) => x.rows) }); setErr(""); })
+    Promise.all(list.map((s) => http.get<Board>(`/api/shops/${s.id}/manager/board?days=${days}&prepared=true&ads=true&prices=true${withMetrics ? "&ad_metrics=true" : ""}`)
+      .then((x) => ({ ...x, rows: x.rows.map((r) => ({ ...r, shop_id: s.id, shop_title: s.title, can_edit: x.can_edit, mp: x.mp || "wb" })) }))))
+      .then((bs) => { if (generation !== request.current || key !== context.current) return; loadedContext.current = key; if (!withMetrics) metricsAttempted.current = ""; setB({ ...bs[0], can_edit: bs.some((x) => x.can_edit), rows: bs.flatMap((x) => x.rows) }); setErr(""); })
       .catch((e) => { if (generation === request.current && key === context.current) setErr(e.message); });
   };
-  const withAds = drr.length > 0;
-  useEffect(() => { setB(null); setErr(""); setPicked(new Set()); load(); return () => { request.current++; }; }, [shopKey, days, withAds]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadedContext.current = ""; metricsAttempted.current = ""; setB(null); setErr(""); setPicked(new Set()); setEdit(null); load(); return () => { request.current++; }; }, [shopKey, days]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (adStats && b && loadedContext.current === context.current && metricsAttempted.current !== context.current) load(true);
+  }, [adStats, b, shopKey, days]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { try {
+    localStorage.setItem("act_ad_stats", adStats ? "1" : "0"); localStorage.setItem("act_ad_groups", adGroups.join(",")); localStorage.setItem("act_ad_basis", adBasis);
+  } catch { /* нет хранилища */ } }, [adStats, adGroups, adBasis]);
   useEffect(() => { try { localStorage.setItem("act_days", String(days)); localStorage.setItem("act_key", showKey ? "1" : "0");
     localStorage.setItem("act_scope", scope); localStorage.setItem("act_drr", drr.join(",")); } catch { /* нет хранилища */ } }, [days, showKey, scope, drr]);
+  useEffect(() => { try {
+    localStorage.setItem("act_deep_ads", deepAds ? "1" : "0"); localStorage.setItem("act_day_prices", dayPrices ? "1" : "0");
+  } catch { /* нет хранилища */ } }, [deepAds, dayPrices]);
   useEffect(() => {
     let live = true;
     setCharts({});
-    if (showCharts) for (const id of shopKey.split(",").map(Number)) {
-      http.get<ActionChartData>(`/api/shops/${id}/manager/charts`).then(data => {
+    if (enableCharts) for (const id of shopKey.split(",").map(Number)) {
+      http.get<ActionChartData>(`/api/shops/${id}/manager/charts?prepared=true`).then(data => {
         if (live) setCharts(old => ({ ...old, [id]: data }));
       }).catch(e => { if (live) setCharts(old => ({ ...old, [id]: { days: [], rows: {}, price_label: "", note: "", error: e.message } })); });
     }
     return () => { live = false; };
-  }, [shopKey, showCharts, chartsReload]);
+  }, [shopKey, enableCharts, chartsReload]);
   const kinds = useMemo(() => Object.fromEntries((b?.kinds || []).map((k) => [k.key, k])), [b]);
+  const selected = useMemo(() => nm.trim() ? new Set(nm.split(/[,;\s]+/).map(Number).filter(n => Number.isSafeInteger(n) && n > 0)) : null, [nm]);
   const rows = useMemo(() => {
     const ql = q.trim().toLowerCase();
-    return (b?.rows || []).filter((r) => (!ql || `${r.vendor_code} ${r.nm_id} ${r.title} ${r.subject}`.toLowerCase().includes(ql))
-      && (!onlyActs || Object.keys(r.actions).length > 0));
-  }, [b, q, onlyActs]);
-  if (err) return <div className="err">{err}</div>;
-  if (!b) return <div className="hint">Загрузка…</div>;
+    return (b?.rows || []).filter((r) => (!(selected || only) || (r.shop_id === shop && (!selected || selected.has(r.nm_id)) && (!only || only.has(r.nm_id))))
+      && (!ql || `${r.vendor_code} ${r.nm_id} ${r.title} ${r.subject}`.toLowerCase().includes(ql))
+      && (!onlyActs || b!.days.some(d => (r.actions[d] || []).some(a => visibleAct(a, deepAds)))));
+  }, [b, q, onlyActs, deepAds, selected, only, shop]);
+  useEffect(() => { setPage(0); }, [q, onlyActs, deepAds, selected, only, shopKey, days, adStats]);
+  useEffect(() => { setPicked(new Set()); setEdit(null); }, [selected, only, shop]);
+  if (!b || loadedContext.current !== context.current) return err ? <div className="err">{err} <button onClick={() => load()}>Повторить загрузку</button></div> : <div className="hint">Загрузка…</div>;
+  const pageSize = adStats ? 20 : 50, maxPage = Math.max(0, Math.ceil(rows.length / pageSize)-1);
+  const currentPage = Math.min(page, maxPage), pageRows = rows.slice(currentPage*pageSize, (currentPage+1)*pageSize);
   const oz = b.mp === "ozon";
-  const all = rows.length > 0 && rows.every((r) => picked.has(keyOf(r)));
+  const editableRows = rows.filter(r => r.can_edit);
+  const all = editableRows.length > 0 && editableRows.every((r) => picked.has(keyOf(r)));
   const flip = (k: string) => setPicked((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const savePlan = (r: Row, v: string) => {
     setPlanEdit(null);
     const qty = v.trim() === "" ? null : Number(v.replace(",", "."));
     if (qty !== null && !Number.isFinite(qty)) return;
-    http.put(`/api/shops/${r.shop_id}/nm_plan`, { nm_id: r.nm_id, month: b.month, qty }).then(load).catch((e) => setErr(e.message));
+    http.put(`/api/shops/${r.shop_id}/nm_plan`, { nm_id: r.nm_id, month: b.month, qty }).then(() => load()).catch((e) => setErr(e.message));
   };
-  const pickedT = (): Target[] => [...picked].map((k) => { const [sh, nm] = k.split(":").map(Number); return { shop: sh, nm }; });
+  const pickedT: Target[] = editableRows.filter(r => picked.has(keyOf(r))).map(r => ({ shop: r.shop_id!, nm: r.nm_id }));
   const month = new Date(b.month).toLocaleString("ru-RU", { month: "long" });
   return (
     <div className="board">
+      {err && <div className="err">{err} <button onClick={() => load()}>Повторить загрузку</button></div>}
+      {b.stale && <div className="hint">Показан готовый расчёт; новые данные обновляются в фоне.</div>}
       <div className="board-bar">
         <input className="q" placeholder="Поиск: артикул, название, предмет" value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
@@ -200,26 +199,50 @@ export function ActionsBoard({ shop, shops, enableCharts = true }: { shop: numbe
         </select>
         <label><input type="checkbox" checked={onlyActs} onChange={(e) => setOnlyActs(e.target.checked)} /> только с действиями</label>
         <label><input type="checkbox" checked={showKey} onChange={(e) => setShowKey(e.target.checked)} /> ключевые данные</label>
+        <button aria-pressed={deepAds} onClick={() => setDeepAds(x => !x)}
+          title="Ставки и состав ключей, минус-фразы, товары и настройки РК, бюджет, лимиты и команды платформы. Обычные статусы и ставки кампаний видны всегда.">
+          {deepAds ? "Скрыть" : "Показать"} глубокие изменения РК</button>
         {enableCharts && <label><input type="checkbox" checked={showCharts} onChange={e => { setShowCharts(e.target.checked); try { localStorage.setItem("act_charts", e.target.checked ? "1" : "0"); } catch { /* no storage */ } }} /> графики за 30 дней</label>}
         {showCharts && Object.values(charts).some(c => c.error) && <button onClick={() => setChartsReload(x => x+1)}>Повторить загрузку графиков</button>}
         {!oz && <span className="hint" title="ДРР дня = расход на рекламу ÷ сумма заказов артикула за день. АРК — единая ставка, ПРК — ручная (аукцион); поиск — траты по поисковым кластерам, рекомендации — остальное (полки, каталог)">ДРР в ячейках:</span>}
         {!oz && DRR.map(([k, t]) => <label key={k}><input type="checkbox" checked={drr.includes(k)}
           onChange={(e) => setDrr((xs) => e.target.checked ? DRR.map((x) => x[0]).filter((x) => x === k || xs.includes(x)) : xs.filter((x) => x !== k))} /> {t}</label>)}
+        {(!oz || b.rows.some(r => r.mp === "wb")) && <label title={PRICE_NOTE}><input type="checkbox" checked={dayPrices}
+          onChange={e => setDayPrices(e.target.checked)} /> цена с СПП по дням</label>}
+        {b.rows.some(r => r.mp === "wb") && <button aria-pressed={adStats} onClick={() => setAdStats(x => !x)}>
+          {adStats ? "Скрыть" : "Показать"} статистику РК</button>}
         {shops.length > 1 && (
           <select value={scope} onChange={(e) => setScope(e.target.value as "one" | "all")} title="Как в планфакте: несколько юрлиц на одной доске">
             <option value="one">Выбранный магазин</option><option value="all">Все магазины кабинета ({shops.length})</option>
           </select>
         )}
-        {b.can_edit && picked.size > 0 && (
-          <button onClick={() => setEdit({ t: pickedT(), label: `выбрано артикулов: ${picked.size}`, day: b.days[0], existing: [] })}>
-            + Действие для выбранных ({picked.size})
+        {b.can_edit && pickedT.length > 0 && (
+          <button onClick={() => setEdit({ t: pickedT, label: `выбрано артикулов: ${pickedT.length}`, day: b.days[0], existing: [] })}>
+            + Действие для выбранных ({pickedT.length})
           </button>
         )}
         {picked.size > 0 && <button className="link" onClick={() => setPicked(new Set())}>снять выбор</button>}
         <span className="hint">Клик по дню — записать действия. ⚙ — изменения, которые мы заметили сами в API {oz ? "Ozon" : "WB"}.</span>
       </div>
+      {adStats && b.rows.some(r => r.mp === "wb") && <div className="board-bar action-ad-controls">
+        {!err && b.rows.some(r => r.mp === "wb" && !r.ad_metrics) && <span className="hint">Загрузка подготовленной статистики РК…</span>}
+        <span>Реклама WB:</span>{AD_GROUPS.map(([key, title]) => <label key={key}><input type="checkbox" checked={adGroups.includes(key)}
+          onChange={e => setAdGroups(xs => e.target.checked ? [...xs, key] : xs.filter(k => k !== key))} />{title}</label>)}
+        <label>Использование бюджета <select value={adBasis} onChange={e => setAdBasis(e.target.value as "limit" | "balance")}>
+          <option value="limit">Расход / дневной лимит</option><option value="balance">Расход / (расход + остаток)</option>
+        </select></label>
+        <span className="hint">{AD_CLASS_NOTE}</span>
+        <details className="hint"><summary>Порядок значений и расчёт рекламы</summary><p>{AD_ORDER_NOTE}</p>{AD_NOTE}</details>
+        {b.ad_metrics_note && <span className="hint">{b.ad_metrics_note}</span>}
+      </div>}
       {b.demand_note && <details className="hint"><summary>Источник заказов и полнота данных</summary>{b.demand_note}</details>}
       {showCharts && <div className="hint">{[...new Set(Object.values(charts).map(c => c.note).filter(Boolean))].join(" ")}</div>}
+      {many && (selected || only) && <div className="hint">Выбор артикулов и менеджера сверху относится к выбранному магазину.</div>}
+      {rows.length > pageSize && <div className="board-bar" aria-label="Страницы действий">
+        <span>Артикулы {currentPage*pageSize+1}–{Math.min((currentPage+1)*pageSize, rows.length)} из {rows.length}</span>
+        <button disabled={currentPage === 0} onClick={() => setPage(currentPage-1)}>Предыдущие</button>
+        <button disabled={currentPage === maxPage} onClick={() => setPage(currentPage+1)}>Следующие</button>
+      </div>}
       <div className="board-wrap">
         <table className="board-t">
           <thead>
@@ -232,7 +255,7 @@ export function ActionsBoard({ shop, shops, enableCharts = true }: { shop: numbe
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {pageRows.map((r) => (
               <tr key={keyOf(r)} className={picked.has(keyOf(r)) ? "picked" : ""}>
                 <td className="sx c0">{r.can_edit && <input type="checkbox" checked={picked.has(keyOf(r))} onChange={() => flip(keyOf(r))} />}
                   {r.photo && <img src={r.photo} className="thumb" alt="" loading="lazy" />}</td>
@@ -253,20 +276,13 @@ export function ActionsBoard({ shop, shops, enableCharts = true }: { shop: numbe
                   </div>)}
                 </div></td>}
                 {showCharts && <td><ActionSparks data={charts[r.shop_id!]} nm={r.nm_id} /></td>}
-                {b.days.map((d, i) => {
-                  const o = r.orders[d] ?? (r.orders_source === "wb_funnel" ? null : 0);
-                  const prevDay = b.days[i + 1] ?? new Date(new Date(d).getTime() - 864e5).toISOString().slice(0, 10);
-                  const p = r.orders[prevDay];
-                  const acts = r.actions[d] || [];
+                {b.days.map((d) => {
+                  const acts = (r.actions[d] || []).filter(a => visibleAct(a, deepAds));
                   return (
                     <td key={d} className={"day" + (r.can_edit ? " click" : "")}
                       onClick={() => r.can_edit && setEdit({ t: [{ shop: r.shop_id!, nm: r.nm_id }], label: `${r.vendor_code} · ${dd(d)}`, day: d, existing: acts })}>
-                      <div title={r.orders_source === "wb_funnel" ? "Заказы по воронке WB; прочерк — нет данных полного дня" : undefined}
-                        className={"o" + (o != null && p != null && o > p ? " up" : o != null && p != null && o < p ? " down" : "")}>{o ?? "—"}</div>
-                      {drr.length > 0 && r.ads?.[d] && <div className="hint" style={{ fontSize: 11, lineHeight: 1.25, whiteSpace: "nowrap" }}>
-                        {DRR.filter(([k]) => drr.includes(k)).map(([k, , short]) => { const a = r.ads![d], v = a[k as "all"];
-                          return v ? <div key={k}>{short} {a.osum ? nf1.format(v / a.osum * 100) + "%" : nf.format(v) + " ₽"}</div> : null; })}</div>}
-                      {acts.map((a) => chip(a, kinds))}
+                      <ActionDayContent row={r} day={d} kinds={kinds} drr={drr} deepAds={deepAds}
+                        dayPrices={dayPrices} adStats={adStats} adGroups={adGroups} adBasis={adBasis} />
                     </td>
                   );
                 })}

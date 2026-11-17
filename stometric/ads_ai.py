@@ -7,34 +7,35 @@ from datetime import datetime, timedelta, timezone
 
 from . import actions
 from .config import today_msk
+from .ai_readability import WRITING_RULES
 
 KIND_T = {"pause": "Пауза кампании", "start": "Запустить кампанию", "nm_remove": "Убрать артикул из кампании", "bid": "Ставка",
           "kw_minus": "Ключ в минус-фразы", "kw_unminus": "Вернуть ключ (убрать из минус-фраз)", "kw_bid": "Ставка на ключ",
-          "placements": "Места размещения", "deposit": "Пополнить бюджет", "create": "Создать кампанию"}  
+          "placements": "Места размещения", "deposit": "Пополнить бюджет", "create": "Создать кампанию"}                                                 
 STATUS_T = {4: "готова к запуску", 7: "завершена", 8: "отказ", 9: "активна", 11: "на паузе"}
 PLACE_T = {"search": "поиск", "recommendations": "рекомендации", "combined": "поиск и рекомендации"}
-MONEY_KINDS = {"deposit", "create"}           
+MONEY_KINDS = {"deposit", "create"}                                                                      
 
-FAST_DAYS = 3        
-WINDOW_DAYS = 7      
-ECO_DAYS = 14        
-KW_DAYS = 7          
-WARMUP_H = 24        
-WARMUP_VIEWS_H = 25  
-RECO_FRESH_H = 24    
-RECO_PER_RUN = 10    
+FAST_DAYS = 3                                                                                   
+WINDOW_DAYS = 7                                                                                                            
+ECO_DAYS = 14                                                                    
+KW_DAYS = 7                                                                                                              
+WARMUP_H = 24                                                                                         
+WARMUP_VIEWS_H = 25                                                  
+RECO_FRESH_H = 24                                              
+RECO_PER_RUN = 10                               
 REJECT_QUIET_DAYS = 3
 APPLIED_QUIET_H = 12
-BUDGET_PAUSES = 3    
-
+BUDGET_PAUSES = 3                                                                                     
+                                                                                                                                     
 SEASONS = (("обогрев", (10, 11, 12, 1, 2, 3)), ("тепловые пушки", (10, 11, 12, 1, 2, 3)), ("конвектор", (10, 11, 12, 1, 2, 3)),
            ("тепловые завесы", (10, 11, 12, 1, 2, 3)), ("тепловентилятор", (10, 11, 12, 1, 2, 3)), ("снегоуб", (11, 12, 1, 2, 3)),
-           ("лопаты для снега", (11, 12, 1, 2)), ("свеч", (11, 12, 1, 2)),     
+           ("лопаты для снега", (11, 12, 1, 2)), ("свеч", (11, 12, 1, 2)),                                                                                                                                                
            ("триммер", (4, 5, 6, 7, 8)), ("газонокосил", (4, 5, 6, 7, 8)), ("культиватор", (4, 5, 6)), ("бассейн", (5, 6, 7, 8)),
            ("кондиционер", (5, 6, 7, 8)), ("вентилятор", (5, 6, 7, 8)), ("опрыскивател", (4, 5, 6, 7)), ("мойки высокого давления", (4, 5, 6, 7, 8, 9)))
-MAX_KW = 40          
-MAX_CREATE = 3       
-MIN_DEPOSIT = 1000   
+MAX_KW = 40                                           
+MAX_CREATE = 3                                                 
+MIN_DEPOSIT = 1000      
 
 
 def settings(c, shop: int) -> dict:
@@ -50,7 +51,7 @@ def _rub(v) -> str:
     return f"{v:,.0f}".replace(",", " ") + " ₽"
 
 
-
+              
 def campaigns(c, shop: int, statuses=(4, 9, 11)) -> dict[int, dict]:
     """Кампании из последнего сбора (обновляются раз в час): статус, тип ставки, оплата, места, артикулы и ставки (копейки)."""
     out = {}
@@ -110,7 +111,7 @@ def economics(c, shop: int, df=None, dt=None) -> dict:
                   "f_cart", "f_orders"):
             a[k] += _f(r.get(k))
     bp, bp_all = rnp.buyout_pct(c, shop)
-    tax = c.execute("SELECT * FROM tax_settings WHERE account_id=%s AND valid_from<=%s ORDER BY valid_from DESC LIMIT 1", (shop, dt)).fetchone()\
+    tax = c.execute("SELECT * FROM tax_settings WHERE account_id=%s AND valid_from<=%s ORDER BY valid_from DESC LIMIT 1", (shop, dt)).fetchone() \
         or {"regime": "Другая СНО", "rate": 0, "vat_rate": 0, "vat_deduct_wb": 0}
     regime, rate, vat_rate, vw = tax["regime"], _f(tax["rate"]), _f(tax["vat_rate"]), _f(tax.get("vat_deduct_wb"))
     k_ad = 1.0
@@ -121,18 +122,18 @@ def economics(c, shop: int, df=None, dt=None) -> dict:
     stk = manager.stocks(c, shop)
     imt = imt_map(c, shop)
     days = (dt - df).days + 1
-    
-    
+                                                                                                                                          
+                                                                                                  
     unit = {}
     try:
         from . import unit_wb
         for u in unit_wb.compute(c, shop):
             if u.get("cost") and u.get("profit") is not None and u.get("bp"):
                 unit[u["nm_id"]] = (u["profit"], u["bp"])
-    except Exception:  
+    except Exception:                                                
         c.rollback()
     nm_out, by_imt = {}, defaultdict(lambda: [0.0, 0.0])
-    conv = defaultdict(lambda: [0.0, 0.0])                    
+    conv = defaultdict(lambda: [0.0, 0.0])                                                                                      
     for nm, a in acc.items():
         cv = conv[imt.get(nm, nm)]
         cv[0] += a.get("f_orders", 0.0); cv[1] += a.get("f_cart", 0.0)
@@ -196,7 +197,7 @@ def group_stats(st: dict, aid: int, imt: dict, eco: dict, k_ad: float) -> dict[i
             g["known"] = False
         g["profit"] += s["orders"] * (m or 0)
     for gi, g in out.items():
-        
+                                                                                                       
         g["orders_exp"] = exp_orders(eco, gi, g["orders"], g["carts"])
         g["profit"] += (g["orders_exp"] - g["orders"]) * (eco["imt"].get(gi) or 0)
         g["profit"] -= g["spend"] * k_ad
@@ -367,7 +368,7 @@ def balance(c, shop: int) -> dict:
     return _wb(c, shop).call("advert", "/adv/v1/balance") or {}
 
 
-
+               
 def _p(kind, advert=None, nm=None, query=None, before=None, after=None, reason="", effect=None, metrics=None, priority=0) -> dict:
     return {"kind": kind, "advert_id": advert, "nm_id": nm, "query": query, "params": {"before": before, "after": after},
             "reason": reason, "effect_week": round(effect) if effect is not None else None, "metrics": metrics or {},
@@ -411,15 +412,15 @@ def build(c, shop: int, with_api: bool = True, eco: dict | None = None) -> list[
     k_ad = eco["k_ad"]
     imt = imt_map(c, shop)
     W = int(max(3, min(14, _f(cfg.get("window_days") or WINDOW_DAYS))))
-    st = _ad_stats(c, shop, today - timedelta(days=W - 1), today)                       
-    stp = _ad_stats(c, shop, today - timedelta(days=2 * W - 1), today - timedelta(days=W))   
-    st3 = _ad_stats(c, shop, today - timedelta(days=FAST_DAYS - 1), today)               
+    st = _ad_stats(c, shop, today - timedelta(days=W - 1), today)                                                   
+    stp = _ad_stats(c, shop, today - timedelta(days=2 * W - 1), today - timedelta(days=W))                                          
+    st3 = _ad_stats(c, shop, today - timedelta(days=FAST_DAYS - 1), today)                                
     st2 = _ad_stats(c, shop, today - timedelta(days=1), today)
     step = max(5, min(50, _f(cfg["max_step"]))) / 100
     learn = learned(c, shop)
     step_down = min(step, _f((learn.get("bid_down") or {}).get("step")) or step)
-    hurt_down = step_down < step - 1e-9                     
-    step_up = min(step, _f((learn.get("bid_up") or {}).get("step")) or 0.1, 0.1)   
+    hurt_down = step_down < step - 1e-9                                                                            
+    step_up = min(step, _f((learn.get("bid_up") or {}).get("step")) or 0.1, 0.1)                                       
     rc = reco(c, shop)
     hist = last_bid(c, shop)
     cool = cooldown(c, shop, max(0.0, _f(cfg.get("cooldown_h", 72))))
@@ -445,7 +446,7 @@ def build(c, shop: int, with_api: bool = True, eco: dict | None = None) -> list[
         if not nms:
             continue
         single = len(cp["nms"]) == 1
-        
+                                                                                         
         low = [n for n in nms if stock_low(n)]
         spending = [n for n in low if st2[(aid, n)]["spend"] > 0]
         if spending:
@@ -461,7 +462,7 @@ def build(c, shop: int, with_api: bool = True, eco: dict | None = None) -> list[
                                   reason=f"Остаток {E[n]['stock']:g} шт" + (f" (~{E[n]['stock_days']:g} дн. продаж)" if E[n]["stock_days"] is not None else "")
                                   + " — убираем артикул из кампании, остальные товары продолжают крутиться."))
             continue
-        
+                                                                                                                         
         age = _age_h(cp)
         if age is not None and age < WARMUP_H:
             if age >= 2:
@@ -475,7 +476,7 @@ def build(c, shop: int, with_api: bool = True, eco: dict | None = None) -> list[
                                           reason=f"Новая кампания (запущена {age:.0f} ч назад) мало показывается: {int(v)} показов. Поднимаем ставку на "
                                                  f"{step * 100:.0f} %, чтобы быстрее набрать ключи и данные; после разгона (24 ч) сервис будет снижать ставку к выгодной."))
             continue
-        
+                                                                                                                                               
         groups, groups3, groups_p = (group_stats(x, aid, imt, eco, k_ad) for x in (st, st3, stp))
         by_imt = defaultdict(list)
         for n in nms:
@@ -500,25 +501,25 @@ def build(c, shop: int, with_api: bool = True, eco: dict | None = None) -> list[
 
             m = eco["imt"].get(gi)
             if m is None or not g["known"]:
-                
+                                                                                                                                  
                 if g["spend"] >= loss_min and gp["spend"] >= loss_min and not in_cool:
                     stop(50, f"У товара не задана себестоимость — прибыль рекламы посчитать нельзя, а реклама идёт уже больше {W} дн.: "
                              f"за последние {W} дн. {_rub(g['spend'])}, за предыдущие {_rub(gp['spend'])}. Ставим на паузу, пока не задана "
                              "себестоимость (раздел «Себестоимость»), — потом сервис посчитает, окупается ли реклама.",
                          {"no_cost": True, "spend": round(g["spend"]), "spend_prev": round(gp["spend"]), "days": W})
                 continue
-            be = m / k_ad if m > 0 else 0.0                       
+            be = m / k_ad if m > 0 else 0.0                                                                                             
             met = {"days": W, "spend": round(g["spend"]), "clicks": int(g["clicks"]), "ad_orders_imt": int(g["orders"]),
                    "ad_carts_imt": int(g["carts"]), "ad_orders_expected": round(g["orders_exp"], 1), "profit_per_order": round(m),
                    "break_even_cpo": round(be), "ad_profit": round(g["profit"]), "ad_profit_prev": round(gp["profit"]), "regime": eco["regime"],
                    "unit": any((E.get(n) or {}).get("unit") for n in adv)}
-            
+                                                                                                                                     
             if g3["orders"] == 0 and g3["carts"] == 0 and g3["clicks"] >= 30 and g3["spend"] >= max(loss_min, be):
                 stop(85, f"За {FAST_DAYS} дня реклама потратила {_rub(g3['spend'])}, {int(g3['clicks'])} кликов — и ни одного заказа и ни одной корзины "
                          f"по всей склейке (безубыточно — до {_rub(be)} рекламы на заказ).", {**met, "days": FAST_DAYS, "urgent": True},
                      g3["spend"] * k_ad * 7 / FAST_DAYS)
                 continue
-            
+                                                                                                                   
             if g["spend"] < max(loss_min, 2 * be) and g["clicks"] < 30:
                 continue
             sea = season_of(subj.get(gi), today.month, seasons)
@@ -528,14 +529,14 @@ def build(c, shop: int, with_api: bool = True, eco: dict | None = None) -> list[
             met.update({"season": sea, "organic": round(o_now), "organic_prev": round(o_prev), "season_ok": season_ok, "bid_cut_14d": aid in cut})
             cpo = g["spend"] / g["orders_exp"] if g["orders_exp"] else None
             cpo_t = f"{_rub(cpo)} за заказ" if cpo else "ни одного заказа"
-            
+                                                                                                                                          
             need = 1 if sea == "off" else int(max(1, _f(cfg.get("loss_weeks", 2))))
-            
-            
-            deep = lambda x: x["profit"] < 0 and -x["profit"] >= x["spend"] * k_ad / 6  
+                                                                                                                                   
+                                                                                                    
+            deep = lambda x: x["profit"] < 0 and -x["profit"] >= x["spend"] * k_ad / 6              
             prev_loss = gp["known"] and gp["spend"] >= loss_min and deep(gp)
-            
-            
+                                                                                                                                                
+                                                            
             tried = aid in cut or (cpo is not None and be > 0 and cpo >= 2 * be) or cpo is None
             if deep(g) and (need <= 1 or prev_loss) and not season_ok and not in_cool and tried:
                 why = (f"Реклама в минусе {'два окна подряд' if need > 1 else 'и сейчас не сезон товара'}: за {W} дн. {_rub(g['profit'])} "
@@ -561,15 +562,15 @@ def build(c, shop: int, with_api: bool = True, eco: dict | None = None) -> list[
                 last_act, last_v = hist.get((aid, n)) or (None, None)
                 cap_t = f" Потолок ставки ~{top * be / cpo / 100:,.0f} ₽ — выше реклама не окупается.".replace(",", " ") if top and be else ""
                 if in_cool:
-                    continue                                  
+                    continue                                                                       
                 if g["profit"] < 0 and not season_ok:
-                    
+                                                                                                                                      
                     ratio = cpo / be if be > 0 else 9.0
                     tier = 0.30 if ratio >= 2 else 0.20 if ratio >= 1.2 else 0.10
                     if hurt_down:
                         tier = max(0.05, tier / 2)
                     k = 1 - min(tier, step)
-                    
+                                                                                                                                                
                     floor = comp if comp and ratio < 1.2 and last_act != "bid_down" else 0
                     bids = _bids_scaled(cp, n, k, floor)
                     if bids:
@@ -586,28 +587,28 @@ def build(c, shop: int, with_api: bool = True, eco: dict | None = None) -> list[
                         out.append(_p("bid", aid, n, before=bids[0], after=bids[1], priority=62, metrics={**met, "last_up": "worse"},
                                       reason="После прошлого повышения ставки прибыль склейки упала (итог «стало хуже») — возвращаем ставку на 10 % ниже."))
                 elif last_act == "bid_down" and last_v == "worse" and g["profit"] >= 0:
-                    
+                                                                                                                                   
                     bids = _bids_scaled(cp, n, 1 + step_up)
                     if bids:
                         out.append(_p("bid", aid, n, before=bids[0], after=bids[1], priority=60, metrics={**met, "last_down": "worse"},
                                       reason=f"После прошлого снижения ставки прибыль склейки упала (итог «стало хуже»). Для этого товара ставка оказалась "
                                              f"ниже выгодной — поднимаем на {step_up * 100:.0f} %." + cap_t))
-                elif g["profit"] >= 0 and season_ok is False and (comp and age_d < 7 or (last_act == "bid_down" and last_v in ("better", "same")))\
+                elif g["profit"] >= 0 and season_ok is False and (comp and age_d < 7 or (last_act == "bid_down" and last_v in ("better", "same"))) \
                         and cpo > 0.5 * be:
-                    
+                                                                                                              
                     known = last_act == "bid_down" and last_v in ("better", "same")
                     if known or top > comp * 1.25:
                         bids = _bids_scaled(cp, n, 1 - min(step_down, 0.15), 0 if known else int(comp * 1.05))
                         if bids:
                             kr = sum(bids[1].values()) / max(1, sum(bids[0].values()))
                             why = (f"прошлое снижение ставки не ухудшило прибыль склейки — пробуем ещё шаг вниз (выгодная ставка у каждого товара своя"
-                                   + (f", конкурентная WB — {comp / 100:g} ₽" if comp else "") + ")") if known else\
+                                   + (f", конкурентная WB — {comp / 100:g} ₽" if comp else "") + ")") if known else \
                                 f"ставка {top / 100:g} ₽ заметно выше конкурентной {comp / 100:g} ₽"
                             out.append(_p("bid", aid, n, before=bids[0], after=bids[1], priority=55, effect=g["spend"] * k_ad * (1 - kr) * 7 / W / len(adv),
                                           metrics={**met, "competitive_bid": comp / 100 if comp else None, "age_days": round(age_d, 1)},
                                           reason=f"Реклама в плюсе ({_rub(g['profit'])} за {W} дн., {_rub(cpo)} за заказ при безубыточных {_rub(be)}), {why}. "
                                                  f"Снижаем на {(1 - kr) * 100:.0f} % — та же реклама дешевле; итог проверим через 3–7 дней."))
-                elif g["orders_exp"] >= 3 and be > 0 and cpo <= 0.5 * be and\
+                elif g["orders_exp"] >= 3 and be > 0 and cpo <= 0.5 * be and \
                         ((E.get(n) or {}).get("stock_days") or 0) >= _f(cfg.get("up_stock_days", 21)):
                     bids = _bids_scaled(cp, n, 1 + step_up)
                     if bids:
@@ -616,26 +617,26 @@ def build(c, shop: int, with_api: bool = True, eco: dict | None = None) -> list[
                                              f"{_rub(be)}; прибыль рекламы {_rub(g['profit'])}, товара на ~{E[n]['stock_days']:g} дн. Поднимаем ставку на "
                                              f"{step_up * 100:.0f} % — больше показов и заказов; если через 3–7 дней прибыль склейки упадёт, вернём."
                                              + cap_t))
-    
+                                           
     out += _kw_rules(c, shop, camps, eco, ex, cfg, step, hurt_down, step_up, cool)
-    
+                                                                
     if with_api:
         try:
             out += _budget_rules(c, shop, camps, eco, imt, ex, cfg, k_ad, W)
-        except Exception:  
+        except Exception:                                                                               
             c.rollback()
-    
-    
+                                                                                                                             
+                                                                                            
     out += _growth_rules(c, shop, camps, eco, imt, ex, cfg, st, step_up, {(p["advert_id"], p["nm_id"]) for p in out if p["kind"] == "bid"})
-    
+                                                                                                                           
     out += _type_rules(c, shop, camps, eco, imt, ex, cfg, st, W, cool)
     return out
 
 
-
+                                                                                                       
 TYPES = {"unified": "единая ставка (поиск + рекомендации)", "search": "ручная ставка, только поиск", "rec": "ручная ставка, только рекомендации (полки)",
          "manual": "ручная ставка, поиск + рекомендации", "cpc": "оплата за клики"}
-TEST_ORDER = ("unified", "search", "rec")          
+TEST_ORDER = ("unified", "search", "rec")                                                            
 MAX_TESTS = 3
 
 
@@ -654,12 +655,12 @@ def ctype(cp: dict) -> str:
 
 def _type_rules(c, shop, camps, eco, imt, ex, cfg, st, W=WINDOW_DAYS, cool=frozenset()) -> list[dict]:
     out = []
-    
+                                                                                                       
     types = cabinet_types(c, shop, eco, imt)
     cab_best = [t for t, roi, _ in types if t in TEST_ORDER and roi > 0]
-    
+                                                                                                                          
     order = tuple(cab_best) if types else TEST_ORDER
-    by_imt: dict = defaultdict(list)                  
+    by_imt: dict = defaultdict(list)                                                      
     for aid, cp in camps.items():
         if cp["status"] != 9:
             continue
@@ -673,8 +674,8 @@ def _type_rules(c, shop, camps, eco, imt, ex, cfg, st, W=WINDOW_DAYS, cool=froze
     vc = None
     for gi, aids in by_imt.items():
         if eco["imt"].get(gi) is None:
-            continue                                  
-        
+            continue                                                                        
+                                                                                                                    
         res = []
         for aid in aids:
             age = _age_h(camps[aid])
@@ -682,17 +683,17 @@ def _type_rules(c, shop, camps, eco, imt, ex, cfg, st, W=WINDOW_DAYS, cool=froze
             if g and g["known"] and (age is None or age >= WARMUP_H) and g["spend"] >= _f(cfg["loss_min_spend"]) and aid not in cool:
                 res.append((aid, g))
         if len(res) >= 2 and len({ctype(camps[a]) for a, _ in res}) >= 2:
-            roi = lambda g: g["profit"] / g["spend"] if g["spend"] else 0  
+            roi = lambda g: g["profit"] / g["spend"] if g["spend"] else 0              
             best_aid, best = max(res, key=lambda x: roi(x[1]))
             for aid, g in res:
                 if aid == best_aid or ctype(camps[aid]) == ctype(camps[best_aid]):
                     continue
                 if best["profit"] <= 0:
-                    break                             
+                    break                                                                                             
                 if g["profit"] < 0 or roi(g) < 0.5 * roi(best):
                     whole = all(imt.get(n, n) == gi for n in camps[aid]["nms"])
                     if not whole:
-                        continue                      
+                        continue                                                                                       
                     out.append(_p("pause", aid, before=9, after=11, priority=70, effect=max(0.0, -g["profit"]) * 7 / W,
                                   metrics={"type": ctype(camps[aid]), "profit": round(g["profit"]), "spend": round(g["spend"]),
                                            "best_advert": best_aid, "best_type": ctype(camps[best_aid]), "best_profit": round(best["profit"]),
@@ -700,7 +701,7 @@ def _type_rules(c, shop, camps, eco, imt, ex, cfg, st, W=WINDOW_DAYS, cool=froze
                                   reason=f"На склейке работают разные типы рекламы. За {W} дн.: «{TYPES[ctype(camps[aid])]}» — прибыль рекламы "
                                          f"{_rub(g['profit'])} на {_rub(g['spend'])} расхода, а «{TYPES[ctype(camps[best_aid])]}» (кампания {best_aid}) — "
                                          f"{_rub(best['profit'])} на {_rub(best['spend'])}. Оставляем более выгодный тип, этот — на паузу."))
-        
+                                                                                                                            
         if tests >= MAX_TESTS or not cfg.get("create", True):
             continue
         have = {ctype(camps[a]) for a in aids}
@@ -710,7 +711,7 @@ def _type_rules(c, shop, camps, eco, imt, ex, cfg, st, W=WINDOW_DAYS, cool=froze
         if prof <= 0 or not stock_ok or not miss:
             continue
         advertised = {n for a in aids for n in camps[a]["nms"]}
-        free = [n for n in stock_ok if n not in advertised]            
+        free = [n for n in stock_ok if n not in advertised]                                                       
         target = max(free or stock_ok, key=lambda n: (eco["nm"].get(n) or {}).get("orders") or 0)
         t = miss[0]
         if vc is None:
@@ -764,11 +765,11 @@ def _kw_rules(c, shop, camps, eco, ex, cfg, step, hurt_down, step_up, cool) -> l
         m = _m(eco, n)
         be = m / k_ad if m and m > 0 else 0.0
         sp, cl, o0, atb = _f(r["sp"]), _f(r["cl"]), _f(r["o"]), _f(r["atb"])
-        o = exp_orders(eco, (eco["nm"].get(n) or {}).get("imt", n), o0, atb)       
+        o = exp_orders(eco, (eco["nm"].get(n) or {}).get("imt", n), o0, atb)                                                     
         met = {"days": KW_DAYS, "clicks": int(cl), "spend": round(sp), "orders": int(o0), "carts": int(atb), "orders_expected": round(o, 1),
                "profit_per_order": round(m) if m else None}
-        
-        
+                                                                                                                                             
+                                                                                                        
         cv = conv.get((eco["nm"].get(n) or {}).get("imt", n))
         need = min(300.0, max(_f(cfg["kw_min_clicks"]), 3 / cv if cv else 100.0))
         if o0 == 0 and atb == 0 and cl >= need and sp >= max(100, be):
@@ -780,8 +781,8 @@ def _kw_rules(c, shop, camps, eco, ex, cfg, step, hurt_down, step_up, cool) -> l
             n_kw += 1
             continue
         if aid in cool:
-            continue                                      
-        
+            continue                                                                                            
+                                                                                 
         if cp["bid_type"] != "manual" or cp["payment"] != "cpm" or not m or o == 0:
             continue
         base = int(_f(r["bid"])) or int(((cp["nms"].get(n) or {}).get("search") or 0) / 100)
@@ -790,7 +791,7 @@ def _kw_rules(c, shop, camps, eco, ex, cfg, step, hurt_down, step_up, cool) -> l
         cpo = sp / o
         prof = o * m - sp * k_ad
         if prof < 0 and o0 == 0 and sp < max(_f(cfg["loss_min_spend"]), 2 * be):
-            continue                                      
+            continue                                                                                         
         if prof < 0:
             ratio = cpo / be if be else 9.0
             tier = 0.30 if ratio >= 2 else 0.20 if ratio >= 1.2 else 0.10
@@ -820,7 +821,7 @@ def _budget_rules(c, shop, camps, eco, imt, ex, cfg, k_ad, W=WINDOW_DAYS) -> lis
     stw = _ad_stats(c, shop, today - timedelta(days=W - 1), today)
     pauses = pause_counts(c, shop)
     st14 = _ad_stats(c, shop, today - timedelta(days=13), today)
-    
+                                                                                                                                         
     ids = []
     for a, cp in camps.items():
         if cp["status"] == 11:
@@ -849,9 +850,9 @@ def _budget_rules(c, shop, camps, eco, imt, ex, cfg, k_ad, W=WINDOW_DAYS) -> lis
     for aid in ids:
         cp = camps[aid]
         nms = [n for n in cp["nms"] if n not in ex]
-        if not nms or any((eco["nm"].get(n) or {}).get("stock_days") is not None and eco["nm"][n]["stock_days"] < 14 for n in nms)\
+        if not nms or any((eco["nm"].get(n) or {}).get("stock_days") is not None and eco["nm"][n]["stock_days"] < 14 for n in nms) \
                 or any(_m(eco, n) is None for n in nms):
-            continue                           
+            continue                                                                                                                     
         g14 = group_stats(st14, aid, imt, eco, k_ad)
         prof14 = sum(g["profit"] for g in g14.values() if g["known"])
         orders14 = sum(g["orders"] for g in g14.values())
@@ -862,9 +863,9 @@ def _budget_rules(c, shop, camps, eco, imt, ex, cfg, k_ad, W=WINDOW_DAYS) -> lis
             gw = group_stats(stw, aid, imt, eco, k_ad)
             prof = sum(x["profit"] for x in gw.values() if x["known"])
             if b is None or spend_day <= 0 or b >= spend_day or prof <= 0 or not all(x["known"] for x in gw.values()):
-                continue                       
+                continue                                                                                                          
             np_ = pauses.get(aid, 0)
-            days_dep = 6 if np_ >= BUDGET_PAUSES else 3       
+            days_dep = 6 if np_ >= BUDGET_PAUSES else 3                                                                             
             total = int(max(MIN_DEPOSIT, min(dmax, math.ceil(spend_day * days_dep / 100) * 100)))
             t, src = source(total)
             if t is None:
@@ -899,11 +900,11 @@ def _budget_rules(c, shop, camps, eco, imt, ex, cfg, k_ad, W=WINDOW_DAYS) -> lis
     return out
 
 
-GROWTH_SHARE = 0.15       
-GROWTH_MIN_ORDERS = 14    
+GROWTH_SHARE = 0.15                                                                                           
+GROWTH_MIN_ORDERS = 14                                              
 GROWTH_STOCK_DAYS = 30
-GROWTH_BIDS = 5           
-JAM_PER_RUN = 3           
+GROWTH_BIDS = 5                                                              
+JAM_PER_RUN = 3                                                                             
 JAM_FRESH_DAYS = 3
 
 
@@ -965,7 +966,7 @@ def _queries(items: list[dict] | None) -> tuple[list[dict], int]:
     """Запросы, где товар покупают, но он не в топ-10 выдачи (есть куда подниматься), и сколько запросов уже в топ-10."""
     if not items:
         return [], 0
-    wk = lambda q: _f(q.get("weekFrequency")) or _f(q.get("frequency")) / 2   
+    wk = lambda q: _f(q.get("weekFrequency")) or _f(q.get("frequency")) / 2               
     sell = [q for q in items if _f(q.get("orders")) or _f(q.get("addToCart"))]
     low = [q for q in sell if _f(q.get("avgPosition")) > 10 and wk(q) >= 300]
     top = sum(1 for q in sell if 0 < _f(q.get("avgPosition")) <= 10)
@@ -974,8 +975,8 @@ def _queries(items: list[dict] | None) -> tuple[list[dict], int]:
              "carts": int(_f(q.get("addToCart")))} for q in low[:5]], top
 
 
-
-KW_BAD_SPEND = 300      
+                                                                                                                    
+KW_BAD_SPEND = 300                                                                                       
 
 
 def kw_history(c, shop: int, nms: list[int], queries: list[str] | None = None) -> dict:
@@ -1015,7 +1016,7 @@ def kw_verdict(h: dict | None, margin: float | None = None, k_ad: float = 1.0) -
         cpo = sp / o
         if margin and cpo * k_ad > margin:
             return "bad", f"{since}: заказов {o} по {_rub(cpo)} при прибыли с заказа ~{_rub(margin)} — в минус"
-        return ("good" if margin else "weak"), f"{since}: заказов {o}, корзин {atb}, {_rub(cpo)} за заказ" +\
+        return ("good" if margin else "weak"), f"{since}: заказов {o}, корзин {atb}, {_rub(cpo)} за заказ" + \
             ("" if margin else " (прибыль с заказа неизвестна — нет себестоимости)")
     if atb:
         if sp >= max(3000, 2 * (margin or 0)):
@@ -1031,18 +1032,18 @@ def _growth_rules(c, shop, camps, eco, imt, ex, cfg, st, step_up, has_bid) -> li
     recent = {r["imt"] for r in c.execute("""SELECT DISTINCT coalesce(n.imt_id, n.nm_id) imt FROM ad_proposals p JOIN nomenclature n
                                             ON n.account_id=p.account_id AND n.nm_id=p.nm_id WHERE p.account_id=%s AND p.kind='create'
                                             AND p.batch_at > now() - interval '14 days' AND p.status <> 'new'""", (shop,))}
-    by_imt = defaultdict(list)                     
+    by_imt = defaultdict(list)                                                         
     for aid, cp in camps.items():
         for n in cp["nms"]:
             by_imt[imt.get(n, n)].append((aid, n))
     out, n_create, n_bid = [], 0, 0
     k_ad = eco["k_ad"]
-    ct = None                                      
+    ct = None                                                                                                             
     for x in growth_candidates(c, shop, eco, imt, ex):
         gi, m = x["imt"], x["margin"]
         q, top = _queries(_jam_items(c, shop, x["nm"]))
         dropped = []
-        if q:                    
+        if q:                                                                                                                 
             hist = kw_history(c, shop, [n for n, i in imt.items() if i == gi] or [x["nm"]], [y["text"] for y in q])
             keep = []
             for y in q:
@@ -1075,12 +1076,12 @@ def _growth_rules(c, shop, camps, eco, imt, ex, cfg, st, step_up, has_bid) -> li
         if not by_imt.get(gi):
             if n_create >= MAX_CREATE or gi in recent or not cfg.get("create", True):
                 continue
-            budget = max(MIN_DEPOSIT, round(per_day * 0.5 * m / 2 * 7 / 100) * 100)   
+            budget = max(MIN_DEPOSIT, round(per_day * 0.5 * m / 2 * 7 / 100) * 100)                                                            
             if ct is None:
                 types = cabinet_types(c, shop, eco, imt)
                 ct = next((t for t, roi, _ in types if t in ("unified", "search", "rec", "manual") and roi > 0), "" if types else "unified")
             if not ct:
-                continue                              
+                continue                                                                                                                 
             after = {"name": f"{vc.get(x['nm']) or x['nm']} · рост · seller-analytics"[:100], "nms": [x["nm"]],
                      "bid_type": "unified" if ct == "unified" else "manual", "payment_type": "cpm"}
             if ct in ("search", "rec", "manual"):
@@ -1094,7 +1095,7 @@ def _growth_rules(c, shop, camps, eco, imt, ex, cfg, st, step_up, has_bid) -> li
         elif active and n_bid < GROWTH_BIDS:
             g = group_stats(st, active[0][0], imt, eco, k_ad).get(gi) or {}
             if g.get("profit", 0) < 0:
-                continue                              
+                continue                                                                                                 
             for aid, n in active:
                 if (aid, n) in has_bid or n_bid >= GROWTH_BIDS:
                     continue
@@ -1135,9 +1136,9 @@ def save(c, shop: int, props: list[dict]) -> dict:
     return {"total": len(keep), "new": fresh, "batch_at": now}
 
 
-
-MEASURE_MIN_DAYS = 3     
-MEASURE_MAX_DAYS = 7     
+                                                                       
+MEASURE_MIN_DAYS = 3                                                                              
+MEASURE_MAX_DAYS = 7                              
 
 
 def _action_key(kind: str, params: dict) -> str:
@@ -1194,7 +1195,7 @@ def measure(c, shop: int) -> int:
         if L < MEASURE_MIN_DAYS:
             continue
         adv = [p["nm_id"]] if p["nm_id"] else list((camps.get(p["advert_id"]) or {}).get("nms") or [])
-        nms = sorted({x for a in adv for x in by_imt.get(imt.get(a, a), [a])})           
+        nms = sorted({x for a in adv for x in by_imt.get(imt.get(a, a), [a])})                        
         if not nms or all(_m(eco, x) is None for x in nms):
             continue
         wins = {"before": (d - timedelta(days=L), d - timedelta(days=1)), "after": (d + timedelta(days=1), d + timedelta(days=L))}
@@ -1205,7 +1206,7 @@ def measure(c, shop: int) -> int:
             for tag, (a, b) in wins.items():
                 gr[tag] = gross(nm_day.cached(c, shop, a, b), lambda x: imt.get(x, x) in ctl)
             ctrl_cache[key] = (gr["after"] / gr["before"]) if gr["before"] > 0 and gr["after"] > 0 and len(ctl) >= 3 else 1.0
-        kc = max(0.5, min(2.0, ctrl_cache[key]))                       
+        kc = max(0.5, min(2.0, ctrl_cache[key]))                                                                                            
         res = {}
         for tag, (a, b) in wins.items():
             rows_nm = nm_day.cached(c, shop, a, b, nms)
@@ -1214,12 +1215,12 @@ def measure(c, shop: int) -> int:
             spend = sum(v["spend"] for (aid, nm), v in st.items() if nm in nms)
             ad_orders = sum(v["orders"] for (aid, nm), v in st.items() if nm in nms)
             ad_carts = sum(v["carts"] for (aid, nm), v in st.items() if nm in nms)
-            carts = sum(_f(r.get("f_cart")) for r in rows_nm)              
+            carts = sum(_f(r.get("f_cart")) for r in rows_nm)                                                                            
             g = gross(rows_nm, lambda x: True)
             res[tag] = {"orders": int(orders), "ad_orders": int(ad_orders), "carts": int(carts), "ad_carts": int(ad_carts),
                         "spend": round(spend), "profit": round(g - spend * k_ad), "gross": round(g), "days": L}
         res["after"]["ctrl_k"] = round(kc, 3)
-        
+                                                                                            
         delta = ((res["after"]["gross"] - res["before"]["gross"] * kc) - (res["after"]["spend"] - res["before"]["spend"]) * k_ad) * 7 / L
         thr = max(100, 0.05 * abs(res["before"]["profit"]) * 7 / L)
         verdict = "better" if delta > thr else "worse" if delta < -thr else "same"
@@ -1263,18 +1264,18 @@ def run(c, shop: int, note: bool = False, slow: bool = False) -> dict:
     for fn in ((measure, refresh_reco, growth_jam) if slow else (measure,)):
         try:
             fn(c, shop)
-        except Exception:  
+        except Exception:                                                
             c.rollback()
     eco = economics(c, shop)
     res = save(c, shop, build(c, shop, eco=eco))
     try:
         state(c, shop, eco, with_balance=slow)
-    except Exception:  
+    except Exception:                                                        
         c.rollback()
     if note and res["total"]:
         try:
             _note(c, shop, res["batch_at"])
-        except Exception:  
+        except Exception:                                                           
             c.rollback()
     if res["new"] and settings(c, shop).get("notify") and actions.block(c, shop, "ads")["enabled"]:
         eff = sum(p["effect_week"] or 0 for p in res["new"])
@@ -1286,7 +1287,7 @@ def run(c, shop: int, note: bool = False, slow: bool = False) -> dict:
     return {"total": res["total"], "new": len(res["new"])}
 
 
-
+                                                                                                               
 NAMES = ("алена", "алёна", "валерия", "лера", "ия", "наташа", "наталья", "кристина", "женя", "евгения", "евгений", "аня", "анна", "катя",
          "екатерина", "маша", "мария", "оля", "ольга", "настя", "анастасия", "юля", "юлия", "даша", "дарья", "света", "светлана", "лена", "елена",
          "таня", "татьяна", "ира", "ирина", "вика", "виктория", "полина", "алина", "ксюша", "ксения", "карина", "диана", "марина", "вера",
@@ -1326,7 +1327,7 @@ def summary(c, shop: int, eco: dict, days: int = 30) -> dict:
                 a["spend"] += g["spend"]; a["orders"] += g["orders"]
                 if g["known"]:
                     a["profit"] += g["profit"]; a["spend_known"] += g["spend"]
-    rows = lambda agg: sorted(({"key": k, **{x: round(v) for x, v in a.items()}, "roi": round(a["profit"] / a["spend_known"], 3) if a["spend_known"] else None}  
+    rows = lambda agg: sorted(({"key": k, **{x: round(v) for x, v in a.items()}, "roi": round(a["profit"] / a["spend_known"], 3) if a["spend_known"] else None}              
                                for k, a in agg.items()), key=lambda r: -r["spend"])
     nocost = defaultdict(float)
     for (a, n), v in st7.items():
@@ -1359,7 +1360,7 @@ def state(c, shop: int, eco: dict, with_balance: bool = False):
 def label(p: dict) -> str:
     """Короткая строка предложения: что и где."""
     t = KIND_T.get(p["kind"], p["kind"])
-    where = (f"кампания {p['advert_id']}" if p.get("advert_id") else "новая кампания") + (f", арт. {p['nm_id']}" if p.get("nm_id") else "")\
+    where = (f"кампания {p['advert_id']}" if p.get("advert_id") else "новая кампания") + (f", арт. {p['nm_id']}" if p.get("nm_id") else "") \
         + (f", «{p['query']}»" if p.get("query") else "")
     b, a = p["params"]["before"], p["params"]["after"]
     if p["kind"] == "bid":
@@ -1371,7 +1372,7 @@ def label(p: dict) -> str:
     return f"{t} ({where})"
 
 
-
+                                          
 NOTE_RULES = """Ты помогаешь селлеру Wildberries управлять рекламой ради прибыли. Тебе дают предложения, которые посчитал сервис по правилам,
 с цифрами, и итоги прошлых действий в этом магазине. Напиши короткое пояснение (до 1200 знаков): что главное сегодня в рекламе, с чего
 начать (2-4 пункта по приоритету), о чём не забыть. Предложения с пометкой роста (товар хорошо продаётся без рекламы) объясни
@@ -1379,7 +1380,7 @@ NOTE_RULES = """Ты помогаешь селлеру Wildberries управл�
 а что нет, и учти это в советах. Не советуй возвращать исключённые ключи и минус-фразы, если в данных нет их истории с корзинами
 или заказами: дорогие ключи без корзин и заказов возвращать нет смысла. Цифры бери только из данных, ничего не придумывай. Ничего не обещай. Пиши просто, по-русски, без
 вступлений и без таблиц. Напомни, что изменения применяет сам пользователь кнопкой «Применить», а пополнение бюджета и создание кампании -
-с двойным подтверждением."""
+с двойным подтверждением.""" + WRITING_RULES
 
 
 def _note(c, shop: int, batch_at):
@@ -1399,19 +1400,28 @@ def _note(c, shop: int, batch_at):
     c.commit()
 
 
-
+                                                  
 class Stale(actions.ActionDenied):
     pass
 
 
 def _fresh(c, shop: int, aid: int) -> dict:
     """Кампания прямо сейчас из WB (ключом на чтение) + обновляем её в базе."""
+    from . import ad_history
+    observed_at = datetime.now(timezone.utc)
     info = (_wb(c, shop).call("advert", "/api/advert/v2/adverts", params={"ids": str(aid)}) or {}).get("adverts") or []
     if not info:
         raise Stale("Кампания не найдена в WB (удалена или завершена)")
-    i = info[0]
+    i = next((x for x in info if x.get('id') == aid), None)
+    if i is None:
+        raise Stale("WB не вернул настройки запрошенной кампании")
+    ad_history.require_complete_detail(i)
     row = c.execute("SELECT data FROM raw_rows WHERE account_id=%s AND source='adverts' AND row_key=%s", (shop, str(aid))).fetchone()
     d = {**((row or {}).get("data") or {"advertId": aid, "type": 9}), "status": i.get("status"), "info": i}
+    accepted, _ = ad_history.observe_campaign(c, shop, d, observed_at, (row or {}).get('data'))
+    if not accepted:
+        c.commit()
+        raise Stale("Получен запоздавший ответ WB; обновите кампанию")
     c.execute("""INSERT INTO raw_rows(account_id,source,row_key,row_date,data) VALUES (%s,'adverts',%s,NULL,%s)
                  ON CONFLICT (account_id,source,row_key) DO UPDATE SET data=EXCLUDED.data, updated_at=now()""",
               (shop, str(aid), json.dumps(d, ensure_ascii=False)))
@@ -1439,7 +1449,7 @@ def execute(c, shop: int, p: dict, uid: int, force: bool = False) -> dict:
     if kind in MONEY_KINDS and not force:
         raise actions.ActionDenied("BIG_STEP: " + ("пополнение бюджета — это деньги" if kind == "deposit" else "создание новой кампании")
                                    + ": подтвердите ещё раз")
-    tgt = (f"кампания {aid}" if aid else "новая кампания") + (f", арт. {nm}" if nm else "") + (f", «{p['query']}»" if p.get("query") else "")\
+    tgt = (f"кампания {aid}" if aid else "новая кампания") + (f", арт. {nm}" if nm else "") + (f", «{p['query']}»" if p.get("query") else "") \
         + f" (предложение №{p['id']})"
 
     def w(method, path, body=None, params=None, b=None):
@@ -1460,7 +1470,7 @@ def execute(c, shop: int, p: dict, uid: int, force: bool = False) -> dict:
             c.execute("UPDATE ad_proposals SET advert_id=%s WHERE id=%s", (new_id, p["id"]))
             try:
                 _fresh(c, shop, new_id)
-            except Exception:  
+            except Exception:                
                 c.rollback()
         return {"ok": True, "advert_id": new_id}
     cur = _fresh(c, shop, aid)
@@ -1522,7 +1532,7 @@ def execute(c, shop: int, p: dict, uid: int, force: bool = False) -> dict:
             new = [x for x in lst if x != q]
         if len(new) > 1000:
             raise actions.ActionDenied("В минус-фразах уже 1000 ключей — больше WB не принимает")
-        w("POST", "/adv/v0/normquery/set-minus", {"advert_id": aid, "nm_id": nm, "norm_queries": new}, b={"minus": len(lst)})
+        w("POST", "/adv/v0/normquery/set-minus", {"advert_id": aid, "nm_id": nm, "norm_queries": new}, b={"norm_queries": lst})
         if kind == "kw_minus":
             c.execute("""INSERT INTO wb_ad_kw_lists(account_id,advert_id,nm_id,query,state) VALUES (%s,%s,%s,%s,'minus') ON CONFLICT DO NOTHING""",
                       (shop, aid, nm, q))
@@ -1531,8 +1541,8 @@ def execute(c, shop: int, p: dict, uid: int, force: bool = False) -> dict:
     else:
         raise actions.ActionDenied(f"Неизвестное действие {kind}")
     try:
-        _fresh(c, shop, aid)            
-    except Exception:  
+        _fresh(c, shop, aid)                                                     
+    except Exception:                
         c.rollback()
     return {"ok": True}
 
@@ -1578,7 +1588,7 @@ def manual(c, shop: int, uid: int, kind: str, advert_id: int, nm_id: int | None,
         bids = cur["nms"].get(nm_id) or {}
         before = ({"combined": bids.get("search") or bids.get("recommendations")} if cur["bid_type"] == "unified"
                   else {pl: bids.get(pl) for pl in after})
-        after = {pl: int(round(float(v) * 100)) for pl, v in after.items()}          
+        after = {pl: int(round(float(v) * 100)) for pl, v in after.items()}                           
     elif kind == "kw_bid":
         before, after = _kw_bid_now(c, shop, advert_id, nm_id, query), int(after)
     elif kind == "placements":

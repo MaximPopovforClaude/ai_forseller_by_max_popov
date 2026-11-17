@@ -7,21 +7,21 @@ from datetime import datetime, timezone
 
 from ..wb import WB, RateLimited
 
-TAIL_HOURS = 6     
+TAIL_HOURS = 6                                                                                  
 
 
 @dataclass
 class Ctx:
-    c: object           
-    acc: dict           
+    c: object                          
+    acc: dict                            
     wb: WB
-    shallow: bool = False   
+    shallow: bool = False                                                                                     
 
     def depth(self, days: int) -> int:
         from ..config import today_msk
         from ..loadplan import SHALLOW_DAYS
         d = min(days, SHALLOW_DAYS) if self.shallow else days
-        hf = self.acc.get("history_from")          
+        hf = self.acc.get("history_from")                                                                             
         return min(d, max(0, (today_msk() - hf).days)) if hf else d
 
     def state(self, name: str) -> dict:
@@ -51,6 +51,7 @@ class Ctx:
 
 def registry():
     from . import content, prices, statistics, stocks, advert, finance, funnel, reports, feedbacks, questions
+    from .. import jam_daily
     return {
         "nomenclature": content.run,
         "tariffs": content.run_tariffs,
@@ -65,6 +66,7 @@ def registry():
         "ad_upd": advert.run_upd,
         "ad_kw": advert.run_kw,
         "ad_kw_lists": advert.run_kw_lists,
+        "ad_settings": advert.run_settings,
         "realization": finance.run,
         "realization_daily": finance.run_daily,
         "funnel": funnel.run,
@@ -76,12 +78,13 @@ def registry():
         "item_rating": feedbacks.run_rating,
         "questions": questions.run,
         "promotions": prices.run_promotions,
+        "jam_daily": jam_daily.run,
     }
 
 
 def run_one(ctx: Ctx, name: str) -> dict:
     fn = registry()[name]
-    
+                                                                                                    
     lock = ctx.c.execute("SELECT pg_try_advisory_lock(hashtext(%s)) ok", (f"collect:{ctx.acc['id']}:{name}",)).fetchone()["ok"]
     if not lock:
         return {"collector": name, "ok": False, "skipped": "уже выполняется в другом процессе"}
@@ -98,8 +101,8 @@ def _run(ctx: Ctx, name: str, fn) -> dict:
     if name in loadplan.DEEP and loadplan.is_big(ctx.c, ctx.acc["id"]):
         cur0 = ctx.state(name)
         if not loadplan.night():
-            ctx.shallow = True                      
-        elif cur0.get("deep_pending") and name != "ad_stats":              
+            ctx.shallow = True                                                    
+        elif cur0.get("deep_pending") and name != "ad_stats":                                                      
             ctx.save_state(name, {"deep_running": True})
     try:
         res = fn(ctx)
@@ -114,9 +117,14 @@ def _run(ctx: Ctx, name: str, fn) -> dict:
         return {"collector": name, "ok": True, **({"shallow": True} if ctx.shallow else {}), **res}
     except RateLimited as e:
         ctx.c.rollback()
-        ctx.save_state(name, None, ok=False, error=str(e))
+                                                                               
+                                                                                
+        cur = None
+        if name == 'jam_daily':
+            cur = {**ctx.state(name), 'backfilled':False, 'retry_after':e.until.isoformat()}
+        ctx.save_state(name, cur, ok=False, error=str(e))
         return {"collector": name, "ok": False, "rate_limited": True, "error": str(e)}
-    except Exception as e:  
+    except Exception as e:                                                       
         ctx.c.rollback()
         ctx.save_state(name, None, ok=False, error=f"{type(e).__name__}: {e}"[:1000])
         return {"collector": name, "ok": False, "error": f"{type(e).__name__}: {e}"[:500], "trace": traceback.format_exc()[-1500:]}

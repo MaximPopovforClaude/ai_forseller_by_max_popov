@@ -7,8 +7,9 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from ..agg import nm_day
+from . import funnel_orders
 
-
+                                                                                                                 
 ROWS = [
     (6, "ЗАКАЗЫ И ПОТЕНЦИАЛЬНАЯ ПРИБЫЛЬ ПО ЗАКАЗАМ", "h", None),
     (7, "Сумма заказов с учетом скидки продавца, руб", "money", lambda S, R: S("orders_sum")),
@@ -31,7 +32,7 @@ ROWS = [
     (24, "ДРР от суммы заказов с учетом скидки продавца, %", "pct", lambda S, R: _d(-R(23), R(7))),
     (25, "ДРР от суммы заказов с учетом процента выкупа, %", "pct", lambda S, R: _d(-R(23), R(15))),
     (26, "ДРР от прибыли, %", "pct", lambda S, R: _d(-R(23), R(35))),
-    
+                                                                                                              
     (231, "Реклама бонусами (Кэшбэк), руб", "money", lambda S, R: -S("ads_bonus")),
     (232, "Реклама всего: деньги + бонусы, руб", "money", lambda S, R: R(23) + R(231)),
     (233, "ДРР от суммы заказов: бонусы, %", "pct", lambda S, R: _d(-R(231), R(7))),
@@ -106,22 +107,66 @@ ROWS = [
 ROW = {n: (lab, fmt, f) for n, lab, fmt, f in ROWS}
 RATIO = {n for n, _, fmt, _ in ROWS if fmt == "pct"}
 
-
-ORDER_NOTE = ("Первыми показаны заказы из воронки WB (конверсии), затем — из статистики WB. "
-              "Сумма воронки — до СПП. Сумма после СПП, средняя цена, СПП, ДРР и прибыль "
-              "сохраняют прежние финансовые источники. Нет данных воронки — пустая ячейка; "
-              "суммы включают только загруженные данные и могут дополняться WB.")
+                                                                              
+ORDER_NOTE = ("Заказы и показатели по заказам рассчитываются из воронки WB. "
+              "Сумма после СПП — оценка: сумма воронки × доля цены после СПП из статистики того же артикула и дня. "
+              "Комиссия масштабируется по сумме, себестоимость и логистика — по количеству товаров. "
+              "Итоги складываются после расчёта по каждому артикулу и дню; при пропусках исходников зависимый расчёт пустой. "
+              "Отмены взяты из статистики; их отношение к заказам воронки не является когортным процентом отказов. "
+              "Выкупы, возвраты и фактическая прибыль сохраняют свои источники.")
 _ORDER_LABELS = {
     12: "Заказы из воронки WB: сумма до СПП, руб",
     13: "Заказы из воронки WB: количество, шт",
     7: "Заказы из статистики WB: сумма со скидкой продавца, руб",
     8: "Заказы из статистики WB: количество, шт",
     9: "Заказы из статистики WB: сумма с учетом СПП, руб",
-    10: "Средняя цена заказа со скидкой продавца (статистика WB), руб",
-    11: "Средняя СПП по заказам (статистика WB), %",
+    10: "Средняя цена заказа из воронки до СПП, руб",
+    11: "Средняя СПП по заказам воронки (оценка), %",
+    68: "Отмены/невыкупы из статистики к заказам воронки, %",
 }
-_DISPLAY_ORDER = [6, 12, 13, *[n for n, _, _, _ in ROWS if n not in (6, 12, 13)]]
-DASHBOARD_ROWS = [(n, _ORDER_LABELS.get(n, ROW[n][0]), ROW[n][1], ROW[n][2]) for n in _DISPLAY_ORDER]
+                                                                               
+DASHBOARD_ROW = {**ROW,
+    funnel_orders.SPP_ROW: ("Заказы из воронки WB: сумма с учетом СПП (оценка), руб", "money", lambda S,R: S("f_orders_sum_spp")),
+    10: (_ORDER_LABELS[10], "money", lambda S,R: _d(R(12), R(13))),
+    11: (_ORDER_LABELS[11], "pct", lambda S,R: _d(R(12)-R(funnel_orders.SPP_ROW), R(12))),
+    15: (ROW[15][0], "money", lambda S,R: R(12)*R(14)),
+    16: (ROW[16][0], "int", lambda S,R: round(R(13)*R(14))),
+    17: (ROW[17][0], "money", lambda S,R: R(funnel_orders.SPP_ROW)*R(14)),
+    20: (ROW[20][0], "money", lambda S,R: -S("f_commission_offer_orders")*R(14)),
+    21: (ROW[21][0], "money", lambda S,R: -S("f_logistics_orders")),
+    22: (ROW[22][0], "money", lambda S,R: S("f_cost_orders")*R(14)),
+    24: (ROW[24][0], "pct", lambda S,R: _d(-R(23),R(12))),
+    233: (ROW[233][0], "pct", lambda S,R: _d(-R(231),R(12))),
+    234: (ROW[234][0], "pct", lambda S,R: _d(-R(232),R(12))),
+    33: (ROW[33][0], "money", lambda S,R: -S("f_vat_orders")*R(14)),
+    68: (_ORDER_LABELS[68], "pct", lambda S,R: _d(R(66),R(13))),
+}
+_DISPLAY_ORDER = [6, 12, 13, funnel_orders.SPP_ROW, *[n for n, _, _, _ in ROWS if n not in (6,12,13)]]
+DASHBOARD_ROWS = [(n, _ORDER_LABELS.get(n, DASHBOARD_ROW[n][0]), DASHBOARD_ROW[n][1], DASHBOARD_ROW[n][2]) for n in _DISPLAY_ORDER]
+
+
+STATISTICS_NOTE = ("Основа показателей по заказам — статистика WB. Маржа, прибыль, ДРР и рентабельность "
+                   "по заказам используют количество, суммы и расходы статистики. Воронка показана отдельно для сверки; "
+                   "её сумма после СПП остаётся оценкой по скидке того же артикула и дня. "
+                   "Выкупы, возвраты и фактическая прибыль сохраняют свои источники.")
+
+
+def dashboard_rows(order_source="funnel"):
+    if order_source == "funnel":
+        return DASHBOARD_ROWS
+    labels = {n: label for n, label in _ORDER_LABELS.items() if n not in (10, 11, 68)}
+    row_map = {**ROW, funnel_orders.SPP_ROW: DASHBOARD_ROW[funnel_orders.SPP_ROW]}
+    order = [6, 7, 8, 9, 12, 13, funnel_orders.SPP_ROW,
+             *[n for n, _, _, _ in ROWS if n not in (6, 7, 8, 9, 12, 13)]]
+    return [(n, labels.get(n, row_map[n][0]), row_map[n][1], row_map[n][2]) for n in order]
+
+
+def order_note(order_source="funnel"):
+    return ORDER_NOTE if order_source == "funnel" else STATISTICS_NOTE
+
+
+class _MissingOrderInput(Exception):
+    """An explicit unavailable dependency; never catch unrelated arithmetic errors."""
 
 
 def _d(a, b):
@@ -131,7 +176,7 @@ def _d(a, b):
 def periods(yesterday: date) -> dict:
     """Окна колонок как в эталоне (TODAY()-1 = yesterday)."""
     today = yesterday + timedelta(days=1)
-    wd = today.isoweekday()                                
+    wd = today.isoweekday()                                                                 
     w_end = today - timedelta(days=wd)
     w_beg = w_end - timedelta(days=6)
     m_beg = yesterday.replace(day=1)
@@ -155,46 +200,65 @@ def _buyout_pct(weekly: list[dict], p_from: date, p_to: date) -> float:
 
 
 def compute(c, shop: int, yesterday: date | None = None, nm_ids: list[int] | None = None, custom: dict | None = None,
-            *, funnel_first: bool = False) -> dict:
+            *, funnel_first: bool = False, order_source: str = "funnel") -> dict:
     """custom — свои окна {"имя": (с, по)} вместо колонок листа.
 
-    funnel_first — представление пяти дашбордов: воронка первой, пропуски null.
+    funnel_first — расширенное представление пяти дашбордов; order_source выбирает
+    основу экономики заказов. В дополнительных строках воронки пропуски null.
     Номера финансовых строк и прежний контракт Главной сохраняются.
     """
+    if order_source not in ("funnel", "statistics"):
+        raise ValueError("Unknown dashboard order source")
+    use_funnel = funnel_first and order_source == "funnel"
     yesterday = yesterday or today_msk() - timedelta(days=1)
     P = custom or periods(yesterday)
     lo = min(v[0] for v in P.values())
-    sums = _period_sums(nm_day.iter_cached(c, shop, lo, max(v[1] for v in P.values()), nm_ids), P)
-    
+                                                                                               
     from ..agg import real_week
     weekly = [{**w, "date_from": date.fromisoformat(w["date_from"]), "date_to": date.fromisoformat(w["date_to"])}
               for w in real_week.weekly_deliveries(c, shop, nm_ids) if w["date_from"]]
     from ..agg import buyout
-    bp_orders = buyout.for_nms(c, shop, nm_ids) if buyout.needed(c, shop) else None   
+    bp_orders = buyout.for_nms(c, shop, nm_ids) if buyout.needed(c, shop) else None                                                
     tax = c.execute("SELECT * FROM tax_settings WHERE account_id=%s AND valid_from<=%s ORDER BY valid_from DESC LIMIT 1",
                     (shop, yesterday)).fetchone() or {"regime": "Другая СНО", "rate": 0, "vat_rate": 0, "vat_deduct_wb": 0}
     regime, rate = tax["regime"], float(tax["rate"])
     vat_rate, vat_wb = float(tax["vat_rate"]), float(tax["vat_deduct_wb"])
 
+    hi = max(v[1] for v in P.values())
+    source = nm_day.iter_cached(c, shop, lo, hi, nm_ids)
+    if funnel_first:
+        costs = funnel_orders.cost_history(c, shop, hi, nm_ids) if use_funnel else {}
+        source = (funnel_orders.project(r, costs, vat_enabled=vat_rate > 0) for r in source)
+        sums = funnel_orders.sum_strict(source, P)
+    else:
+        sums = _period_sums(source, P)
+    row_map = ({n: (lab, fmt, fn) for n, lab, fmt, fn in dashboard_rows(order_source)}
+               if funnel_first else ROW)
+
     cols = {}
     for col, (a, b) in P.items():
         k = 1.0
-        if col == "M":   
+        if col == "M":                                             
             k = calendar.monthrange(b.year, b.month)[1] / ((b - a).days + 1)
         vals: dict[int, float] = {}
 
         def S(key, total=sums[col], k=k):
-            if funnel_first and key in ("f_orders", "f_orders_sum") and key not in total:
-                return None
+            if funnel_first and key in funnel_orders.KEYS and total.get(key) is None:
+                raise _MissingOrderInput
             return k * float(total.get(key, 0))
 
         def R(n, vals=vals):
             if n not in vals:
-                vals[n] = ev(n)
+                try:
+                    vals[n] = ev(n)
+                except _MissingOrderInput:
+                    vals[n] = None
+            if vals[n] is None:
+                raise _MissingOrderInput
             return vals[n]
 
         def ev(n, S=S, R=R, a=a, b=b):
-            f = ROW[n][2]
+            f = row_map[n][2]
             if f == "buyout_pct":
                 return bp_orders if bp_orders is not None else _buyout_pct(weekly, a, b)
             if f == "tax_orders":
@@ -207,7 +271,7 @@ def compute(c, shop: int, yesterday: date | None = None, nm_ids: list[int] | Non
                     return _income_tax_estimate(R(18) + R(23) + R(27) + R(33) + R(34), regime, rate)
                 return 0.0
             if f == "vat_deduct_orders":
-                return S("vat_deduct_orders") * R(14) + ((R(20) + R(21) + R(27) + R(23)) * vat_wb / (1 + vat_wb) * -1 if vat_rate >= 0.10 else 0)
+                return S("f_vat_deduct_orders" if use_funnel else "vat_deduct_orders") * R(14) + ((R(20) + R(21) + R(27) + R(23)) * vat_wb / (1 + vat_wb) * -1 if vat_rate >= 0.10 else 0)
             if f in ("tax_buyouts", "tax_returns"):
                 ret = R(70) if f == "tax_returns" else 0
                 vat = R(81) if f == "tax_returns" else R(61)
@@ -228,9 +292,12 @@ def compute(c, shop: int, yesterday: date | None = None, nm_ids: list[int] | Non
                 return R(62) + R(73)
             return f(S, R)
 
-        for n, _, fmt, f in ROWS:
+        for n, (_, fmt, f) in row_map.items():
             if f is not None:
-                R(n)
+                try:
+                    R(n)
+                except _MissingOrderInput:
+                    pass
         cols[col] = vals
 
     if custom:
@@ -245,7 +312,7 @@ def compute(c, shop: int, yesterday: date | None = None, nm_ids: list[int] | Non
         return _d(cols[x][n], cols[y][n]) - 1 if cols[y][n] else 0
 
     out = []
-    for n, lab, fmt, f in DASHBOARD_ROWS if funnel_first else ROWS:
+    for n, lab, fmt, f in dashboard_rows(order_source) if funnel_first else ROWS:
         row = {"row": n, "label": lab, "fmt": fmt}
         if f is not None:
             for col in P:
@@ -277,8 +344,8 @@ def _period_sums(rows, periods):
     totals = {col: {} for col in periods}
     corrections = {col: {} for col in periods}
     for row in rows:
-        
-        
+                                                                                 
+                                                                                        
         fields = [(key, float(value) if isinstance(value, Decimal) else value)
                   for key, value in row.items() if isinstance(value, (int, float, Decimal))]
         for col, (start, end) in periods.items():

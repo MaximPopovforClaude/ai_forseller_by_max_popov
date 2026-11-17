@@ -33,7 +33,7 @@ def validate(c, shop, data):
                 dropped.append({'title': str(t.get('title', ''))[:300], 'reason': 'Кампания не принадлежит магазину'})
                 continue
             adv = int(adv)
-            
+                                                                                            
             if not campaigns[adv] or not set(ids + check_ids) <= campaigns[adv]:
                 check = {'kind': 'none'}
             else:
@@ -55,7 +55,7 @@ def validate(c, shop, data):
         t['check'] = check
         if not can_auto_check({'check_spec': check, 'nm_ids': ids}):
             t['check'] = {'kind': 'none', 'nm_ids': ids}
-        
+                                                                                     
         t['effect_week'] = None
         valid.append(t)
     return {**data, 'tasks': valid}, dropped

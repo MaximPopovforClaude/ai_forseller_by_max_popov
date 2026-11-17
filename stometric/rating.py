@@ -31,8 +31,8 @@ def drop(r: float, n: int, floor: float, star: int = 1) -> int | None:
     return math.floor(n * (r - floor) / (floor - star)) + 1
 
 
-EXACT = 0.011          
-CAL_DAYS, CAL_DR = 45, 0.03     
+EXACT = 0.011                                                                                              
+CAL_DAYS, CAL_DR = 45, 0.03                                                                                                    
 
 
 def basis(c, shop: int, rows: list[dict]) -> None:
@@ -84,7 +84,7 @@ def latest(c, shop: int, nm_ids=None, day=None) -> list[dict]:
         r["total"] = sum(r[f"s{s}"] or 0 for s in STAR)
         r["month"] = sum(r[f"m{s}"] or 0 for s in STAR)
         r["avg"] = sum(s * (r[f"s{s}"] or 0) for s in STAR) / r["total"] if r["total"] else None
-        if r["rating"] is not None and float(r["rating"]) == 0:        
+        if r["rating"] is not None and float(r["rating"]) == 0:                                                            
             r["rating"] = None
     basis(c, shop, rows)
     return rows

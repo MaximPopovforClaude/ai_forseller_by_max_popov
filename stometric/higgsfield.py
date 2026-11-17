@@ -15,7 +15,7 @@ from .config import site_url
 REDIRECT = site_url() + "/api/higgsfield/callback"
 SCOPE = "openid email offline_access"
 
-
+                                                                                                                      
 MODELS = {
     "nano_pro": {"title": "Nano Banana Pro", "model": "nano_banana_pro", "params": {"resolution": "2k"}},
     "nano2": {"title": "Nano Banana 2", "model": "nano_banana_2", "params": {"resolution": "2k"}},
@@ -33,7 +33,7 @@ def _j(v):
     return v if isinstance(v, dict) else json.loads(v)
 
 
-
+                                                           
 def _client_id(c) -> str:
     r = c.execute("SELECT value FROM app_settings WHERE key='hf_oauth_client'").fetchone()
     if r:
@@ -80,7 +80,7 @@ def callback(c, state: str, code: str) -> int:
     try:
         payload = tok.get("id_token", "").split(".")[1]
         email = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))).get("email")
-    except Exception:  
+    except Exception:                
         pass
     _save(c, st["ws"], st["uid"], tok, email)
     return st["ws"]
@@ -92,7 +92,7 @@ def _token(c, ws_id: int) -> str | None:
     if not r:
         return None
     d = json.loads(vault.decrypt(bytes(r["enc"])))
-    c.commit()                  
+    c.commit()                                                                                                 
     if d["exp"] > time.time():
         return d["access"]
     if not d.get("refresh"):
@@ -115,7 +115,7 @@ def connected(c, shop: int) -> bool:
     return bool(c.execute("SELECT 1 FROM workspace_secrets WHERE workspace_id=%s AND kind='higgsfield'", (shop_ws(c, shop),)).fetchone())
 
 
-
+           
 class Client:
     def __init__(self, c, shop: int):
         tok = _token(c, shop_ws(c, shop))

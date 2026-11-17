@@ -27,10 +27,10 @@ HOSTS = {
     "common": "https://common-api.wildberries.ru",
     "documents": "https://documents-api.wildberries.ru",
     "feedbacks": "https://feedbacks-api.wildberries.ru",
-    "calendar": "https://dp-calendar-api.wildberries.ru",     
+    "calendar": "https://dp-calendar-api.wildberries.ru",                                                                    
 }
 
-
+                                                                               
 INTERVAL = {
     "statistics:/api/v1/supplier/orders": 62,
     "statistics:/api/v1/supplier/sales": 62,
@@ -64,9 +64,10 @@ INTERVAL = {
     "advert:/adv/v0/normquery/list": 0.3,
     "advert:/adv/v0/normquery/get-minus": 0.3,
     "advert:/adv/v0/normquery/get-bids": 0.3,
-    "advert:/api/advert/v0/bids/recommendations": 12.5,     
-    "advert:/api/advert/v2/budget": 3.1,                    
+    "advert:/api/advert/v0/bids/recommendations": 12.5,                          
+    "advert:/api/advert/v2/budget": 3.1,                                          
     "advert:/adv/v1/balance": 1.1,
+    "advert:/api/advert/v0/daily-limits": 12.5,
     "content:/content/v2/get/cards/list": 0.7,
     "prices:/api/v2/list/goods/filter": 0.7,
     "common:/api/v1/tariffs/commission": 62,
@@ -82,7 +83,7 @@ INTERVAL = {
 }
 DEFAULT_INTERVAL = 21
 
-
+                                                                                                    
 WRITE_PATTERNS = re.compile(r"/(save-ad|delete|rename|start|pause|stop|deposit|upload|bids(?!/min|/recommendations)|set-minus|"
                             r"drafts|cancel|update|create)\b", re.I)
 READ_POSTS = {"/content/v2/get/cards/list", "/api/analytics/v3/sales-funnel/products/history",
@@ -91,11 +92,11 @@ READ_POSTS = {"/content/v2/get/cards/list", "/api/analytics/v3/sales-funnel/prod
               "/api/finance/v1/sales-reports/detailed", "/api/finance/v1/sales-reports/list",
               "/api/finance/v1/acquiring/detailed", "/api/v1/supplies", "/adv/v1/normquery/stats", "/api/advert/v2/budget",
               "/api/v2/search-report/product/search-texts", "/api/v2/list/goods/filter",
-              "/api/v2/stocks-report/products/products", "/api/v2/stocks-report/offices"}  
+              "/api/v2/stocks-report/products/products", "/api/v2/stocks-report/offices"}              
 READ_POSTS.add("/api/analytics/v3/sales-funnel/products")
-READ_POSTS.add("/content/v2/cards/error/list")   
-READ_POSTS.add("/api/analytics/v2/item-rating")   
-READ_POSTS |= {"/adv/v0/normquery/get-bids", "/adv/v0/normquery/get-minus", "/adv/v0/normquery/list"}   
+READ_POSTS.add("/content/v2/cards/error/list")                             
+READ_POSTS.add("/api/analytics/v2/item-rating")                             
+READ_POSTS |= {"/adv/v0/normquery/get-bids", "/adv/v0/normquery/get-minus", "/adv/v0/normquery/list"}                                 
 
 
 class WBError(RuntimeError):
@@ -121,19 +122,19 @@ class WB:
         self.token = token_for(conn, account)
         self.http = httpx.Client(timeout=300, headers={"Authorization": self.token})
 
-    
+                    
     def _wait_slot(self, bucket: str, max_wait: float = 120):
         row = self.c.execute(
             "INSERT INTO api_rate(account_id,bucket,next_allowed) VALUES (%s,%s,now()) "
             "ON CONFLICT (account_id,bucket) DO UPDATE SET bucket=EXCLUDED.bucket RETURNING next_allowed,blocked_until",
             (self.acc["id"], bucket)).fetchone()
-        
-        
+                                                                                 
+                                                                                
         now = datetime.now(timezone.utc)
         reserved = max(now, row["next_allowed"], row.get("blocked_until") or now)
         wait = (reserved - now).total_seconds()
         if wait > max_wait:
-            self.c.commit()  
+            self.c.commit()                           
             raise RateLimited(bucket, reserved)
         nxt = reserved + timedelta(seconds=INTERVAL.get(bucket, DEFAULT_INTERVAL))
         self.c.execute("UPDATE api_rate SET next_allowed=%s WHERE account_id=%s AND bucket=%s", (nxt, self.acc["id"], bucket))
@@ -141,8 +142,8 @@ class WB:
         remaining = (reserved - datetime.now(timezone.utc)).total_seconds()
         if remaining > 0:
             time.sleep(remaining)
-        
-        
+                                                                                 
+                                                                         
         penalty = self.c.execute("SELECT blocked_until FROM api_rate WHERE account_id=%s AND bucket=%s",
                                  (self.acc["id"], bucket)).fetchone()
         self.c.commit()
@@ -156,7 +157,7 @@ class WB:
         self.c.commit()
         return row["blocked_until"] if row else until
 
-    
+                   
     def _archive(self, bucket: str, payload) -> str:
         now = datetime.now(timezone.utc)
         slug = re.sub(r"[^a-z0-9]+", "_", bucket.lower()).strip("_")
@@ -167,10 +168,10 @@ class WB:
             json.dump(payload, fh, ensure_ascii=False)
         return str(f.relative_to(config.ROOT))
 
-    
+                   
     def call(self, host: str, path: str, method: str = "GET", params: dict | None = None, body=None,
-             bucket_path: str | None = None, max_wait: float = 120, raw: bool = False):
-        if WRITE_PATTERNS.search(path) or (method == "POST" and path not in READ_POSTS):
+             bucket_path: str | None = None, max_wait: float = 120, raw: bool = False, archive_response: bool = True):
+        if method not in ('GET', 'POST') or WRITE_PATTERNS.search(path) or (method == "POST" and path not in READ_POSTS):
             raise WBError(f"{method} {path}: не в списке методов только для чтения — запрещено")
         bucket = _bucket(host, bucket_path or path)
         self._wait_slot(bucket, max_wait)
@@ -187,7 +188,7 @@ class WB:
                 err = r.text[:500]
                 raise WBError(f"{method} {path}: HTTP {status}: {err}")
             data = r.content if raw else (r.json() if r.content.strip() else None)
-            if not raw:
+            if not raw and archive_response:
                 arch = self._archive(bucket, {"request": {"method": method, "path": path, "params": params, "body": body},
                                               "fetched_at": datetime.now(timezone.utc).isoformat(), "response": data})
                 rows = len(data) if isinstance(data, list) else None

@@ -22,14 +22,16 @@ export function useTabData(shop: number | null, tab: string, query: TabQ, enable
       if (!isCurrent()) return;
       live = false;
       controller.abort();
-      setResult({ key, viewKey, data: null, loading: false, error: "Расчёт не ответил за 90 секунд. Повторите загрузку." });
+      setResult(old => ({ key, viewKey, data: tab === "jam_deep" && old?.viewKey === viewKey ? old.data : null,
+        loading: false, error: "Расчёт не ответил за 90 секунд. Повторите загрузку." }));
     }, 90_000);
     api.tab(shop, tab, query, controller.signal).then((data) => {
       if (!isCurrent()) return;
       if (data.key !== tab) throw new Error("Сервер вернул другую вкладку. Повторите загрузку.");
       setResult({ key, viewKey, data, error: "", loading: false });
     }).catch((error: Error) => {
-      if (isCurrent()) setResult({ key, viewKey, data: null, error: error.message || "Не удалось загрузить вкладку.", loading: false });
+      if (isCurrent()) setResult(old => ({ key, viewKey, data: tab === "jam_deep" && old?.viewKey === viewKey ? old.data : null,
+        error: error.message || "Не удалось загрузить вкладку.", loading: false }));
     }).finally(() => clearTimeout(timeout));
     return () => { live = false; clearTimeout(timeout); controller.abort(); };
   // key includes all query fields; recreating an equivalent query must not restart the request.

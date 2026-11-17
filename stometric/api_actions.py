@@ -47,10 +47,10 @@ def actions_get(shop_id: int, u=Depends(current_user), c=Depends(conn)):
 
 class TokenIn(BaseModel):
     token: str
-    client_id: str | None = None      
+    client_id: str | None = None                                           
     agree: bool
     version: str
-    purpose: str = "main"             
+    purpose: str = "main"                                                                                                     
 
 
 @router.put("/api/shops/{shop_id}/actions/write_token")
@@ -104,7 +104,7 @@ class PauseIn(BaseModel):
 
 @router.put("/api/shops/{shop_id}/actions/paused")
 def actions_pause(shop_id: int, body: PauseIn, u=Depends(current_user), c=Depends(conn)):
-    
+                                                                             
     s = _shop(c, u, shop_id, "editor" if body.paused else "admin")
     c.execute("UPDATE accounts SET actions_paused=%s WHERE id=%s", (body.paused, shop_id))
     actions.log(c, shop_id, "_all", "pause" if body.paused else "resume", None, None, None, u["id"])
@@ -139,7 +139,7 @@ def actions_block(shop_id: int, block: str, body: BlockIn, u=Depends(current_use
     return jsonable_encoder(res)
 
 
-
+              
 @router.get("/api/shops/{shop_id}/reviews")
 def reviews_list(shop_id: int, stars: str = "all", state: str = "unanswered", nm: int | None = None, q: str = "",
                  ours: bool = False, limit: int = 50, offset: int = 0, u=Depends(current_user), c=Depends(conn)):
@@ -259,7 +259,7 @@ def reviews_rules_save(shop_id: int, body: RulesIn, u=Depends(current_user), c=D
     return jsonable_encoder(reviews.rules(c, shop_id, body.nm_id))
 
 
-
+                                                    
 @router.get("/api/shops/{shop_id}/reco/{nm}")
 def reco_get(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
     from . import reco
@@ -272,10 +272,10 @@ def reco_get(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
         x.update(vendor_code=n.get("vendor_code"), title=n.get("title"), photo=n.get("photo"))
     good = {x["nm_id"] for x in reco._catalog(c, shop_id)}
     for x in m["items"]:
-        x["ok"] = x["nm_id"] in good          
+        x["ok"] = x["nm_id"] in good                                                                         
     m["min_rating"] = reco.min_rating(c, shop_id)
     m["reg"] = reco.REGS.get(reco.reg(c, shop_id) or "")
-    if m["reg"]:                              
+    if m["reg"]:                                                                                  
         m["queue"] = [{**x, "kind_t": reco.KIND_T[x["kind"]], "photo": (names.get(x["nm_id"]) or {}).get("photo")}
                       for x in reco.ordered(c, shop_id, nm, m)]
     return jsonable_encoder(m)
@@ -292,7 +292,7 @@ def reco_build(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
     import threading
     from . import db
 
-    def run():                                  
+    def run():                                                                                                     
         with db.connect() as c2:
             reco.build(c2, shop_id, nm, acc["key"])
     threading.Thread(target=run, daemon=True).start()

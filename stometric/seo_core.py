@@ -7,9 +7,9 @@ import threading
 from . import db, market
 
 WORD = re.compile(r"[a-zа-я0-9]+")
-COMPS = 8            
-KW_PAGES = 4         
-REC = 15             
+COMPS = 8                                                       
+KW_PAGES = 4                                                                    
+REC = 15                                                                                                    
 
 
 def norm(text: str) -> str:
@@ -45,7 +45,7 @@ def _own_queries(c, shop: int, nm: int, notes: list) -> dict:
     j = c.execute("""SELECT items, date_from, date_to FROM jam_cache WHERE account_id=%s AND nm_id=%s AND state='done'
                      ORDER BY fetched_at DESC LIMIT 1""", (shop, nm)).fetchone()
     if j and j["items"]:
-        for i in j["items"]:              
+        for i in j["items"]:                                                                                                            
             k = norm(i.get("text"))
             e = out.setdefault(k, {"phrase": i.get("text"), "freq": None, "opens": 0, "orders": 0, "pos": None})
             e["freq"] = max(e["freq"] or 0, i.get("frequency") or 0) or None
@@ -82,7 +82,7 @@ def _comp_keys(tok: str, ids: list[int]) -> list[dict]:
     for _ in range(KW_PAGES):
         p = {"product_ids": ",".join(map(str, ids)), "period": 30, "ordering": "-frequency"}
         if len(ids) >= 4:
-            p["percent_products__gte"] = 25          
+            p["percent_products__gte"] = 25                                                                           
         if low is not None:
             p["frequency__lte"] = low - 1
         r = market._call(tok, "get_external_analytics", schema_name="external.keywords.list", params=p, extra_fields="count_products,percent_products")
@@ -179,7 +179,7 @@ def start(shop: int, nm: int) -> bool:
                 data = collect(c2, shop, nm)
                 c2.execute("UPDATE seo_core SET state='done', data=%s, built_at=now() WHERE account_id=%s AND nm_id=%s",
                            (json.dumps(data, ensure_ascii=False, default=str), shop, nm))
-            except Exception as e:  
+            except Exception as e:                
                 c2.rollback()
                 c2.execute("UPDATE seo_core SET state='error', error=%s WHERE account_id=%s AND nm_id=%s", (str(e)[:400], shop, nm))
             c2.commit()
@@ -195,7 +195,7 @@ def set_mark(c, shop: int, nm: int, phrase: str, mark: str | None, uid: int):
     p = norm(phrase)
     if not p:
         raise ValueError("Пустой ключ")
-    if mark == "main":                       
+    if mark == "main":                                                                           
         c.execute("UPDATE seo_kw_marks SET mark='core' WHERE account_id=%s AND nm_id=%s AND mark='main'", (shop, nm))
     if mark in ("core", "main", "excluded"):
         c.execute("""INSERT INTO seo_kw_marks(account_id,nm_id,phrase,mark,user_id) VALUES (%s,%s,%s,%s,%s)
@@ -215,15 +215,15 @@ def view(c, shop: int, nm: int) -> dict:
     text = norm(cd["title"] + " " + cd["description"])
     title = norm(cd["title"])
     mk = marks(c, shop, nm)
-    anchor = _stem((norm(cd["subject"]) or title).split()[0]) if (cd["subject"] or title) else ""   
-    rel = lambda p: not anchor or any(_stem(w).startswith(anchor[:5]) for w in p.split())  
+    anchor = _stem((norm(cd["subject"]) or title).split()[0]) if (cd["subject"] or title) else ""                                       
+    rel = lambda p: not anchor or any(_stem(w).startswith(anchor[:5]) for w in p.split())                                       
     keys = {k["phrase"]: dict(k) for k in ((s or {}).get("data") or {}).get("keys") or []}
-    for p, m in mk.items():                  
+    for p, m in mk.items():                                                               
         keys.setdefault(p, {"phrase": p, "src": ["manual"], "freq": None})
     rec, seen = set(), {tuple(sorted(_stem(w) for w in p.split())) for p, m in mk.items() if m in ("core", "main")}
     for k in sorted((k for k in keys.values() if k["phrase"] not in mk and rel(k["phrase"]) and
                      ((k.get("orders") or 0) > 0 or (k.get("ad_orders") or 0) > 0 or (k.get("comp_share") or 0) >= 0.5)), key=_score, reverse=True):
-        sig = tuple(sorted(_stem(w) for w in k["phrase"].split()))   
+        sig = tuple(sorted(_stem(w) for w in k["phrase"].split()))                                                                   
         if sig in seen or len(rec) >= REC:
             continue
         seen.add(sig)

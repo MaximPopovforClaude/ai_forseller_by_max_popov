@@ -39,13 +39,13 @@ def parse_file(raw: bytes, name: str) -> list[dict]:
             raise PromoError("Не удалось открыть ZIP-архив. Распакуйте его и загрузите файл .xlsx.") from e
     try:
         wb = open_xlsx(io.BytesIO(raw))
-    except Exception as e:  
+    except Exception as e:                
         raise PromoError("Не похоже на файл акции из ЛК WB (xlsx)") from e
     try:
         return _parse_workbook(wb)
     except PromoError:
         raise
-    except Exception as e:  
+    except Exception as e:                                                               
         raise PromoError("Не удалось прочитать таблицу. Скачайте файл акции заново в формате .xlsx.") from e
     finally:
         wb.close()
@@ -58,8 +58,8 @@ def _parse_workbook(wb):
         for row in ws.iter_rows(values_only=True):
             cells = [re.sub(r"\s+", " ", str(x or "")).strip().lower() for x in row]
             if head is None:
-                
-                
+                                                                                  
+                                                                      
                 nm_i = next((cells.index(x) for x in ("артикул wb", "артикул вб", "номенклатура (код 1с)", "артикул") if x in cells), None)
                 pr_i = next((i for i, x in enumerate(cells) if "плановая цена" in x or "цена для акции" in x or "цена по акции" in x
                              or "цена для участия" in x), None)

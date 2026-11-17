@@ -7,7 +7,7 @@ import urllib.request
 ANTHROPIC = "anthropic"
 CLAUDE_MODEL = "claude-sonnet-5-5"
 
-
+                                                                                                                             
 PROVIDERS = {
     ANTHROPIC: {"title": "Claude (Anthropic)", "model": CLAUDE_MODEL, "keys": "console.anthropic.com → API Keys"},
     "openai": {"title": "ChatGPT (OpenAI)", "base": "https://api.openai.com/v1", "model": "gpt-5", "max": "max_completion_tokens",
@@ -70,7 +70,7 @@ def _http(url: str, headers: dict, body: dict | None, timeout: int) -> dict:
         try:
             msg = json.loads(e.read()).get("error")
             msg = msg.get("message") if isinstance(msg, dict) else msg
-        except Exception:  
+        except Exception:                
             msg = None
         raise AiError(f"нейросеть ответила ошибкой {e.code}" + (f": {str(msg)[:200]}" if msg else "")) from None
 
@@ -81,7 +81,7 @@ def _headers(key) -> dict:
     return {"Authorization": f"Bearer {key}"}
 
 
-
+                               
 def _oa_part(b: dict, p: dict):
     t = b.get("type")
     if t == "text":
@@ -171,10 +171,10 @@ def check(key) -> str | None:
     try:
         res = _http(url, _headers(key), None, 30)
         ids = {str(m.get("id") or "").removeprefix("models/") for m in res.get("data") or []}
-        if getattr(key, "model", None) and ids and key.model not in ids:     
+        if getattr(key, "model", None) and ids and key.model not in ids:                                                              
             return f"{name}: модели «{key.model}» нет у этого ключа. Например: {', '.join(sorted(ids)[:8])}"
         return None
     except AiError as e:
         return f"{name} не принял ключ (неверный или отключён)" if " 401" in str(e) or " 403" in str(e) else f"{name}: {e}"
-    except Exception as e:  
+    except Exception as e:                
         return f"{name} не ответил: {str(e)[:120]}"

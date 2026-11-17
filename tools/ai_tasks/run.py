@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import stometric.web  
+import stometric.web              
 from stometric import ai_tasks
 from stometric.config import today_msk
 from stometric.db import connect
@@ -59,7 +59,7 @@ def build(c, shop: int, run_id: int, day) -> dict:
         c.execute("UPDATE ai_task_runs SET entry_ok=%s, data_coverage=%s::jsonb, status='running', started_at=now() WHERE id=%s",
                   (entry_ok, json.dumps(source_state, ensure_ascii=False, default=str), run_id))
     else:
-        
+                                                                                  
         c.execute("UPDATE ai_task_runs SET entry_ok=%s, status='running', started_at=now() WHERE id=%s", (entry_ok, run_id))
     c.commit()
     WORK.mkdir(parents=True, exist_ok=True)
@@ -82,7 +82,7 @@ def build(c, shop: int, run_id: int, day) -> dict:
     try:
         out = ai_tasks.load(c, shop, day, run_id, data, brief, platform=platform)
     except ValueError:
-        
+                                                                              
         raise
     except Exception as error:
         raise RuntimeError('uncertain task persistence: ' + type(error).__name__) from error
@@ -94,8 +94,8 @@ def build(c, shop: int, run_id: int, day) -> dict:
                   (str(data.get("summary") or "")[:2000], model, note, run_id))
         c.commit()
     except Exception as error:
-        
-        
+                                                                           
+                                                              
         raise RuntimeError('uncertain task completion: ' + type(error).__name__) from error
     log(shop, f"готово за {time.time() - t0:.0f} с:", note[:300])
     return out
@@ -128,12 +128,12 @@ def claim_run(c, s, day, now, *, force=False, retry_interrupted=False):
         from stometric.ozon_task_data import coverage
         current = coverage(c, s, y)
         previous = last.get("data_coverage") or {}
-        
+                                                                                              
         oz_improved = any(set(v.get(field, [])) - set(previous.get("sources", {}).get(k, {}).get(field, []))
                           for k, v in current.get("sources", {}).items()
                           for field in ("days", "days_basic", "days_full"))
-    
-    
+                                                                                                                                          
+                              
     n_runs = c.execute("""SELECT count(*) n FROM ai_task_runs WHERE account_id=%s AND day=%s AND status <> 'requested'
                           AND coalesce(error, '') NOT ILIKE '%%limit%%'""", (s, day)).fetchone()["n"]
     why = None
@@ -192,7 +192,7 @@ def main():
     for s in shops:
         try:
             ai_tasks.check(c, s)
-        except Exception as e:  
+        except Exception as e:                
             c.rollback()
             log(s, "автоотметки: ошибка", e)
     now = datetime.now(MSK)
@@ -205,7 +205,7 @@ def main():
         log(s, "разбор:", why)
         try:
             build(c, s, rid, day)
-        except Exception as e:  
+        except Exception as e:                
             c.rollback()
             error = ('uncertain execution: ' + type(e).__name__
                      if isinstance(e, (MemoryError, TimeoutError, subprocess.TimeoutExpired)) else str(e)[:2000])

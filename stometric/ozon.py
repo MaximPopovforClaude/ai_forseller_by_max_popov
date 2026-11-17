@@ -15,7 +15,7 @@ from .api_log_params import encode as log_params
 
 HOST = "https://api-seller.ozon.ru"
 READ_PATHS = {
-    "/v1/review/list", "/v1/review/count", "/v1/review/comment/list",          
+    "/v1/review/list", "/v1/review/count", "/v1/review/comment/list",                                         
     "/v1/roles", "/v3/product/list", "/v3/product/info/list", "/v5/product/info/prices", "/v1/analytics/stocks",
     "/v2/analytics/stock_on_warehouses", "/v2/posting/fbo/list", "/v3/posting/fbs/list", "/v3/finance/transaction/list",
     "/v1/analytics/data", "/v1/finance/realization/by-day", "/v1/finance/products/buyout",

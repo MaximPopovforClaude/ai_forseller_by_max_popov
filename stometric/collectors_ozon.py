@@ -11,9 +11,9 @@ from .config import today_msk
 from .ozon import Ozon, OzonError
 
 MSK = timezone(timedelta(hours=3))
-HISTORY_DAYS = 120          
-REFRESH_DAYS = 14           
-SHORT_DAYS = 3              
+HISTORY_DAYS = 120                           
+REFRESH_DAYS = 14                                                                                                           
+SHORT_DAYS = 3                                                                   
 
 
 def _ts(s):
@@ -44,7 +44,7 @@ def _iso(d: date, end=False) -> str:
     return f"{d.isoformat()}T{'23:59:59' if end else '00:00:00'}.000Z"
 
 
-
+              
 def run_products(ctx: Ctx) -> dict:
     oz: Ozon = ctx.wb
     ids, last = [], ""
@@ -68,7 +68,7 @@ def run_products(ctx: Ctx) -> dict:
             sku = it.get("sku") or next((s.get("sku") for s in it.get("sources") or [] if s.get("sku")), None)
             img = it.get("primary_image")
             img = (img[0] if isinstance(img, list) and img else img) or ((it.get("images") or [None])[0])
-            if prev:                     
+            if prev:                                                                                        
                 oz_card_diff(ctx.c, ctx.acc["id"], sku, prev.get(pid), it)
             ctx.c.execute(
                 """INSERT INTO oz_products(account_id,product_id,offer_id,sku,name,model_id,type_id,category_id,photo,archived,raw,updated_at)
@@ -84,7 +84,7 @@ def run_products(ctx: Ctx) -> dict:
     try:
         _type_names(ctx)
     except OzonError:
-        pass                  
+        pass                                                                                                  
     return {"rows": n}
 
 
@@ -146,8 +146,10 @@ def run_stocks(ctx: Ctx) -> dict:
     n = 0
     for k in range(0, len(skus), 100):
         r = oz.post("/v1/analytics/stocks", {"skus": [str(s) for s in skus[k:k + 100]]})
+        if not isinstance(r.get('items'),list):
+            raise ValueError('Неполный ответ остатков Ozon: нет списка items')
         for it in r.get("items") or []:
-            avail = _f(it.get("available_stock_count")) or 0
+            avail = _f(it.get("available_stock_count"))
             other = sum(_f(it.get(f)) or 0 for f in ("transit_stock_count", "requested_stock_count", "valid_stock_count",
                                                      "waiting_docs_stock_count", "expiring_stock_count", "stock_defect_stock_count",
                                                      "other_stock_count", "transit_defect_stock_count", "excess_stock_count"))
@@ -156,12 +158,16 @@ def run_stocks(ctx: Ctx) -> dict:
                            it.get("warehouse_name") or it.get("cluster_name"), avail, other, json.dumps(it, ensure_ascii=False)))
             n += 1
     ctx.c.execute("DELETE FROM oz_stocks WHERE account_id=%s AND snap_at < now() - interval '35 days'", (ctx.acc["id"],))
+                                                                      
+    if skus:
+        ctx.c.execute('INSERT INTO balance_stock_runs(account_id,source,snap_at,row_count) VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING',
+                      (ctx.acc['id'],'oz_stocks',snap,n))
     ctx.c.commit()
     return {"rows": n, "skus": len(skus)}
 
 
-
-PII = ("customer", "addressee")     
+                   
+PII = ("customer", "addressee")                                          
 
 
 def _save_posting(ctx, p: dict, scheme: str) -> int:
@@ -256,7 +262,7 @@ def run_fbs(ctx: Ctx) -> dict:
     return {"rows": n, "since": str(since), "cursor": {"loaded": True, "tail_at": tail_at}}
 
 
-
+               
 def _money(o) -> float:
     return _f((o or {}).get("amount")) or 0.0
 
@@ -368,10 +374,10 @@ def run_transactions(ctx: Ctx) -> dict:
     return {"rows": n, "since": str(since), "cursor": {"loaded": True, "tail_at": tail_at}}
 
 
-
+               
 METRICS_FULL = ["hits_view_search", "hits_view_pdp", "hits_view", "hits_tocart_search", "hits_tocart_pdp", "hits_tocart",
                 "session_view_search", "session_view_pdp", "session_view", "position_category", "revenue", "ordered_units",
-                "cancellations", "returns"]          
+                "cancellations", "returns"]                                                                 
 METRICS_BASIC = ["revenue", "ordered_units"]
 
 
@@ -382,7 +388,7 @@ def run_analytics(ctx: Ctx) -> dict:
     metrics = METRICS_BASIC if st.get("metrics") == METRICS_BASIC else METRICS_FULL
     today = today_msk()
     back = date.fromisoformat(st["back"]) if st.get("back") else None
-    if back is None or back > today - timedelta(days=90):   
+    if back is None or back > today - timedelta(days=90):                                                            
         b = (back or today) - timedelta(days=1)
         a = b - timedelta(days=13)
         new_back = a
@@ -395,13 +401,13 @@ def run_analytics(ctx: Ctx) -> dict:
                                                "dimension": ["sku", "day"], "filters": [], "sort": [], "limit": 1000, "offset": off})
         except OzonError as e:
             if metrics != METRICS_BASIC and any(w in str(e).lower() for w in ("premium", "metric", "403", "400")):
-                metrics = METRICS_BASIC            
+                metrics = METRICS_BASIC                                                    
                 continue
             raise
         data = (r.get("result") or {}).get("data") or []
         got = len((r.get("result") or {}).get("totals") or (data[0].get("metrics") if data else []) or [])
         if metrics != METRICS_BASIC and got and got < len(metrics):
-            
+                                                                                                                            
             metrics = METRICS_BASIC
             off = 0
             continue
@@ -421,7 +427,7 @@ def run_analytics(ctx: Ctx) -> dict:
     return {"rows": n, "period": f"{a}..{b}", "metrics": len(metrics), "cursor": {"back": str(new_back), "metrics": metrics}}
 
 
-
+                                                                     
 AD_HISTORY_DAYS = 90
 AD_REFRESH_DAYS = 7
 
@@ -485,7 +491,7 @@ def run_ad_campaigns(ctx: Ctx) -> dict:
 def _ad_stats(pf, kind: str, a: date, b: date) -> list[dict]:
     p = {"dateFrom": a.isoformat(), "dateTo": b.isoformat()}
     data = pf.get(f"/api/client/statistics/{kind}/json", p, allow_404=True)
-    if data is None:                              
+    if data is None:                                                                    
         data = pf.get(f"/api/client/statistics/{kind}", p)
     from .ozon_perf import rows
     return rows(data)
@@ -544,11 +550,11 @@ def run_ad_daily(ctx: Ctx) -> dict:
         ctx.c.commit()
     res = {"rows": n, "since": str(since), "cursor": {"loaded": True}}
     if unknown:
-        res["unparsed_headers"] = sorted(unknown)[:3]       
+        res["unparsed_headers"] = sorted(unknown)[:3]                                                                   
     return res
 
 
-
+                                                                 
 def _premium_denied(e: Exception) -> bool:
     t = str(e).lower()
     return any(w in t for w in (" 403", " 404", "premium", "permission", "denied", "not available", "подписк"))
@@ -592,14 +598,14 @@ def run_buyouts(ctx: Ctx) -> dict:
     return {"rows": n, "since": str(since), "cursor": {"loaded": True, "tail_at": tail_at}}
 
 
-AD_SKU_PER_RUN = 6          
+AD_SKU_PER_RUN = 6                                                                           
 
 
 def _hdr(h: str) -> str | None:
     t = h.lower().replace("ё", "е")
     if "модел" in t:
         return "models_money" if ("₽" in t or "руб" in t or "продаж" in t) else "models"
-    if t in ("дата", "день"):                       
+    if t in ("дата", "день"):                                                                 
         return "day"
     if t == "sku" or t.startswith("sku"):
         return "sku"
@@ -682,7 +688,7 @@ def run_queries(ctx: Ctx) -> dict:
     d = today - timedelta(days=3 if st.get("loaded") else 30)
     n = 0
     while d < today:
-        for k in range(0, len(skus), 6):                  
+        for k in range(0, len(skus), 6):                                                               
             page = 0
             while True:
                 try:
@@ -690,7 +696,7 @@ def run_queries(ctx: Ctx) -> dict:
                                                                          "skus": skus[k:k + 6], "limit_by_sku": 15, "page": page,
                                                                          "page_size": 100, "sort_by": "BY_VIEWS", "sort_dir": "DESCENDING"})
                 except OzonError as e:
-                    if "no data for the specified period" in str(e):   
+                    if "no data for the specified period" in str(e):                                                                 
                         return {"rows": n, "cursor": {"loaded": True}}
                     raise
                 for q in r.get("queries") or []:
@@ -750,7 +756,7 @@ def has_ad_key(c, account_id: int) -> bool:
 
 
 
-
+                                                                                                    
 NO_SUB = "not available with existing subscription"
 
 
@@ -770,7 +776,7 @@ def _oz_review_put(c, acc: int, r: dict, offers: dict) -> bool:
         (acc, r["id"], sku, pr.get("offer_id"), pr.get("name"), val, r.get("text"), int(r.get("photos_amount") or 0),
          bool(r.get("videos_amount")), r.get("order_status"), created, (r.get("status") or "").upper() == "PROCESSED",
          r.get("is_rating_participant"))).fetchone()
-    if row["fresh"] and val is not None and val <= 4:      
+    if row["fresh"] and val is not None and val <= 4:                                                                             
         b = c.execute("""SELECT avg(valuation) a FROM wb_feedbacks WHERE account_id=%s AND nm_id=%s AND created_at < %s
                          AND coalesce(in_rating, true) AND id<>%s""", (acc, sku, created, r["id"])).fetchone()["a"]
         c.execute("UPDATE wb_feedbacks SET rating_before=%s WHERE account_id=%s AND id=%s", (b, acc, r["id"]))
@@ -813,7 +819,7 @@ def run_reviews(ctx: Ctx) -> dict:
             if r["id"] not in still]
     if done:
         ctx.c.execute("UPDATE wb_feedbacks SET answered=true, updated_at=now() WHERE account_id=%s AND id = ANY(%s)", (acc, done))
-    
+                                                                                                                       
     todo = ctx.c.execute("""SELECT id FROM wb_feedbacks WHERE account_id=%s AND answered AND answer_text IS NULL
                             AND created_at > now() - interval '60 days' ORDER BY created_at DESC LIMIT 100""", (acc,)).fetchall()
     for t in todo:
@@ -828,7 +834,7 @@ def run_reviews(ctx: Ctx) -> dict:
         from .private_ai import scheduled_ai
         with scheduled_ai(ctx.c):
             out["auto"] = reviews.process(ctx.c, acc)
-    except Exception as e:  
+    except Exception as e:                
         ctx.c.rollback()
         out["auto_error"] = str(e)[:200]
     return out
@@ -854,9 +860,9 @@ def due(c, account_id: int) -> list[str]:
         last = st.get(name, {}).get("last_run_at")
         cur = st.get(name, {}).get("cursor") or {}
         if name == "oz_reviews" and cur.get("no_subscription") and last and now - last < timedelta(hours=6):
-            continue               
+            continue                                                               
         if name == "oz_analytics" and cur.get("back") and date.fromisoformat(cur["back"]) > today_msk() - timedelta(days=90):
-            out.append(name)       
+            out.append(name)                                        
             continue
         if last is None or now - last >= timedelta(minutes=mins) - timedelta(minutes=2):
             out.append(name)

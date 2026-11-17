@@ -236,7 +236,7 @@ def edit(c, shop: int, pid: int, uid: int, file_ids: list[int], task: str, mods:
     return batch
 
 
-
+                  
 def kick():
     """Запустить обработчик очереди, если он ещё не работает (в этом процессе)."""
     with _LOCK:
@@ -270,8 +270,8 @@ def _expire_direct(c, pid: int | None = None):
 
 
 def _claim(c):
-    
-    
+                                                                               
+                                                                            
     c.execute("SELECT pg_advisory_xact_lock(hashtext('seller-analytics:visual:render-claim'))")
     _expire_direct(c)
     return c.execute("""UPDATE vis_renders SET state='running', started_at=now() WHERE id IN (
@@ -327,8 +327,8 @@ def _direct_one(c, r: dict):
             raise RenderError(VIP_UNAVAILABLE)
         token = None if subscription else oi.key(c, r["account_id"])
         refs = _direct_refs(c, r)
-        
-        
+                                                                         
+                                                                                
         claimed = c.execute("""UPDATE vis_renders SET request_id=%s WHERE id=%s AND state='running'
                                AND request_id IS NULL RETURNING id""", ("chatgpt:started" if subscription else "openai:started", rid)).fetchone()
         c.commit()
@@ -351,7 +351,7 @@ def _direct_one(c, r: dict):
                         raw, r["created_by"], vip.MODEL_ID if subscription else oi.MODEL)
         c.execute("UPDATE vis_renders SET state='done', file_id=%s, finished_at=now() WHERE id=%s", (f["id"], rid))
         c.commit()
-        del refs, raw, token  
+        del refs, raw, token                                                           
     except Exception as exc:
         c.rollback()
         msg = str(exc) if isinstance(exc, (RenderError, oi.ImageError)) else provider.UNCERTAIN
@@ -362,8 +362,8 @@ def _direct_one(c, r: dict):
     try:
         check(rid)
     except Exception:
-        
-        
+                                                                                 
+                                                                           
         c.rollback()
         c.execute("""UPDATE vis_renders SET check_res='{"skipped":true}'::jsonb
                      WHERE id=%s AND state='done' AND check_res IS NULL""", (rid,))
@@ -380,7 +380,7 @@ def _one(rid: int):
             _direct_one(c, r)
             return
         try:
-            if not r["refs"]:                       
+            if not r["refs"]:                                                                 
                 raise RenderError(NO_SRC)
             cl = hf.Client(c, r["account_id"])
             if not r["request_id"]:
@@ -389,10 +389,10 @@ def _one(rid: int):
                     f = c.execute("SELECT path, mime, name FROM vis_files WHERE id=%s", (fid,)).fetchone()
                     if f and Path(f["path"]).exists():
                         raw, mime = Path(f["path"]).read_bytes(), f["mime"]
-                        if mime == "image/webp":                       
+                        if mime == "image/webp":                                                                            
                             raw, mime = _jpeg(raw), "image/jpeg"
                         mids.append(hf.upload(cl, raw, mime, f"ref_{fid}{'.png' if mime == 'image/png' else '.jpg'}"))
-                        if r.get("zone") and len(mids) == 1:      
+                        if r.get("zone") and len(mids) == 1:                                                               
                             mids.append(hf.upload(cl, _framed(raw, r["zone"]), "image/jpeg", f"zone_{fid}.jpg"))
                 req = hf.submit(cl, r["model"], r["prompt"], mids)
                 c.execute("UPDATE vis_renders SET request_id=%s WHERE id=%s", (req, rid))
@@ -402,7 +402,7 @@ def _one(rid: int):
             while True:
                 if c.execute("SELECT state FROM vis_renders WHERE id=%s", (rid,)).fetchone()["state"] == "canceled":
                     c.commit()
-                    return                          
+                    return                                                                   
                 c.commit()
                 st = hf.wait(cl, r["request_id"])
                 if st.get("status") == "completed":
@@ -417,7 +417,7 @@ def _one(rid: int):
             if not img:
                 raise RenderError("Нейросеть не вернула картинку")
             raw = httpx.get(img, timeout=120).content
-            if r.get("zone") and r["refs"]:          
+            if r.get("zone") and r["refs"]:                                                                                   
                 f0 = c.execute("SELECT path FROM vis_files WHERE id=%s", (r["refs"][0],)).fetchone()
                 if f0 and Path(f0["path"]).exists():
                     raw = _paste(Path(f0["path"]).read_bytes(), raw, r["zone"])
@@ -426,7 +426,7 @@ def _one(rid: int):
                             raw, r["created_by"], f"{r['model']} {r['request_id']}")
             c.execute("UPDATE vis_renders SET state='done', file_id=%s, finished_at=now() WHERE id=%s AND state<>'canceled'", (f["id"], rid))
             c.commit()
-        except Exception as e:  
+        except Exception as e:                
             c.rollback()
             msg = str(e)[:400] if isinstance(e, (RenderError, hf.HFError, visual.VisualError)) else f"{type(e).__name__}: {str(e)[:300]}"
             c.execute("UPDATE vis_renders SET state='error', error=%s, finished_at=now() WHERE id=%s AND state<>'canceled'", (msg, rid))
@@ -434,7 +434,7 @@ def _one(rid: int):
             return
     try:
         check(rid)
-    except Exception:  
+    except Exception:                                              
         pass
 
 
@@ -474,7 +474,7 @@ def _paste(orig: bytes, new: bytes, z: list[float]) -> bytes:
     with Image.open(io.BytesIO(orig)) as a, Image.open(io.BytesIO(new)) as b:
         a, b = a.convert("RGB"), b.convert("RGB")
         W, H = a.size
-        if abs(b.width / b.height - W / H) > 0.01:          
+        if abs(b.width / b.height - W / H) > 0.01:                                                                         
             if b.width / b.height > W / H:
                 nw = round(b.height * W / H)
                 b = b.crop(((b.width - nw) // 2, 0, (b.width - nw) // 2 + nw, b.height))
@@ -486,7 +486,7 @@ def _paste(orig: bytes, new: bytes, z: list[float]) -> bytes:
         x0, y0, x1, y1 = z[0] * W, z[1] * H, (z[0] + z[2]) * W, (z[1] + z[3]) * H
         m = Image.new("L", (W, H), 0)
         ImageDraw.Draw(m).rectangle([x0 - pad, y0 - pad, x1 + pad, y1 + pad], fill=255)
-        
+                                                                                                                                                                
         gx, gy = (x1 - x0) * 0.5, (y1 - y0) * 0.5
         box = (max(0, round(x0 - gx)), max(0, round(y0 - gy)), min(W, round(x1 + gx)), min(H, round(y1 + gy)))
         d = ImageChops.difference(a.crop(box).filter(ImageFilter.GaussianBlur(2)), b.crop(box).filter(ImageFilter.GaussianBlur(2))).convert("L")
@@ -549,8 +549,8 @@ def renders(c, pid: int) -> list[dict]:
 
 
 def ensure_running(c, pid: int):
-    
-    
+                                                                                
+                                                                              
     _expire_direct(c, pid)
     c.commit()
     if c.execute("SELECT 1 FROM vis_renders WHERE project_id=%s AND state IN ('queued','running') LIMIT 1", (pid,)).fetchone():
@@ -561,8 +561,8 @@ def ensure_running(c, pid: int):
         kick()
 
 
-
-
+                              
+                                                                                                                      
 SLIDE_ORDER = """(SELECT CASE WHEN r.slot LIKE 'first:%%' THEN coalesce(substring(r.slot from '[0-9]+')::int, 0)
                                 WHEN r.slot LIKE 'slide:%%' THEN 100 + coalesce(substring(r.slot from '[0-9]+')::int, 0) ELSE 999 END
                      FROM vis_renders r WHERE r.id = coalesce(ph.render_id, (SELECT id FROM vis_renders WHERE file_id=ph.file_id LIMIT 1)))"""

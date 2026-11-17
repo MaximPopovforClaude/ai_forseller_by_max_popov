@@ -35,12 +35,12 @@ def _queries(c, shop: int, nm: int) -> list[dict]:
     try:
         r = WB(c, c.execute("SELECT * FROM accounts WHERE id=%s", (shop,)).fetchone()).call(
             "analytics", "/api/v2/search-report/product/search-texts", "POST", body=body) or {}
-    except Exception:  
+    except Exception:                                          
         c.rollback()
         return []
     out = []
     for x in (r.get("data") or {}).get("items") or []:
-        g = lambda k: (x.get(k) or {}).get("current") if isinstance(x.get(k), dict) else x.get(k)  
+        g = lambda k: (x.get(k) or {}).get("current") if isinstance(x.get(k), dict) else x.get(k)              
         out.append({"q": x.get("text"), "freq_month": g("frequency"), "pos": g("avgPosition"), "opens": g("openCard"), "orders": g("orders")})
     return out
 
@@ -179,7 +179,7 @@ def suggest(c, shop: int, nm: int, scope: str, uid: int) -> dict:
             if f == "media":
                 order = [int(i) - 1 for i in v if str(i).isdigit()]
                 if sorted(order) != list(range(len(media))):
-                    continue                     
+                    continue                                                              
                 v = [media[i] for i in order]
             d = cards.draft_set(c, shop, nm, f, v, uid, source="ai", note=why)
             done.append(f)
@@ -210,7 +210,7 @@ def start(shop: int, nm: int, scope: str, uid: int) -> bool:
                 res = suggest(c2, shop, nm, scope, uid)
                 txt = res["summary"] or ("Изменения в черновике: " + ", ".join(res["fields"]) if res["fields"] else "Нейросеть не нашла, что улучшить.")
                 c2.execute("UPDATE card_ai_jobs SET state='done', summary=%s, finished_at=now() WHERE account_id=%s AND nm_id=%s", (txt, shop, nm))
-            except Exception as e:  
+            except Exception as e:                
                 c2.rollback()
                 c2.execute("UPDATE card_ai_jobs SET state='error', error=%s, finished_at=now() WHERE account_id=%s AND nm_id=%s",
                            (str(e)[:400], shop, nm))

@@ -66,7 +66,7 @@ class ExistingInstallation(unittest.TestCase):
             current = ROOT/'stometric/migrations'
             for source in current.glob('*.sql'):
                 n = int(source.name.split('_')[0])
-                if n <= 109 or n == 900:
+                if n <= 127 or n == 900:
                     (old/source.name).write_bytes(source.read_bytes())
             with patch.object(db, 'connect', return_value=c), patch.object(db, 'MIGRATIONS', old):
                 db.migrate()
@@ -82,9 +82,9 @@ class ExistingInstallation(unittest.TestCase):
             before = {t:c.execute('SELECT * FROM '+t).fetchall() for t in tables}
             with patch.object(db, 'connect', return_value=c), patch.object(db, 'MIGRATIONS', current):
                 applied = db.migrate()
-                self.assertIn('110_password_reset.sql', applied)
-                self.assertIn('121_workspace_xyz_news.sql', applied)
-                self.assertIn('125_order_sources_news.sql', applied)
+                self.assertIn('139_jam_deep.sql', applied)
+                self.assertIn('153_company_balance.sql', applied)
+                self.assertIn('157_platform_batch.sql', applied)
                 self.assertNotIn('900_selfhost_personal_ai.sql', applied)
                 self.assertEqual(db.migrate(), [])
             self.assertEqual({t:c.execute('SELECT * FROM '+t).fetchall() for t in tables}, before)

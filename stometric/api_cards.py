@@ -86,7 +86,7 @@ def card_get(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
         return _state(c, u, shop_id, nm, d)
     try:
         card = cards.live_card(c, shop_id, nm)
-    except Exception as e:  
+    except Exception as e:                
         _err(e)
     st = _state(c, u, shop_id, nm, None)
     st["base"] = jsonable_encoder(cards.view(card))
@@ -98,7 +98,7 @@ def card_charcs(shop_id: int, nm: int, subject_id: int, u=Depends(current_user),
     _shop(c, u, shop_id, "viewer")
     try:
         return jsonable_encoder(cards.charcs(c, shop_id, subject_id))
-    except Exception as e:  
+    except Exception as e:                
         _err(e)
 
 

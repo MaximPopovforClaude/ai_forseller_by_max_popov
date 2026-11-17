@@ -8,6 +8,26 @@ from . import wb_demand
 KEYS = ('orders', 'buyouts', 'price_spp', 'ads', 'profit')
 
 
+def price_spp(row):
+    """Same daily order-weighted price for the chart and action cells."""
+    orders = float(row.get('orders') or 0)
+    amount = row.get('orders_sum_spp')
+    return round(float(amount) / orders, 2) if orders and amount is not None else None
+
+
+def daily_prices(c, shop, start, end, nms=None):
+    """Small, optional WB projection; no current-price fallback for historical days."""
+    out = {}
+    for row in c.execute('''SELECT d.nm_id, d.day, (d.data->>'orders')::numeric orders,
+            (d.data->>'orders_sum_spp')::numeric orders_sum_spp
+        FROM agg_nm_day d JOIN agg_state s ON s.account_id=d.account_id AND s.name='nm_day'
+            AND d.day BETWEEN s.covered_from AND s.covered_to
+        WHERE d.account_id=%s AND d.day BETWEEN %s AND %s
+          AND (%s::bigint[] IS NULL OR d.nm_id=ANY(%s::bigint[]))''', (shop, start, end, nms, nms)):
+        out.setdefault(row['nm_id'], {})[row['day'].isoformat()] = price_spp(row)
+    return out
+
+
 def values(rows, days, bp, tax, covered=None, funnel=False):
     out = {k: [] for k in KEYS}
     for day in days:
@@ -17,8 +37,7 @@ def values(rows, days, bp, tax, covered=None, funnel=False):
             continue
         s = rows.get(day) or {}
         v = rnp._vals(s, bp, tax)
-        o = float(s.get('orders') or 0)
-        v['price_spp'] = round(float(s['orders_sum_spp']) / o, 2) if o and s.get('orders_sum_spp') is not None else None
+        v['price_spp'] = price_spp(s)
         if funnel:
             v['orders'] = wb_demand.number(s.get('f_orders')) if day < today_msk() else None
         for k in KEYS:
@@ -39,7 +58,7 @@ def get(c, shop, end=None):
             raise NotReady('Готовых данных для графиков пока нет.')
         covered = (state['covered_from'], state['covered_to'])
         bp, bp0 = rnp.buyout_pct(c, shop)
-        
+                                                                                           
         sel = ', '.join(f"(data->>'{k}')::numeric {k}" for k in rnp.F + ['f_orders'])
         raw = c.execute(f'''SELECT nm_id, day, {sel} FROM agg_nm_day
             WHERE account_id=%s AND day BETWEEN %s AND %s ORDER BY nm_id, day''', (shop, days[0], end))

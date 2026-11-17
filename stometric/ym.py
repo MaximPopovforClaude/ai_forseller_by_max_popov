@@ -20,13 +20,13 @@ READ = [
     ("POST", r"/v2/campaigns/\d+/stats/orders"), ("POST", r"/v2/campaigns/\d+/stats/skus"),
     ("POST", r"/v2/businesses/\d+/offer-mappings"), ("POST", r"/v2/businesses/\d+/offer-prices"),
     ("POST", r"/v2/campaigns/\d+/offers/stocks"),
-    
+                                                                                                      
     ("POST", r"/v2/reports/(united-netting|united-marketplace-services|shows-sales|boost-consolidated|shows-boost|goods-movement|stocks-on-warehouses)/generate"),
     ("GET", r"/v2/reports/info/[\w-]+"),
 ]
 INTERVAL = {"stats/orders": 1.0, "offer-mappings": 1.0, "offer-prices": 1.0, "offers/stocks": 1.0, "reports": 2.0}
 DEFAULT_INTERVAL = 0.5
-
+                                                                                           
 READ_SCOPES = {"ALL_METHODS_READ_ONLY", "INVENTORY_AND_ORDER_PROCESSING_READ_ONLY", "PRICING_READ_ONLY", "OFFERS_AND_CARDS_MANAGEMENT_READ_ONLY",
                "PROMOTION_READ_ONLY", "FINANCE_AND_ACCOUNTING"}
 

@@ -5,7 +5,7 @@ import json
 
 from . import auth
 
-KINDS = [  
+KINDS = [                                                     
     ("spp", "СПП / соинвест (цена покупателя)", "💸 Цена для покупателя изменилась"),
     ("price", "Изменение цены товара (любым пользователем)", "🏷 Цена товара изменилась"),
     ("ads", "Реклама: новые предложения ИИ", "📢 Реклама: новые предложения"),
@@ -24,7 +24,7 @@ def sync_changes(c) -> int:
     """Новые изменения цены из журнала карточек → события ленты (ref не даёт задвоить)."""
     r = c.execute("SELECT value FROM app_settings WHERE key='news_cc_last'").fetchone()
     last = int(r["value"]) if r else None
-    if last is None:   
+    if last is None:                                                                               
         last = c.execute("SELECT coalesce(max(id),0) m FROM card_changes").fetchone()["m"]
     rows = c.execute("""SELECT ch.*, coalesce(n.vendor_code, op.offer_id) vc, coalesce(n.title, op.name) title
                         FROM card_changes ch LEFT JOIN nomenclature n ON n.account_id=ch.account_id AND n.nm_id=ch.nm_id
@@ -34,7 +34,7 @@ def sync_changes(c) -> int:
     from .exclusions import excluded
     for x in rows:
         last = x["id"]
-        if x["kind"] != "price" or x["nm_id"] in excluded(c, x["account_id"]):     
+        if x["kind"] != "price" or x["nm_id"] in excluded(c, x["account_id"]):                                   
             continue
         o, w = x["old_value"] or {}, x["new_value"] or {}
         if not o.get("final") or not w.get("final") or o["final"] == w["final"]:
@@ -72,7 +72,7 @@ def sync_spp(c) -> int:
     n = 0
     from .exclusions import excluded
     from .showcase import fresh_accounts
-    sc = fresh_accounts(c)              
+    sc = fresh_accounts(c)                                                                         
     for r in rows:
         if r["account_id"] in sc or r["nm_id"] in excluded(c, r["account_id"]):
             continue
@@ -92,7 +92,7 @@ def sync_spp(c) -> int:
                       (r["account_id"], r["nm_id"], json.dumps(d, ensure_ascii=False), f"spp:{r['account_id']}:{r['nm_id']}:{r['last_dt']}"))
             n += 1
         elif old is not None and r["last_order"] is not None:
-            keep = float(old)        
+            keep = float(old)                                                                                      
         c.execute("""INSERT INTO spp_state(account_id,nm_id,spp,price,last_order,updated_at) VALUES (%s,%s,%s,%s,%s,now())
                      ON CONFLICT (account_id,nm_id) DO UPDATE SET spp=EXCLUDED.spp, price=EXCLUDED.price, last_order=EXCLUDED.last_order,
                        updated_at=now()""", (r["account_id"], r["nm_id"], keep if keep is not None else base, price, r["last_dt"]))
@@ -135,10 +135,10 @@ def line(kind: str, d: dict, nm, x: dict | None = None) -> str:
                   else f"\n   Покупатель платит ~{_rub(d['new_buyer'])} вместо ~{_rub(d['old_buyer'])}")
         buyer = d.get("new_buyer")
         return s + _info(x, float(buyer) if buyer else None, "витрина" if d.get("src") == "showcase" else "цена покупателя")
-    if kind == "volume":                 
+    if kind == "volume":                                                                                    
         o, w = float(d["old"]), float(d["new"])
         pct = (w - o) / o * 100 if o else 0
-        f = lambda v: f"{v:.2f}".rstrip("0").rstrip(".").replace(".", ",")  
+        f = lambda v: f"{v:.2f}".rstrip("0").rstrip(".").replace(".", ",")              
         subj = html.escape(d.get("subject") or (x or {}).get("subject") or "")
         s = (f"📦 <code>{name}</code> ({nm}){' — ' + subj if subj else ''}\n"
              f"{'🟢' if w < o else '🔴'} {f(o)} → {f(w)} л ({'+' if w > o else '−'}{f(abs(w - o))} | {'+' if pct > 0 else '−'}{abs(pct):.1f} %)".replace(".", ",")
@@ -151,7 +151,7 @@ def line(kind: str, d: dict, nm, x: dict | None = None) -> str:
         if d.get("old_w") is not None and d.get("new_w") is not None and d["old_w"] != d["new_w"]:
             s += f"\n   Вес: {f(d['old_w'])} → {f(d['new_w'])} кг"
         return s
-    if kind == "entry":                  
+    if kind == "entry":                                                                                                     
         def one(x):
             return (f"<code>{html.escape(x['vendor_code'])}</code> · {html.escape(x['section'])} / {html.escape(x['point'])}: "
                     f"{x['clicks_avg']:.0f} → {x['clicks']} переходов ({'+' if x['change_pct'] > 0 else ''}{x['change_pct']} %)")
@@ -222,7 +222,7 @@ def send_pending(c) -> int:
             try:
                 if notify(c, s["user_id"], s["chat_id"], txt):
                     sent += 1
-            except Exception:  
+            except Exception:                                                            
                 pass
     c.execute("UPDATE news_events SET notified=true WHERE id = ANY(%s)", ([e["id"] for e in ev],))
     c.commit()

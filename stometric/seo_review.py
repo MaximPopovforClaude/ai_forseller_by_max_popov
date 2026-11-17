@@ -71,7 +71,7 @@ def approve(c, user: dict, draft_id: int) -> dict:
         raise actions.ActionDenied("Этот черновик уже не ждёт согласования")
     if not can_review(c, user, d):
         raise actions.ActionDenied("Согласовать может менеджер артикула или администратор магазина")
-    res = cards.apply(c, d["account_id"], d["nm_id"], user["id"])       
+    res = cards.apply(c, d["account_id"], d["nm_id"], user["id"])                                                                       
     c.execute("UPDATE card_drafts SET review_state='approved', reviewed_by=%s, reviewed_at=now() WHERE id=%s", (user["id"], d["id"]))
     _event(c, d, "approved" if res["status"] == "applied" else "error", user["id"], "; ".join(res.get("errors") or []) or None)
     if d["review_from"] and d["review_from"] != user["id"]:

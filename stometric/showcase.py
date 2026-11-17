@@ -8,8 +8,8 @@ from datetime import datetime
 
 from . import db
 
-STEP = 1.0           
-FRESH = "2 hours"    
+STEP = 1.0                                       
+FRESH = "2 hours"                                              
 
 
 def fetch(nms):
@@ -48,7 +48,7 @@ def save_panels(c, tg: dict, panels: dict) -> int:
         if not t:
             continue
         a = t["account_id"]
-        pid = pid or 0                          
+        pid = pid or 0                                                                                                            
         was = old.get((a, nm))
         if was is not None and was != pid:
             c.execute("""INSERT INTO card_changes(account_id,nm_id,detected_at,kind,field,old_value,new_value,source)
@@ -64,7 +64,7 @@ def save_panels(c, tg: dict, panels: dict) -> int:
     return n
 
 
-VOL_STEP = 0.1      
+VOL_STEP = 0.1                                                              
 
 
 def save_vols(c, tg: dict, vols: dict) -> int:
@@ -113,8 +113,8 @@ def save(c, tg: dict, prices: dict) -> dict:
         spp = round((1 - price / sp) * 100, 1) if sp else None
         o = old.get((a, nm))
         n["checked"] += 1
-        changed = o is None or float(o["price"] or 0) != price or\
-            (None if o["seller_price"] is None else float(o["seller_price"])) != sp or (o["spp"] is None) != (spp is None) or\
+        changed = o is None or float(o["price"] or 0) != price or \
+            (None if o["seller_price"] is None else float(o["seller_price"])) != sp or (o["spp"] is None) != (spp is None) or \
             (spp is not None and float(o["spp"]) != spp)
         c.execute("""INSERT INTO wb_showcase(account_id,nm_id,basic,price,seller_price,spp,checked_at,changed_at)
                      VALUES (%s,%s,%s,%s,%s,%s,now(),now())

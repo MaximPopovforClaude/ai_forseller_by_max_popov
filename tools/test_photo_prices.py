@@ -1,5 +1,5 @@
 """Synthetic price arithmetic and real SQL on disposable, socketless PostgreSQL."""
-import stometric.web  
+import stometric.web                                      
 from datetime import datetime, timedelta, timezone, date
 from decimal import Decimal
 from pathlib import Path
@@ -66,13 +66,13 @@ class Arithmetic(unittest.TestCase):
                 if 'FROM photo_events' in sql: return Cursor(events)
                 raise AssertionError(sql)
         c = Db()
-        
+                                                                
         original = c.execute
         def execute(sql, args=()):
             return Cursor([{'ok':1}]) if c.own and 'FROM nomenclature' in sql else original(sql,args)
         c.execute = execute
-        with patch.object(api_manager, '_role'), patch.object(photos, 'period_stats', side_effect=lambda *a: {}),\
-             patch.object(photo_entry, 'periods', return_value={}),\
+        with patch.object(api_manager, '_role'), patch.object(photos, 'period_stats', side_effect=lambda *a: {}), \
+             patch.object(photo_entry, 'periods', return_value={}), \
              patch.object(photos, 'effect', return_value={}), patch.object(prices, 'periods', return_value={i:{'before_spp':i*100} for i in (1,2,3)}) as read:
             result = api_manager.pf_item(7,77,u={},c=c)
             self.assertEqual(result['current_period']['prices']['before_spp'],300)
@@ -120,7 +120,7 @@ class PriceSql(unittest.TestCase):
         self.assertIsNone(prices.periods(self.c,9,77,[{'id':1,'taken_at':at(0)}],now=at(5))[1]['before_spp'])
 
     def test_absent_snapshot_does_not_extrapolate_past_last_observation(self):
-        self.c.raw('DELETE FROM wb_showcase;')  
+        self.c.raw('DELETE FROM wb_showcase;')                                   
         values = prices.periods(self.c,7,77,[{'id':1,'taken_at':at(0)}],now=at(5))
         self.assertEqual(values[1]['before_spp'],1000)
         self.assertEqual(values[1]['coverage'],.4)

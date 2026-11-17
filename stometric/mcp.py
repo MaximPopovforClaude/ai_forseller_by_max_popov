@@ -11,11 +11,11 @@ LEVELS = {"read": "Только чтение", "platform": "Чтение + из�
           "market": "Чтение + изменения в платформе и в кабинете маркетплейса"}
 PLANS = ("ai", "mcp", "owner")
 PREFIX = "mcp_"
-RATE_MIN = 120               
+RATE_MIN = 120                                                
 TOKEN_DAYS = 90
 
 _SHOP = r"^/api/shops/\d+/"
-BLOCKS = {                   
+BLOCKS = {                                                                            
     "platform:kb": ("База знаний", [r"^/api/(workspaces/\d+/kb|kb)/"]),
     "platform:costs": ("Себестоимость и доп. расходы", [_SHOP + r"(cost|cost/import|cost/import_url|ext_costs(/\d+)?|cost/drafts/\d+/apply)$"]),
     "platform:analytics": ("Планы, юнит-экономика, налог, исключения, акции, чек-листы, гипотезы, действия по артикулам, выгрузки",
@@ -36,10 +36,10 @@ BLOCKS = {
                      [_SHOP + r"cards/(\d+/apply|rollback/\d+)$", _SHOP + r"seo_review/\d+/approve$"]),
     "market:ads": ("Реклама: применять действия (пауза, запуск, ставки, минус-фразы…)", [_SHOP + r"ads/(decide|manual)$"]),
 }
-
+                                                                                                          
 CLOSED = [r"^/api/(admin|billing|auth|mcp|oauth|assistant|invites|higgsfield)(/|$)", r"^/api/me/",
           r"/(token|ad_token|write_token|secret|invites|members|higgsfield|key_split|paused)(/|$)"]
-HUMAN_ONLY = ("force", "price_ack")         
+HUMAN_ONLY = ("force", "price_ack")                                                                                
 
 
 class Denied(Exception):
@@ -70,7 +70,7 @@ def allowed_blocks(g: dict) -> set[str]:
 def check(g: dict, method: str, path: str, body: dict | None) -> None:
     """Можно ли подключению g этот запрос к API платформы. Нельзя — Denied с причиной (её видит нейросеть)."""
     if g.get("kind") == "plugin":
-        
+                                                                            
         read = method in ("GET", "HEAD") and re.fullmatch(r"/api/plugin/(me|entry_days|download|card/\d+)", path)
         write = method == "POST" and re.fullmatch(r"/api/plugin/(trace|entry/\d+)", path)
         if not (read or write):
@@ -132,7 +132,7 @@ def shops(c, g: dict) -> list[dict]:
             and (g.get("shops") is None or s["id"] in g["shops"])]
 
 
-
+                                                                          
 def clean(c, user: dict, ws: int, level: str, blocks: list[str], shop_ids: list[int] | None) -> tuple[str, list[str], list[int] | None]:
     from . import auth
     if level not in LEVELS:

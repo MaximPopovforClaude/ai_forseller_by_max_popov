@@ -86,7 +86,7 @@ def issue(c, target, actor_id, delivery, workspace=None):
         (digest, target["id"], actor_id, workspace, delivery, "ready" if delivery == "manual" else "pending")).fetchone()
     audit(c, actor_id, target["id"], workspace, "issued", delivery=delivery)
     c.commit()
-    
+                                                                 
     return {"url": f"{SITE}/reset-password#{token}", "expires_at": row["expires_at"], "digest": digest}
 
 
@@ -105,7 +105,7 @@ def deliver(c, target, actor_id, workspace, link, bot=None):
                      f"Ссылка одноразовая, действует {MINUTES} минут:\n{link['url']}\n\n"
                      "Если вы не просили менять пароль, не открывайте ссылку. Текущий пароль продолжит работать.")
             ok = bool(result and result.get("message_id"))
-    except Exception:  
+    except Exception:                                                              
         ok = False
     finally:
         if made_bot and bot is not None:

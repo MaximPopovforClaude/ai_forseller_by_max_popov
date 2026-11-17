@@ -62,12 +62,12 @@ async def upload(request: Request, name: str = "", u=Depends(current_user), c=De
                     (mates, sha, key)).fetchone()
     if old:
         return {"id": old["id"], "duplicate": True, "team": old["user_id"] != u["id"]}
-    first = cc.first_of_key(c, key)          
+    first = cc.first_of_key(c, key)                                                                                        
     photos = {}
     for nm in parsed["nm_ids"]:
         try:
             photos[str(nm)] = cc.photo(c, nm)
-        except Exception:  
+        except Exception:                                        
             c.rollback()
     r = c.execute("""INSERT INTO card_comparisons(user_id,file_sha,file_name,period_from,period_to,nm_ids,data,photos,content_key)
                      VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
@@ -76,9 +76,9 @@ async def upload(request: Request, name: str = "", u=Depends(current_user), c=De
     _audit(c, u, None, "compare/upload", {"id": r["id"], "nm_ids": parsed["nm_ids"], "repeat_of": first["id"] if first else None})
     c.commit()
     import threading
-    threading.Thread(target=_photo_snaps, args=(r["id"],), daemon=True).start()   
+    threading.Thread(target=_photo_snaps, args=(r["id"],), daemon=True).start()                                            
     auto = _is_client(c, u) and bool(_user_key(c, u))
-    if auto:   
+    if auto:                                                                            
         import threading
         threading.Thread(target=_auto_ai, args=(r["id"], u["id"]), daemon=True).start()
     return {"id": r["id"], "duplicate": False, "ai_started": auto, "repeat": bool(first)}
@@ -119,8 +119,8 @@ def view(cid: int, u=Depends(current_user), c=Depends(conn)):
         raise HTTPException(404, "Сравнение не найдено")
     own = r["user_id"] == u["id"]
     team = team_ids(c, u["id"])
-    mate = r["user_id"] in team                 
-    if not own and not mate:                    
+    mate = r["user_id"] in team                                                                                
+    if not own and not mate:                                                                                                      
         if not r["is_public"]:
             raise HTTPException(403, "Автор не открыл это сравнение для других")
         seen = c.execute("SELECT 1 FROM comparison_views WHERE user_id=%s AND comparison_id=%s", (u["id"], cid)).fetchone()
@@ -295,7 +295,7 @@ def write_ai(c, r: dict, viewer_id: int, key: str, store: str = "auto") -> str:
     own = r["user_id"] == viewer_id
     r = _anon(r, viewer_id)
     mine = None if own else _my_nm(c, viewer_id, r["nm_ids"])
-    if mine:   
+    if mine:                           
         data = dict(r["data"])
         data["cards"] = sorted(data["cards"], key=lambda k: k["nm_id"] != mine)
         r = {**r, "data": data}
@@ -326,7 +326,7 @@ def _photo_snaps(cid: int) -> None:
         for nm in r["nm_ids"]:
             try:
                 snaps[str(nm)] = photos.snapshot(c, nm, "compare")["snap_id"]
-            except Exception:  
+            except Exception:                
                 c.rollback()
         c.execute("UPDATE card_comparisons SET photo_snaps=%s WHERE id=%s", (json.dumps(snaps), cid))
         c.commit()
@@ -349,7 +349,7 @@ def _auto_ai(cid: int, user_id: int) -> None:
                 sv = c.execute("SELECT ai_text FROM comparison_saved WHERE user_id=%s AND comparison_id=%s", (user_id, cid)).fetchone()
                 if sv and not sv["ai_text"]:
                     write_ai(c, r, user_id, key)
-        except Exception:  
+        except Exception:                
             import traceback
             traceback.print_exc()
 
@@ -389,7 +389,7 @@ def for_shop_home(c, shop: int) -> dict | None:
     if not r:
         return None
     mine = set(r["a"] or [])
-    cards = sorted((r["data"] or {}).get("cards") or [], key=lambda k: (k["nm_id"] not in mine, k["nm_id"]))   
+    cards = sorted((r["data"] or {}).get("cards") or [], key=lambda k: (k["nm_id"] not in mine, k["nm_id"]))                                   
     return {"id": r["id"], "period_from": r["period_from"], "period_to": r["period_to"], "ai_text": r["ai_text"], "ai_model": r["ai_model"],
             "cards": [f"{k.get('brand') or ''} {k['nm_id']}".strip() for k in cards]}
 

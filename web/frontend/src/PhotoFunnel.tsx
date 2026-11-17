@@ -6,7 +6,7 @@ type Item = { nm_id: number; vendor_code: string | null; title: string | null; p
 type Eff = { views: number | null; cart: number | null; orders: number | null; conv_cart: number | null; conv_order: number | null; orders_day: number | null;
   covered_days?: number; expected_days?: number; conversion_days?: number };
 type Prices = { from: string; to: string; before_spp: number | null; after_spp: number | null; coverage: number };
-type Entry = { from: string; to: string | null; ctr: number | null; conv_cart: number | null; conv_order: number | null;
+type Entry = { conv_view_order?: number | null; from: string; to: string | null; ctr: number | null; conv_cart: number | null; conv_order: number | null;
   views: number | null; clicks: number | null; carts: number | null; orders: number | null; expected_days: number;
   report_days: number; covered_days: number; missing_days: string[]; coverage: number;
   status: "complete" | "partial" | "empty" | "pending" | "intraday" };
@@ -20,6 +20,7 @@ const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 const num = (v: number | null | undefined) => v == null ? "—" : nf.format(v);
 const money = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 const pct = (v: number | null | undefined) => (v == null ? "—" : nf.format(v * 100) + " %");
+const pct2 = (v: number | null | undefined) => v == null ? "—" : (v * 100).toFixed(2).replace(".", ",") + " %";
 const dd = (s: string) => s.slice(0, 10).split("-").reverse().join(".");
 
 export function Slides({ hashes, small }: { hashes: string[] | null | undefined; small?: boolean }) {
@@ -34,8 +35,8 @@ function change(b: number | null | undefined, a: number | null | undefined) {
   return <span className={ch >= 0 ? "up" : "down"}> {ch >= 0 ? "+" : ""}{nf.format(ch)} %</span>;
 }
 
-/** Фотоворонка: слепки первых 7 фото, история изменений, по своим — конверсии до/после. */
-export function PhotoFunnel({ shop }: { shop: number }) {
+/** Фотоворонка: текущий набор и предыдущие периоды без повторяющихся пар фото. */
+export function PhotoFunnel({ shop, selected = "", only = null }: { shop: number; selected?: string; only?: Set<number> | null }) {
   const [list, setList] = useState<Item[] | null>(null);
   const [nm, setNm] = useState<number | null>(null);
   const [d, setD] = useState<Full | null>(null);
@@ -44,20 +45,25 @@ export function PhotoFunnel({ shop }: { shop: number }) {
   useEffect(() => {
     let live = true;
     setList(null); setNm(null); setErr("");
-    http.get<Item[]>(`/api/shops/${shop}/photo_funnel`).then((x) => { if (live) { setList(x); setNm(x[0]?.nm_id ?? null); } })
+    http.get<Item[]>(`/api/shops/${shop}/photo_funnel`).then((x) => { if (live) { setList(x); } })
       .catch((e) => { if (live) setErr(e.message); });
     return () => { live = false; };
   }, [shop]);
   const load = (x: number, stamp: number) => http.get<Full>(`/api/shops/${shop}/photo_funnel/${x}`)
-    .then(value => { if (stamp === context.current) setD(value); }).catch(e => { if (stamp === context.current) setErr(e.message); });
+    .then(value => { if (stamp === context.current) { setD(value); setList(prev => prev?.map(item => item.nm_id === value.nm_id
+        ? { ...item, has_snap: !!value.current?.length, changes: Math.max(item.changes || 0, value.events.length), last_change: value.events[0]?.day ?? null } : item) ?? null); } }).catch(e => { if (stamp === context.current) setErr(e.message); });
   useEffect(() => {
     const stamp = ++context.current;
     setD(null); setMsg(""); setErr(""); setBusy(false); if (nm) load(nm, stamp);
     return () => { ++context.current; };
   }, [shop, nm]); // eslint-disable-line react-hooks/exhaustive-deps
+  const selectedNms = selected.split(",").filter(Boolean).map(Number);
+  const available = (list || []).filter(r => (!only || only.has(r.nm_id)) && (!selectedNms.length || selectedNms.includes(r.nm_id)));
+  const availableKey = available.map(r => r.nm_id).join(",");
+  useEffect(() => { setNm(cur => available.some(r => r.nm_id === cur) ? cur : available[0]?.nm_id ?? null); }, [availableKey]); // eslint-disable-line react-hooks/exhaustive-deps
   if (err && !list) return <div className="err">{err}</div>;
   if (!list) return <div className="hint">Загрузка…</div>;
-  const shown = list.filter((r) => !q || `${r.vendor_code} ${r.nm_id} ${r.title}`.toLowerCase().includes(q.toLowerCase()));
+  const shown = available.filter((r) => !q || `${r.vendor_code} ${r.nm_id} ${r.title}`.toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="comp">
       <div className="comp-side">
@@ -78,22 +84,23 @@ export function PhotoFunnel({ shop }: { shop: number }) {
               .then((r) => { if (stamp === context.current) { setMsg(r.summary || (r.changed ? "Слепок снят" : "Изменений нет")); load(d.nm_id, stamp); } })
               .catch(e => { if (stamp === context.current) setErr(e.message); }).finally(() => { if (stamp === context.current) setBusy(false); }); }}>
               {busy ? "Снимаю…" : "📸 Снять слепок сейчас"}</button>
-            {msg && <span className="ok">{msg}</span>}</div>
+            {msg && <span className="ok">{msg}</span>}{err && <span className="err">{err}</span>}</div>
           <div className="acc-box"><b>Сейчас (первые 7 фото)</b><div className="pf-row"><Slides hashes={d.current} /><Kpi p={d.current_period} /></div></div>
           <div className="acc-box">
-            <b>История изменений фото</b>
-            {!d.events.length && <div className="hint">Изменений пока не было. Слепки снимаются каждый день в 07:00 — как только фото поменяют, здесь появится запись.</div>}
+            <b>Предыдущие периоды</b>
+            {!d.events.length && <div className="hint">Сохранённых изменений пока нет. История начинается с первого успешного слепка; более ранние замены фото по нему определить нельзя. Автоматический сбор выполняется ежедневно.</div>}
             {d.events.map((e, i) => (
               <div key={i} className="pf-ev">
-                <div><b>{dd(e.day)}</b> · {e.summary}</div>
-                <div className="pf-cmp"><span className="hint">было</span><div className="pf-row"><Slides hashes={e.before} small /><Kpi p={e.period_before} /></div></div>
-                <div className="pf-cmp"><span className="hint">стало</span><div className="pf-row"><Slides hashes={e.after} small /><Kpi p={e.period} /></div></div>
-                {e.effect && <div className="pf-eff">7 дней до → после: переходы {num(e.effect.before.views)} → {num(e.effect.after.views)}
+                <b>Было</b>
+                <div className="hint">Смена этого набора {dd(e.day)}: {e.summary}</div>
+                <div className="pf-row"><Slides hashes={e.before} small /><Kpi p={e.period_before} /></div>
+                {e.effect && <details className="pf-eff"><summary>Сравнение 7 дней вокруг смены</summary>
+                  <div>7 дней до → после: переходы {num(e.effect.before.views)} → {num(e.effect.after.views)}
                   {e.effect.before.conversion_days === 7 && e.effect.after.conversion_days === 7 && change(e.effect.before.views, e.effect.after.views)}; конверсия в корзину {pct(e.effect.before.conv_cart)} → {pct(e.effect.after.conv_cart)}
                   {e.effect.before.conversion_days === 7 && e.effect.after.conversion_days === 7 && change(e.effect.before.conv_cart, e.effect.after.conv_cart)}; в заказ {pct(e.effect.before.conv_order)} → {pct(e.effect.after.conv_order)}
                   {e.effect.before.conversion_days === 7 && e.effect.after.conversion_days === 7 && change(e.effect.before.conv_order, e.effect.after.conv_order)}; заказов в день {num(e.effect.before.orders_day)} → {num(e.effect.after.orders_day)}
                   {change(e.effect.before.orders_day, e.effect.after.orders_day)}
-                  {e.effect.before.covered_days !== undefined && <small> · Воронка: {e.effect.before.covered_days}/7 → {e.effect.after.covered_days}/7 дн.; сравнение частичных периодов ограничено.</small>}</div>}
+                  {e.effect.before.covered_days !== undefined && <small> · Воронка: {e.effect.before.covered_days}/7 → {e.effect.after.covered_days}/7 дн.; сравнение частичных периодов ограничено.</small>}</div></details>}
               </div>))}
           </div>
         </>}
@@ -108,18 +115,23 @@ function Kpi({ p }: { p?: Per | null }) {
   const pc = (v: number | null) => (v == null ? "—" : (v * 100).toFixed(2).replace(".", ",") + " %");
   const d = (s: string) => `${s.slice(8, 10)}.${s.slice(5, 7)}`;
   return (
-    <div className="pf-kpi" title="CTR — по рекламным показам и кликам (другие показы WB по API не отдаёт); конверсии — воронка карточки">
-      <div className="hint">{d(p.from)}–{d(p.to)} · {p.days ? `${p.days} дн.` : "смена в течение дня"}</div>
+    <div className="pf-kpi">
+      <div className="hint">{p.days > 0 ? `${d(p.from)}–${d(p.to)} · ${p.days} дн.` : `С ${d(p.from)} · пока нет завершённых дней`}</div>
+      <div className="pf-kpi-sources">
+      <section className="pf-main-kpi" aria-label="Показатели рекламы и воронки WB">
+      <b>Реклама и воронка WB</b>
       <div><span>CTR рекламы</span><b>{pc(p.ctr)}</b></div>
       <div><span>Конв. в корзину</span><b>{pc(p.conv_cart)}</b></div>
       <div><span>Конв. в заказ</span><b>{pc(p.conv_order)}</b></div>
       <div><span>Заказов в день</span><b>{p.orders_day == null ? "—" : p.orders_day.toFixed(1).replace(".", ",")}</b></div>
       {p.covered_days !== undefined && <small className="hint">Воронка WB: заказы {p.covered_days}/{p.expected_days} дн.; конверсии {p.conversion_days}/{p.expected_days} дн.
         Пропуски не считаются нулями. Сегодня исключено.</small>}
+      </section>
       {p.entry !== undefined && <EntryKpi e={p.entry} />}
+      </div>
       {p.prices !== undefined && <>
-        <div title="Цена со скидкой продавца, до СПП"><span>Средняя цена до СПП</span><b>{p.prices?.before_spp == null ? "—" : money.format(p.prices.before_spp) + " ₽"}</b></div>
-        <div title="Цена на витрине для гостя в Москве, без скидки кошелька"><span>Средняя цена после СПП</span><b>{p.prices?.after_spp == null ? "—" : money.format(p.prices.after_spp) + " ₽"}</b></div>
+        <div className="pf-price-kpi" title="Цена со скидкой продавца, до СПП"><span>Средняя цена до СПП</span><b>{p.prices?.before_spp == null ? "—" : money.format(p.prices.before_spp) + " ₽"}</b></div>
+        <div className="pf-price-kpi" title="Цена на витрине для гостя в Москве, без скидки кошелька"><span>Средняя цена после СПП</span><b>{p.prices?.after_spp == null ? "—" : money.format(p.prices.after_spp) + " ₽"}</b></div>
         <details className="hint pf-price-note"><summary>Как рассчитаны показатели</summary>
         <small title={p.prices ? `Период цен, МСК: ${new Date(p.prices.from).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} — ${new Date(p.prices.to).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })}` : undefined}>
           {p.prices?.coverage ? `Среднее по времени · история цен покрывает ${(p.prices.coverage * 100).toFixed(1).replace(".", ",")} % периода.` : "Нет истории цен за этот период."}
@@ -136,6 +148,7 @@ function EntryKpi({ e }: { e: Entry | null }) {
     <div title="Переходы / показы по отчётам точек входа"><span>CTR</span><b>{pct(e?.ctr)}</b></div>
     <div title="Добавления в корзину / переходы"><span>Переход → корзина</span><b>{pct(e?.conv_cart)}</b></div>
     <div title="Заказы / добавления в корзину"><span>Корзина → заказ</span><b>{pct(e?.conv_order)}</b></div>
+    <div title="Заказы / показы из отчётов точек входа за доступные дни"><span>Показ → заказ</span><b>{pct2(e?.conv_view_order)}</b></div>
     <small className="hint">
       {!e ? "Нет данных за период набора фото." : e.status === "intraday" ? "Набор сменился в тот же день: дневной отчёт нельзя разделить между фото."
         : e.status === "pending" ? "Ещё нет завершённых дней для этого набора фото."

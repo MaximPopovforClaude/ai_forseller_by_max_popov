@@ -18,13 +18,13 @@ ROWS = [("rev", "Выручка (до СПП)", "money", True), ("buy", "Вык�
 
 
 def compute(c, shop: int, year: int) -> dict:
-    tax = c.execute("SELECT * FROM tax_settings WHERE account_id=%s ORDER BY valid_from DESC LIMIT 1", (shop,)).fetchone()\
+    tax = c.execute("SELECT * FROM tax_settings WHERE account_id=%s ORDER BY valid_from DESC LIMIT 1", (shop,)).fetchone() \
         or {"regime": "Другая СНО", "rate": 0, "vat_rate": 0, "vat_deduct_wb": 0}
     A = defaultdict(lambda: defaultdict(float))
     for g in real_week.cached(c, shop, date(year, 1, 1), date(year, 12, 31)):
         if g["date_from"] and g["date_from"][:4] == str(year):
             pnl_real.accumulate(A[g["date_from"][:7]], g)
-    for d, x in pnl_real.ads_fact(c, shop, f"{year}-01-01", f"{year}-12-31", only="Счет").items():   
+    for d, x in pnl_real.ads_fact(c, shop, f"{year}-01-01", f"{year}-12-31", only="Счет").items():                                   
         A[d[:7]]["ads"] += x
     ext = defaultdict(lambda: {"ext": 0.0, "give": 0.0})
     for e in c.execute("SELECT * FROM ext_costs WHERE account_id=%s AND d_from <= %s AND coalesce(d_to, d_from) >= %s",
@@ -38,7 +38,7 @@ def compute(c, shop: int, year: int) -> dict:
     months = sorted(set(A) | set(ext))
     hist = c.execute("SELECT * FROM tax_settings WHERE account_id=%s ORDER BY valid_from", (shop,)).fetchall()
 
-    def tax_of(m: str) -> dict:          
+    def tax_of(m: str) -> dict:                                                               
         end = f"{m}-31"
         cur = None
         for t in hist:
@@ -57,15 +57,15 @@ def compute(c, shop: int, year: int) -> dict:
         else:
             a, ex = A[m], ext[m]
         R = pnl_real.calc(a, tax if m == "year" else tax_of(m))
-        if m != "year" and tax_of(m)["regime"] == pnl_real.IP:     
+        if m != "year" and tax_of(m)["regime"] == pnl_real.IP:                                                 
             pnl_real.ytd_ndfl({**month_R, m: R}, [*month_R, m], lambda p: tax_of(p)["regime"] == pnl_real.IP)
             month_R[m] = R
         if m == "year":
-            R[53] = sum(month_tax.values())          
+            R[53] = sum(month_tax.values())                                                             
         else:
             month_tax[m] = R[53]
         rev = R[4]
-        
+                                                                                                                                   
         v = {"rev": rev, "buy": a["retail_disc_s"], "ret": a["retail_disc_r"], "wb_real": R[5], "spp": 1 - R[5] / rev if rev else None,
              "cost": R[47], "comm": rev - R[15] + R[25], "log": -R[28], "ads": -R[46], "ext": ex["ext"], "give": ex["give"], "pen": -R[38],
              "stor": -R[40], "acc": -R[45], "acq": -R[25], "add": R[39], "other": -R[41], "tax": -R[53]}

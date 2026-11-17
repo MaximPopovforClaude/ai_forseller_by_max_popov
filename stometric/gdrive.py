@@ -13,7 +13,7 @@ SCOPE = "https://www.googleapis.com/auth/drive.file openid email"
 REDIRECT = f"{SITE}/api/admin/google/callback"
 FOLDER = "seller-analytics — выгрузки"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-_tok: dict = {}          
+_tok: dict = {}                                                                 
 
 
 class GError(Exception):
@@ -71,7 +71,7 @@ def auth_url(c, uid: int) -> str:
 def check_state(state: str) -> int:
     try:
         d = json.loads(vault.decrypt(state.encode()))
-    except Exception:  
+    except Exception:                
         raise GError("Ссылка подключения недействительна — начните заново в админке") from None
     if time.time() - d["ts"] > 900:
         raise GError("Ссылка подключения устарела — начните заново в админке")
@@ -136,7 +136,7 @@ def upload(c, body: bytes, name: str, share_to: str | None) -> dict:
     perm = {"type": "user", "role": "writer", "emailAddress": share_to}
     url = f"https://www.googleapis.com/drive/v3/files/{f['id']}/permissions"
     p = httpx.post(url, params={"sendNotificationEmail": "false"}, headers=h, json=perm, timeout=30)
-    if p.status_code != 200:            
+    if p.status_code != 200:                                                                          
         p = httpx.post(url, params={"sendNotificationEmail": "true", "emailMessage": "Выгрузка из platform.example.org"}, headers=h, json=perm, timeout=30)
     if p.status_code == 200:
         out["shared"] = True

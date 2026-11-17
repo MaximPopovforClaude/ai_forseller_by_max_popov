@@ -5,7 +5,7 @@ import json
 from datetime import date, datetime, timedelta, timezone
 
 
-
+                                                                             
 DAILY = {
     "analytics": ("oz_analytics", "day", "Воронка"),
     "ad_daily": ("oz_ad_daily", "day", "Реклама по кампаниям"),
@@ -50,7 +50,7 @@ def _safe(c, read, label, warnings):
     try:
         with c.transaction():
             return read()
-    except Exception as exc:  
+    except Exception as exc:                                                          
         warnings.append(f"{label}: источник недоступен ({type(exc).__name__})")
         return None
 
@@ -95,7 +95,7 @@ def coverage(c, shop: int, end: date) -> dict:
                                 + "; возможен базовый отчёт без Premium. Показы, корзины и конверсии не считать нулевыми.")
     now = datetime.now(timezone.utc)
     for key, (table, column, title) in SNAPSHOTS.items():
-        
+                                                                                         
         sql = (f"SELECT max({column}) AS latest, count(*) AS n FROM {table} WHERE account_id=%s"
                if key != "stocks" else
                "SELECT max(snap_at) AS latest, count(*) AS n FROM oz_stocks WHERE account_id=%s "
@@ -116,7 +116,7 @@ def coverage(c, shop: int, end: date) -> dict:
     collectors = {r["collector"]: _iso(r["last_ok_at"]) for r in (rows or [])}
     warnings.append("Наличие строк за день не доказывает полную загрузку всех SKU, кампаний и метрик; "
                     "заказы и начисления относятся к разным событиям и датам.")
-    
+                                                                                  
     snapshot = {"shop": shop, "day": end.isoformat(), "sources": sources, "collectors": collectors}
     digest = hashlib.sha256(json.dumps(snapshot, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     return {"day": end.isoformat(), "from": start.isoformat(), "sources": sources, "collectors": collectors,

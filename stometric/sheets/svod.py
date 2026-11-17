@@ -65,7 +65,7 @@ def compute(c, shop: int, yesterday=None, nm_ids=None) -> list[dict]:
         GROUP BY 1,2,3,4""", P):
         rows[key(r)].update(buy_y=r["by"], rev_y=r["ry"] or 0, buy_w=r["bw"], rev_w=r["rw"] or 0, buy_m=r["bm"], rev_m=r["rm"] or 0,
                             buy_pm=r["bpm"], rev_pm=r["rpm"] or 0)
-    
+                                                                       
     for r in c.execute("""
         WITH last AS (SELECT max(snap_at) t FROM stocks_wb_snap WHERE account_id=%(a)s)
         SELECT lower(n.vendor_code) supplier_article, coalesce(z.skus[1], '') barcode, s.nm_id, coalesce(z.tech_size, '0') tech_size,

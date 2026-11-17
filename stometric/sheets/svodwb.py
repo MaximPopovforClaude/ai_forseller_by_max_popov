@@ -11,9 +11,10 @@ PERIODS = ["вчера", "позавчера", "за послед. 4 недел�
            "за последние 6 дней"]
 
 
-def period(name: str, y: date) -> tuple[date, date]:
+def period(name: str, y: date, as_of: date | None = None) -> tuple[date, date]:
     """Периоды как в Импорт#ОбщиеНастройки (вчера = y)."""
-    mon = y - timedelta(days=y.isoweekday() - 1)
+    calendar_day = as_of or y
+    mon = calendar_day - timedelta(days=calendar_day.isoweekday() - 1)
     if name == "вчера":
         return y, y
     if name == "позавчера":
@@ -21,15 +22,15 @@ def period(name: str, y: date) -> tuple[date, date]:
     if name == "за послед. 4 недели":
         return y - timedelta(days=27), y
     if name == "текущая неделя":
-        return mon, y
+        return mon, calendar_day
     if name == "предыдущая неделя":
         return mon - timedelta(days=7), mon - timedelta(days=1)
     if name == "позапрошлая неделя":
         return mon - timedelta(days=14), mon - timedelta(days=8)
     if name == "текущий месяц":
-        return y.replace(day=1), y
+        return calendar_day.replace(day=1), calendar_day
     if name == "предыдущий месяц":
-        e = y.replace(day=1) - timedelta(days=1)
+        e = calendar_day.replace(day=1) - timedelta(days=1)
         return e.replace(day=1), e
     if name.startswith("за последние "):
         n = int(name.split()[2])
@@ -38,7 +39,7 @@ def period(name: str, y: date) -> tuple[date, date]:
 
 
 _SUM_PREFIX = [(t, k) for k, t, ty in nm_day.COLS if ty in ("int", "money") and k not in ("nm_id", "year_week", "year_month")]
-
+                                                                                                                      
 _FULL = ["Кол-во заказов ВСЕГО", "Сумма ВСЕХ заказов, руб", "Сумма ВСЕХ заказов с учетом скидки ВБ (СПП), руб", "Кол-во выкупов",
          "Сумма выкупов, руб", "Сумма выкупов до скидки ВБ (СПП), руб", "Сумма комиссии ВБ, руб", "К оплате продавцу, руб",
          "Сумма себестоимости, руб", "Маржа, руб", "Сумма расходов на логистику, руб", "Сумма расходов на рекламу, руб",
@@ -66,12 +67,12 @@ def _resolve(title: str):
 
 SUM_METRICS = {t: _resolve(t) for t in _FULL if _resolve(t)}
 SUM_METRICS["Логистика на единицу, руб"] = "logistics_unit"
-
+                                                               
 DERIVED = {
     "Маржинальность  от суммы выкупов до скидки ВБ (СПП), %": (lambda S: _d(S["margin"], S["buyouts_sum_before_spp"]), "share"),
-    "Прибыль от суммы выкупов до скидки ВБ (СПП), %": (lambda S: _d(S["profit"] - S["_tax"], S["buyouts_sum_before_spp"]), "share"),
+    "Прибыль от суммы выкупов до скидки ВБ (СПП), %": (lambda S: _d(S["profit"] - S["_tax"], S["buyouts_sum_before_spp"]) if S["_tax"] is not None else None, "share"),
     "Сумма налога": (lambda S: S["_tax"], "money"),
-    "Прибыль за минусом налога, руб": (lambda S: S["profit"] - S["_tax"], "money"),
+    "Прибыль за минусом налога, руб": (lambda S: S["profit"] - S["_tax"] if S["_tax"] is not None else None, "money"),
     "ДРР от суммы заказов, %": (lambda S: _d(S["ads"], S["orders_sum"]), "share"),
     "ДРР от суммы выкупов до скидки ВБ (СПП), %": (lambda S: _d(S["ads"], S["buyouts_sum_before_spp"]), "share"),
     "CTR (клики / просмотры), %": (lambda S: _d(S["ad_clicks"], S["ad_views"]), "share"),
@@ -80,12 +81,12 @@ DERIVED = {
     "Конверсия в заказ, %": (lambda S: _d(S["f_orders"], S["f_cart"]), "share"),
 }
 
-
+                                                                                                                              
 DEFAULT = [
     ("ЗАКАЗЫ", "Кол-во заказов ВСЕГО", "вчера"), ("", "Кол-во заказов ВСЕГО", "позавчера"), ("", "разница", ""),
     ("", "Кол-во Отмененных/Невыкупленных заказов в дату отмены", "вчера"),
     ("", "Сумма ВСЕХ заказов, руб", "вчера"), ("", "Сумма ВСЕХ заказов, руб", "позавчера"), ("", "разница", ""),
-    ("ВЫКУПЫ", "Кол-во выкупов", "вчера"), ("", "Кол-во выкупов", "позавчера"), ("", "разница", ""),   
+    ("ВЫКУПЫ", "Кол-во выкупов", "вчера"), ("", "Кол-во выкупов", "позавчера"), ("", "разница", ""),                                                          
     ("", "Кол-во возвратов", "вчера"),
     ("", "К оплате продавцу, руб", "вчера"), ("", "К оплате продавцу, руб", "позавчера"), ("", "разница", ""),
     ("МАРЖИНАЛЬНАЯ ПРИБЫЛЬ", "Сумма выкупов до скидки ВБ (СПП), руб", "предыдущая неделя"),
@@ -120,7 +121,7 @@ def metric_options() -> list[str]:
 
 
 LAST4 = "за послед. 4 недели"
-SORT_COL = ("orders_sum_4w", "Сумма всех заказов, руб, за последние 4 недели")   
+SORT_COL = ("orders_sum_4w", "Сумма всех заказов, руб, за последние 4 недели")                                                       
 
 
 def _period_sums(rows, rng):
@@ -156,7 +157,7 @@ def _buyout_last4(c, shop, nm_ids=None):
             rt = sum(r[3] for r in rows if r[0] >= end-timedelta(days=27) and r[1] <= end)
             result[nm] = (dl-rt)/dl if dl else 0
         return result
-    
+                                                                                        
     rows = c.execute("""SELECT nm_id,
         coalesce(sum(deliveries) FILTER (WHERE df >= last_day-27 AND dt <= last_day),0)::float deliveries,
         coalesce(sum(returns) FILTER (WHERE df >= last_day-27 AND dt <= last_day),0)::float returns
@@ -171,16 +172,19 @@ def _buyout_last4(c, shop, nm_ids=None):
     return {r['nm_id']: (r['deliveries']-r['returns'])/r['deliveries'] if r['deliveries'] else 0 for r in rows}
 
 
-def compute(c, shop: int, yesterday: date | None = None, layout=None, nm_ids=None) -> dict:
+def compute(c, shop: int, yesterday: date | None = None, layout=None, nm_ids=None, *, as_of: date | None = None) -> dict:
     y = yesterday or today_msk() - timedelta(days=1)
     layout = layout or DEFAULT
     need = {p for _, m, p in layout if p} | {LAST4}
-    rng = {p: period(p, y) for p in need}
+    rng = {p: period(p, y, as_of) for p in need}
     lo = min([a for a, _ in rng.values()] + [y - timedelta(days=27)])
-    rows = nm_day.iter_cached(c, shop, lo, y, nm_ids)
+    hi = max(b for _, b in rng.values())
     tax = c.execute("SELECT * FROM tax_settings WHERE account_id=%s AND valid_from<=%s ORDER BY valid_from DESC LIMIT 1",
-                    (shop, y)).fetchone() or {"regime": "Другая СНО", "rate": 0}
-    
+                    (shop, as_of or y)).fetchone() or {"regime": "Другая СНО", "rate": 0}
+                                                                            
+    tax_all_shop = tax['regime'] == 'ОСНО ИП (НДФЛ)'
+    rows = nm_day.iter_cached(c, shop, lo, hi, None if tax_all_shop else nm_ids)
+                                
     S = _period_sums(rows, rng)
     for nm in S:
         for p, acc in S[nm].items():
@@ -188,11 +192,22 @@ def compute(c, shop: int, yesterday: date | None = None, layout=None, nm_ids=Non
                 acc["_tax"] = float(tax["rate"]) * acc["buyouts_sum"]
             elif tax["regime"] == "УСН доходы-расходы":
                 acc["_tax"] = float(tax["rate"]) * acc["profit"] if acc["profit"] > 0 else 0
+            elif tax['regime'] == 'ОСНО':
+                acc['_tax'] = float(tax['rate']) * max(0.0, acc['profit'])
+            elif tax['regime'] not in ('ОСНО ИП (НДФЛ)', 'Другая СНО'):
+                acc['_tax'] = None
             else:
                 acc["_tax"] = 0.0
-    
+    if tax_all_shop:
+        from .pnl_real import ndfl, allocate_income_tax
+        for p in rng:
+            bases = {nm: values[p]['profit'] for nm, values in S.items() if p in values}
+            allocated = allocate_income_tax(-ndfl(max(0.0, sum(bases.values()))), bases)
+            for nm, amount in allocated.items():
+                S[nm][p]['_tax'] = -amount
+                                                                                              
     from ..agg import buyout
-    if buyout.needed(c, shop):              
+    if buyout.needed(c, shop):                                                                        
         per, shop_bp = buyout.by_orders(c, shop)
         bp = defaultdict(lambda: shop_bp, per)
     else:

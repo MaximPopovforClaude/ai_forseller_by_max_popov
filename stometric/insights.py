@@ -54,7 +54,7 @@ def findings(c, shop: int, day: date | None = None, nms: list[int] | None = None
         agg.setdefault(r["nm_id"], {})[r["day"]] = r["data"]
     names = {r["nm_id"]: r for r in c.execute("SELECT nm_id, vendor_code, title FROM nomenclature WHERE account_id=%s", (shop,))}
     from .manager import stocks
-    stock = {nm: v["total"] for nm, v in stocks(c, shop).items()}   
+    stock = {nm: v["total"] for nm, v in stocks(c, shop).items()}                          
     changes = {}
     for r in c.execute("""SELECT nm_id, kind, field, old_value, new_value FROM card_changes WHERE account_id=%s
                           AND (detected_at AT TIME ZONE 'Europe/Moscow')::date BETWEEN %s AND %s""", (shop, y - timedelta(days=2), y)):
@@ -71,7 +71,7 @@ def findings(c, shop: int, day: date | None = None, nms: list[int] | None = None
         for e in events_for_shop(c, shop, y):
             for vc in e["mine"] or []:
                 comp.setdefault(vc, []).append(f"{e['title']} у {e['comp_nm_id']}")
-    except Exception:  
+    except Exception:                                            
         c.rollback()
 
     def tot(rows, k):
@@ -144,7 +144,7 @@ def findings(c, shop: int, day: date | None = None, nms: list[int] | None = None
         why += comp.get(vc, [])
         out["articles"].append({"nm_id": nm, "vendor_code": vc, "title": (nmi.get("title") or "")[:60], "orders": o,
                                 "orders_avg7": round(a7, 1), "change_pct": round(diff / max(a7, 1) * 100), "why": why})
-    rc = []                                   
+    rc = []                                                                                                                    
     for nm, dd in agg.items():
         a, b = (dd.get(y) or {}).get("rating"), (dd.get(y - timedelta(days=1)) or {}).get("rating")
         if a and b and float(a) > 0 and float(b) > 0 and round(float(a), 1) != round(float(b), 1):
@@ -157,13 +157,13 @@ def findings(c, shop: int, day: date | None = None, nms: list[int] | None = None
         own = {(names.get(n) or {}).get("vendor_code") or str(n) for n in nms}
         comp = {vc: v for vc, v in comp.items() if vc in own}
     out["competitors"] = [x for v in comp.values() for x in v][:20]
-    try:                                       
+    try:                                                                                                                          
         from .entry import analyze
         e = analyze(c, shop, y, nms)
         if e and (y - date.fromisoformat(e["day"])).days <= 2:
-            out["entry_points"] = {k: e[k] for k in ("day", "base_days", "drops_n", "rises_n", "shop_points")} |\
+            out["entry_points"] = {k: e[k] for k in ("day", "base_days", "drops_n", "rises_n", "shop_points")} | \
                                   {"drops": e["drops"][:8], "rises": e["rises"][:5]}
-    except Exception:  
+    except Exception:                                        
         c.rollback()
     return out
 
@@ -191,7 +191,7 @@ def template_text(f: dict) -> str:
     if low:
         L.append("Заканчивается остаток: " + ", ".join(f"{x['vendor_code']} ({x['days']:.0f} дн)" for x in low[:6]) + ".")
     if f.get("rating_changes"):
-        r1 = lambda v: f"{v:.1f}".replace(".", ",")   
+        r1 = lambda v: f"{v:.1f}".replace(".", ",")               
         L.append("⭐ Рейтинг в звёздах: " + ", ".join(f"{x['vendor_code']} {r1(x['before'])} → {r1(x['now'])}" + (" ▼" if x["now"] < x["before"] else " ▲")
                                                    for x in f["rating_changes"][:10]) + ".")
     if f["negative"]:
@@ -202,7 +202,7 @@ def template_text(f: dict) -> str:
         L.append("Конкуренты: " + "; ".join(f["competitors"][:4]) + ".")
     e = f.get("entry_points")
     if e:
-        one = lambda x: f"{x['vendor_code']} ({x['point']}: {x['clicks_avg']:.0f} → {x['clicks']}, {'+' if x['change_pct'] > 0 else ''}{x['change_pct']} %)"  
+        one = lambda x: f"{x['vendor_code']} ({x['point']}: {x['clicks_avg']:.0f} → {x['clicks']}, {'+' if x['change_pct'] > 0 else ''}{x['change_pct']} %)"              
         if e.get("drops"):
             L.append(f"🚪 Точки входа за {e['day'][8:10]}.{e['day'][5:7]} — просели ({e['drops_n']}): " + "; ".join(one(x) for x in e["drops"][:5]) + ".")
         if e.get("rises"):
@@ -227,14 +227,16 @@ JSON:
 
 def ai_text(f: dict, key: str | None = None) -> tuple[str | None, str | None]:
     from .aireport import complete, model_name
-    
-    
+                                                                              
+                                                                  
     if not key:
         return None, None
     try:
-        text = complete(key, "Ты аналитик магазина на Wildberries.", PROMPT.format(day=f["day"], data=json.dumps(f, ensure_ascii=False)), 900)
+        from .ai_readability import WRITING_RULES
+        text = complete(key, "Ты аналитик магазина на Wildberries.\n" + WRITING_RULES,
+                        PROMPT.format(day=f["day"], data=json.dumps(f, ensure_ascii=False)), 900)
         return text or None, model_name(key)
-    except Exception:  
+    except Exception:                                                      
         return None, None
 
 
@@ -249,10 +251,10 @@ def build(c, shop: int, day: date | None = None, use_ai: bool | None = None, sta
         use_ai = (c.execute("SELECT w.plan FROM accounts a JOIN workspaces w ON w.id=a.workspace_id WHERE a.id=%s", (shop,)).fetchone()
                   or {}).get("plan") == "ai"
     from .aireport import shop_key
-    ws_key = shop_key(c, shop, actor_id)             
+    ws_key = shop_key(c, shop, actor_id)                                                                 
     text, model = ai_text(f, ws_key) if (use_ai or ws_key) else (None, None)
-    
-    
+                                                                              
+                                                                             
     _cost_lock(c, shop)
     if basis != _cost_revision(c, shop):
         from .materialize import NotReady

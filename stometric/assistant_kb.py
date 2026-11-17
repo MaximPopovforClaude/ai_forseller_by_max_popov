@@ -41,7 +41,7 @@ def _ws(c, shop: int) -> int:
 
 
 def t_find(c, shop: int, uid: int, a: dict, *, user: dict | None = None) -> dict:
-    
+                                                                                 
     u, ws = user if user is not None else _user(c, uid), _ws(c, shop)
     if not u or u["id"] != uid:
         return {"error": "нет доступа к базе знаний"}
@@ -49,7 +49,7 @@ def t_find(c, shop: int, uid: int, a: dict, *, user: dict | None = None) -> dict
         return {"error": "нет доступа к базе знаний"}
     q = (a.get("query") or "").strip()
     rows = kb.items(c, u, ws, None, q, None, limit=15 if q else 10)
-    if q and not rows:                                   
+    if q and not rows:                                                                     
         seen = {}
         for w in [x for x in q.split() if len(x) >= 4][:5]:
             for r in kb.items(c, u, ws, None, w, None, limit=8):
@@ -96,7 +96,7 @@ def apply(c, shop: int, uid: int, d: dict, chat_id: int) -> dict:
         file = None
         if d.get("file"):
             rows = c.execute("SELECT * FROM assistant_files WHERE chat_id=%s ORDER BY id DESC", (chat_id,)).fetchall()
-            f = next((r for r in rows if r["name"].lower() == d["file"].lower()), None) or\
+            f = next((r for r in rows if r["name"].lower() == d["file"].lower()), None) or \
                 next((r for r in rows if d["file"].lower() in r["name"].lower()), None)
             if not f:
                 return {"error": f"в чате нет файла «{d['file']}»; файлы чата: {[r['name'] for r in rows[:10]]}"}

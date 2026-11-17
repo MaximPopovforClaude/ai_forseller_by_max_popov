@@ -14,7 +14,7 @@ from .web import _audit, conn, current_user
 router = APIRouter()
 
 
-
+                       
 @router.get("/api/billing/{ws_id}")
 def billing_info(ws_id: int, u=Depends(current_user), c=Depends(conn)):
     role = auth.workspace_role(c, u, ws_id)
@@ -65,7 +65,7 @@ def billing_checkout(ws_id: int, body: QuoteIn, u=Depends(current_user), c=Depen
         try:
             from .bots import notify_admins
             notify_admins(c, f"💳 Заявка на оплату AI-100metric: {u['email']}, тариф {body.plan}, {body.months} мес. (платёж №{res['payment_id']})")
-        except Exception:  
+        except Exception:                
             pass
     return res
 
@@ -76,21 +76,21 @@ async def yookassa_webhook(request: Request, c=Depends(conn)):
     try:
         body = await request.json()
         pid = str(((body or {}).get("object") or {}).get("id") or "")[:64]
-    except Exception:  
+    except Exception:                
         pid = ""
     if pid:
         billing.yookassa_confirm(c, pid)
     return {"ok": True}
 
 
-
+                             
 @router.get("/api/me/referral")
 def referral(u=Depends(current_user), c=Depends(conn)):
     code = billing.ref_code(c, u["id"])
     from .bots import Bot
     try:
         reg = Bot("TG_BOT_REGISTER_TOKEN").username
-    except Exception:  
+    except Exception:                
         reg = None
     st = c.execute("""SELECT count(*) invited, count(*) FILTER (WHERE EXISTS (SELECT 1 FROM payments p WHERE p.user_id=x.id AND p.status='paid'
                       AND p.amount > 0)) paid FROM users x WHERE referred_by=%s""", (u["id"],)).fetchone()
@@ -98,7 +98,7 @@ def referral(u=Depends(current_user), c=Depends(conn)):
     bal = c.execute("SELECT bonus_balance FROM users WHERE id=%s", (u["id"],)).fetchone()["bonus_balance"]
     rows = c.execute("""SELECT x.email, x.created_at, coalesce((SELECT sum(amount) FROM ref_rewards r WHERE r.referee_id=x.id AND r.referrer_id=%s),0) reward
                         FROM users x WHERE x.referred_by=%s ORDER BY x.created_at DESC LIMIT 100""", (u["id"], u["id"])).fetchall()
-    for r in rows:   
+    for r in rows:                                            
         name, _, dom = r["email"].partition("@")
         r["email"] = (name[:2] + "***@" + dom) if dom else "***"
     return jsonable_encoder({"code": code, "site_link": f"{billing.SITE}/?ref={code}",
@@ -114,12 +114,12 @@ def ref_info(code: str, c=Depends(conn)):
     ok = billing.referrer_by_code(c, code) is not None
     try:
         reg = Bot("TG_BOT_REGISTER_TOKEN").username
-    except Exception:  
+    except Exception:                
         reg = None
     return {"ok": ok, "bot_link": f"https://t.me/{reg}?start=ref_{code.strip().upper()}" if reg and ok else (f"https://t.me/{reg}" if reg else None)}
 
 
-
+                                                      
 def _sa(u):
     if not u["is_superadmin"]:
         raise HTTPException(403, "Только для владельца сервиса")
@@ -527,7 +527,7 @@ def admin_audit(limit: int = 200, u=Depends(current_user), c=Depends(conn)):
            LEFT JOIN workspaces w ON w.id=a.workspace_id ORDER BY a.id DESC LIMIT %s""", (max(1, min(limit, 1000)),)).fetchall())
 
 
-
+                                                                                                                                  
 @router.get("/api/admin/support")
 def admin_support(u=Depends(current_user), c=Depends(conn)):
     _sa(u)
@@ -560,7 +560,7 @@ def admin_support_open(body: SupportIn, u=Depends(current_user), c=Depends(conn)
     h = max(0.25, min(24.0, float(body.hours or 2)))
     r = c.execute("""INSERT INTO support_access(user_id,workspace_id,reason,until) VALUES (%s,%s,%s,now() + make_interval(mins => %s))
                      RETURNING id, until""", (u["id"], body.workspace_id, reason[:1000], int(h * 60))).fetchone()
-    
+                                                                                                
     c.execute("INSERT INTO audit_log(user_id,workspace_id,action,details) VALUES (%s,%s,'support/open',%s)",
               (u["id"], body.workspace_id, json.dumps({"reason": reason[:500], "hours": h, "until": r["until"].isoformat()}, ensure_ascii=False)))
     c.commit()

@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 
-from .. import jam
+from .. import jam, jam_scope
 
 COLS = [("query", "Кластер / Поисковый запрос", "text"), ("freq", "Частота за период", "int"), ("cover", "% охвата кластера", "share"),
         ("pos", "Средняя позиция", "num"), ("views", "Показы за период", "int"), ("clicks", "Клики общие", "int"),
@@ -13,9 +13,9 @@ COLS = [("query", "Кластер / Поисковый запрос", "text"), (
         ("profit", "Прибыль с ДРР", "money"), ("pot_clicks", "Потенциал кликов", "int"), ("pot_orders", "Потенциал заказов", "num"),
         ("pot_profit", "Потенциал прибыли", "money")]
 
-
+                                  
 GREEN, LIGHT, LIGHTER, YELLOW, RED = "#57bb8a", "#80cca7", "#afdfc7", "#ffe599", "#ea9999"
-RULES = {   
+RULES = {                                                             
     "cover": [(0.8, None, GREEN), (0.5, 0.8, YELLOW), (None, 0.5, RED)],
     "pos": [(None, 30, GREEN), (30, 100, YELLOW), (100, None, RED)],
     "views": [(5000, None, GREEN), (500, 5000, LIGHT), (0, 500, LIGHTER)],
@@ -24,7 +24,7 @@ RULES = {
     "orders": [(10, None, GREEN), (3, 10, LIGHT), (0, 3, LIGHTER)],
     "ctr": [(0.1, None, GREEN), (0.04, 0.1, LIGHT), (0, 0.04, LIGHTER)],
 }
-GRAD = ["pot_clicks", "pot_orders", "pot_profit"]     
+GRAD = ["pot_clicks", "pot_orders", "pot_profit"]                                                    
 
 
 def _rules():
@@ -39,10 +39,17 @@ def _msg(text: str, retry: int | None = None, nm=None, label: str = "") -> dict:
 
 def _pick_nm(c, shop, f) -> tuple[int | None, str]:
     if f.get("nm_ids"):
-        return f["nm_ids"][0], ("Выбрано несколько артикулов — отчёт Джема строится по одному: показан первый. " if len(f["nm_ids"]) > 1 else "")
-    r = c.execute("""SELECT nm_id, sum((data->>'f_orders')::numeric) o FROM agg_nm_day WHERE account_id=%s AND day BETWEEN %s AND %s
-                     GROUP BY 1 HAVING count(data->>'f_orders')>0 ORDER BY 2 DESC NULLS LAST LIMIT 1""", (shop, f["date_from"], f["date_to"])).fetchone()
-    return (r["nm_id"] if r else None), "Артикул не выбран — показан самый заказываемый по доступной воронке WB за период (выберите свой в фильтре «Артикулы»). "
+        nms=jam_scope.in_work_ids(c,shop,f['nm_ids'])
+        if not nms:
+            return None,jam_scope.NOT_IN_WORK
+        return nms[0], ("Выбрано несколько артикулов — отчёт Джема строится по одному: показан первый товар в работе. " if len(f["nm_ids"]) > 1 else "")
+    r = c.execute("""SELECT d.nm_id, sum((d.data->>'f_orders')::numeric) o FROM agg_nm_day d
+                     JOIN nomenclature n ON n.account_id=d.account_id AND n.nm_id=d.nm_id
+                     WHERE d.account_id=%s AND d.day BETWEEN %s AND %s AND """+jam_scope.IN_WORK+"""
+                     GROUP BY 1 HAVING count(d.data->>'f_orders')>0 ORDER BY 2 DESC NULLS LAST,d.nm_id LIMIT 1""", (shop, f["date_from"], f["date_to"])).fetchone()
+    if not r:
+        return None, "Нет товаров в работе с данными воронки за этот период. Выберите товар в фильтре «Артикулы»."
+    return r["nm_id"], "Артикул не выбран — показан самый заказываемый товар в работе по доступной воронке WB за период (выберите свой в фильтре «Артикулы»). "
 
 
 def unit_profit(c, shop: int, nm: int, a, b) -> tuple[float | None, str]:
@@ -62,7 +69,7 @@ def _ads(c, shop, nm, a, b) -> dict[str, dict]:
     out = {}
     for r in c.execute("""SELECT lower(trim(query)) q, sum(views) v, bool_or(views IS NOT NULL) hv, sum(clicks) cl, sum(spend) sp
                           FROM wb_ad_kw_daily WHERE account_id=%s AND nm_id=%s AND day BETWEEN %s AND %s GROUP BY 1""", (shop, nm, a, b)):
-        
+                                                                                                      
         out[r["q"]] = {"v": int(r["v"] or 0) if r["hv"] else None, "cl": int(r["cl"] or 0), "sp": float(r["sp"] or 0)}
     return out
 
@@ -76,7 +83,7 @@ def _row(q, freq, vis, pos, cl, ca, o, ad, ppu) -> dict:
     av, acl, sp = (ad or {}).get("v", 0), (ad or {}).get("cl", 0), (ad or {}).get("sp", 0.0)
     ctr = _d(acl, av)
     crc = _d(o, cl)
-    k = ctr if ctr is not None else _d(cl, views)      
+    k = ctr if ctr is not None else _d(cl, views)                                                              
     pclk = max(0, (freq or 0) - (views or 0)) * k if k is not None else 0
     pord = pclk * crc if crc is not None else 0
     return {"query": q, "freq": freq, "cover": min(1.0, views / freq) if freq and views is not None else None, "pos": pos, "views": views,
@@ -88,59 +95,71 @@ def _row(q, freq, vis, pos, cl, ca, o, ad, ppu) -> dict:
 
 
 def jam_tab(c, shop, f):
+    try:
+        return _jam_tab(c,shop,f)
+    except jam_scope.NotInWork:
+        return _msg(jam_scope.NOT_IN_WORK)
+
+
+def _jam_tab(c, shop, f):
     a, b = jam.period(f)
     nm, note = _pick_nm(c, shop, f)
     if not nm:
-        return _msg("Выберите артикул в фильтре «Артикулы» — отчёт Джема строится по одному артикулу.")
+        return _msg(note or "Выберите артикул в фильтре «Артикулы» — отчёт Джема строится по одному артикулу.")
     acc = jam.access(c, shop)
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
-    if acc and acc["status"] != "ok" and now - acc["checked_at"] < jam.ACCESS_RECHECK:
-        return _msg(jam.NO_JAM if acc["status"] == "no_jam" else jam.NO_SCOPE)
+    blocked = acc and acc["status"] != "ok" and now - acc["checked_at"] < jam.ACCESS_RECHECK
     cur = jam.cached(c, shop, nm, a, b)
     ready = _loaded(c, shop)
-    if cur and cur["state"] == "done":
-        if now - cur["fetched_at"] > jam.FRESH:      
-            jam.start(shop, nm, a, b)
-        return _render(c, shop, nm, a, b, cur["items"], note, ready)
-    other = _latest(c, shop, nm)                     
-    if not cur or (cur["state"] == "error" and now - (cur["fetched_at"] or cur["started_at"]) > timedelta(minutes=2)):
+                                                                                   
+                                                                                    
+    saved = cur if cur and cur.get('items') is not None else None
+    fresh = cur and cur['state'] == 'done' and now - cur['fetched_at'] <= jam.FRESH
+    if fresh:
+        return _render(c, shop, nm, a, b, cur['items'], note, ready)
+    other = None if saved else _latest(c, shop, nm)
+    if not blocked and (not cur or cur['state'] == 'done' or
+            (cur['state'] == 'error' and now - (cur['fetched_at'] or cur['started_at']) > timedelta(minutes=2))):
         jam.start(shop, nm, a, b)
-        cur = {"state": "running"}
-    if other and cur["state"] == "running":
-        res = _render(c, shop, nm, other["date_from"], other["date_to"], other["items"],
-                      note + f"Показан отчёт, загруженный сегодня за {other['date_from']:%d.%m}–{other['date_to']:%d.%m}; "
-                      f"за выбранный период {a:%d.%m}–{b:%d.%m} загружаю в фоне — вкладка обновится сама. ", ready)
-        return {**res, "retry": 20, "shown_period": [other["date_from"], other["date_to"]]}   
-    if cur["state"] == "running":
-        return _msg(f"Загружаю отчёт Джема по артикулу {nm} за {a:%d.%m.%Y}–{b:%d.%m.%Y} из WB (лимит WB — 3 запроса в минуту, "
-                    "около минуты). Вкладка обновится сама." + _ready_text(ready), retry=15)
-    e = cur["error"] or ""
-    if e in (jam.NO_JAM, jam.NO_SCOPE):
-        return _msg(e)
-    return _msg(f"WB не отдал отчёт Джема: {e[:300]}. Повторю через пару минут при следующем открытии вкладки." + _ready_text(ready))
+        cur = {**(cur or {}), 'state':'running'}
+    running = not blocked and cur and cur['state'] == 'running'
+    if blocked:
+        status = jam.NO_JAM if acc['status'] == 'no_jam' else jam.NO_SCOPE
+    elif running:
+        status = f'Загружаю Джем за {a:%d.%m.%Y}–{b:%d.%m.%Y}. Ожидаю WB; вкладка обновится сама.'
+    else:
+        status = f"WB не отдал отчёт Джема: {str((cur or {}).get('error') or 'ошибка загрузки')[:300]}."
+    if saved or other:
+        source = saved or other
+        x,y = (a,b) if saved else (other['date_from'],other['date_to'])
+        res = _render(c, shop, nm, x, y, source['items'], note, ready)
+        status = (f'Обновляю Джем за {a:%d.%m}–{b:%d.%m}. ' if saved and running else status+' ')
+        status += f'Пока показан сохранённый предыдущий отчёт за {x:%d.%m.%Y}–{y:%d.%m.%Y}.'
+        return {**res, 'retry':5 if running else None, 'shown_period':[x,y],
+                'loading_status':status if running else None, 'note':status+' '+res.get('note','')}
+    return {**_msg(status+_ready_text(ready),retry=5 if running else None),
+            'loading_status':status if running else None}
 
 
 def _loaded(c, shop) -> list[dict]:
-    """Артикулы, по которым Джем уже загружен сегодня (МСК): открываются сразу, без ожидания WB."""
+    """Артикулы с сохранённым отчётом; обновление/ошибка не скрывает прежние данные."""
     return c.execute("""SELECT DISTINCT ON (j.nm_id) j.nm_id, n.vendor_code FROM jam_cache j
-                        LEFT JOIN nomenclature n ON n.account_id=j.account_id AND n.nm_id=j.nm_id
-                        WHERE j.account_id=%s AND j.state='done'
-                          AND j.fetched_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') AT TIME ZONE 'Europe/Moscow')
+                        JOIN nomenclature n ON n.account_id=j.account_id AND n.nm_id=j.nm_id
+                        WHERE j.account_id=%s AND j.items IS NOT NULL AND """+jam_scope.IN_WORK+"""
                         ORDER BY j.nm_id""", (shop,)).fetchall()
 
 
 def _latest(c, shop, nm):
-    return c.execute("""SELECT date_from, date_to, items FROM jam_cache WHERE account_id=%s AND nm_id=%s AND state='done'
-                          AND fetched_at >= (date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') AT TIME ZONE 'Europe/Moscow')
+    return c.execute("""SELECT date_from, date_to, items FROM jam_cache WHERE account_id=%s AND nm_id=%s AND items IS NOT NULL
                         ORDER BY date_to DESC, fetched_at DESC LIMIT 1""", (shop, nm)).fetchone()
 
 
 def _ready_text(ready) -> str:
     if not ready:
         return ""
-    return (f" Уже загружены сегодня и открываются сразу ({len(ready)}): "
-            + ", ".join(r["vendor_code"] or str(r["nm_id"]) for r in ready) + ".")
+    return (f" Есть сохранённые отчёты ({len(ready)}): "
+            + ", ".join(r["vendor_code"] or str(r["nm_id"]) for r in ready[:20]) + (" и другие." if len(ready)>20 else "."))
 
 
 def _render(c, shop, nm, a, b, items, note, ready):
@@ -152,7 +171,7 @@ def _render(c, shop, nm, a, b, items, note, ready):
         rows.append(_row(q, x.get("frequency"), x.get("visibility"), x.get("avgPosition"), x.get("openCard"), x.get("addToCart"),
                          x.get("orders"), ads.get(q.lower().strip()), ppu))
     rows.sort(key=lambda r: (-(r["orders"] or 0), -(r["clicks"] or 0)))
-    s = lambda k: sum(r[k] or 0 for r in rows)  
+    s = lambda k: sum(r[k] or 0 for r in rows)              
     pos = [r["pos"] for r in rows if r["pos"]]
     tot = _row("ИТОГО", s("freq"), None, round(sum(pos) / len(pos)) if pos else None, s("clicks"), s("carts"), s("orders"), None, ppu)
     has_av = any(r["ad_views"] is not None for r in rows)
@@ -176,3 +195,50 @@ def _render(c, shop, nm, a, b, items, note, ready):
             + _ready_text(ready))
     return {"columns": [{"field": k, "title": t, "type": ty} for k, t, ty in COLS], "rows": rows, "plain": True, "note": head,
             "total_row": tot, "rules": _rules(), "grad": GRAD, "empty": "WB не нашёл поисковых запросов артикула за период."}
+
+
+def _daily_preview(src):
+    """Temporary query list from observations; not an invented WB period report."""
+    from .. import jam_daily as jd
+    rows=[{k:r[k] for k in ('query','clicks','carts','orders')} for r in jd.summaries(src)]
+    cols=[{'field':k,'title':t+(' · загруженные дни' if k in ('clicks','carts','orders') else ''),'type':ty}
+          for k,t,ty in COLS]
+    return {'columns':cols,'rows':rows,'plain':True,
+            'empty':'Сохранённых поисковых запросов за выбранные дни пока нет.',
+            'note':'В отчёте за период пока нет доступного списка; показаны запросы из загруженных дней. '
+                   'Клики, корзины и заказы — суммы доступных наблюдений, не итог всего периода. '
+                   'Среднюю позицию периода и остальные неизвестные показатели не подставляем.'}
+
+
+def deep_tab(c,shop,f):
+    """Ordinary report first; its availability never gates already saved daily data."""
+    import hashlib
+    import json
+    from .. import jam_daily as jd
+    selected_a,selected_b=jam.period(f)
+    nm,note=_pick_nm(c,shop,f)
+    if not nm: return _msg(note or 'Выберите артикул в фильтре «Артикулы».')
+    base=jam_tab(c,shop,{**f,'nm_ids':[nm]})
+                                                                                  
+    if not jam_scope.in_work_ids(c,shop,[nm]):return _msg(jam_scope.NOT_IN_WORK)
+    a,b=jd.window(selected_a,selected_b)
+    src=jd.read(c,shop,nm,a,b)
+    preview=(not any(col['field']=='query' for col in base['columns']) or
+             (not base['rows'] and bool(src.get('series'))))
+    if preview:
+        fallback=_daily_preview(src)
+        base={**fallback,'note':(base.get('note') or '')+' '+fallback['note'],
+              'loading_status':base.get('loading_status'),'retry':base.get('retry')}
+    period_a,period_b=base.get('shown_period') or (selected_a,selected_b)
+    acc=jam.access(c,shop)
+    state=c.execute("SELECT last_ok_at,last_error,last_run_at FROM collector_state WHERE account_id=%s AND collector='jam_daily'",(shop,)).fetchone()
+    revision=hashlib.sha256(json.dumps(src['coverage'],sort_keys=True,default=str).encode()).hexdigest()[:20]
+    return {**base,'custom':'jam_deep','retry':base.get('retry') or 30,'note':note+(base.get('note') or ''),'jam_deep':{
+                'nm_id':nm,'from':str(a),'to':str(b),'days':src['days'],'missing_days':src['missing_days'],
+                'period_from':str(period_a),'period_to':str(period_b),'daily_note':jd.NOTE,
+                'daily_revision':revision,'summary_source':'daily_preview' if preview else 'period',
+                'loaded_days':len(src['coverage']),'expected_days':len(src['days']),
+                'access':(acc or {}).get('status'),'last_run_at':str(state['last_run_at']) if state and state['last_run_at'] else None,
+                'collection_error':bool(state and state['last_error']),
+                'metrics':[{'field':k,'title':t,'type':ty} for k,t,ty in COLS if k!='query']+
+                    [{'field':'median_pos','title':'Медианная позиция','type':'num'},{'field':'week_freq','title':'Частота за неделю WB','type':'int'}]}}

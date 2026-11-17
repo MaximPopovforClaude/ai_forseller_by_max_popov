@@ -36,7 +36,7 @@ from .bot_runtime import settings as bot_job_settings
 
 
 def new_token(c, user_id: int, purpose: str, hours: int) -> str:
-    
+                                                                                   
     c.execute("SELECT id FROM users WHERE id=%s FOR UPDATE", (user_id,))
     tok = secrets.token_urlsafe(24)
     c.execute("INSERT INTO login_tokens(token_hash,user_id,purpose,expires_at) VALUES (%s,%s,%s, now() + make_interval(hours => %s))",
@@ -45,7 +45,7 @@ def new_token(c, user_id: int, purpose: str, hours: int) -> str:
     return f"{SITE}/login/{tok}"
 
 
-
+                   
 ACCEPT = "✅ Принимаю"
 
 
@@ -89,7 +89,7 @@ def handle_register(bot: Bot, m: dict):
                          f"(одноразовая, {'1 час' if u['password_hash'] else '24 часа'}):\n{link}")
             return
         if text.startswith("/start") or text.startswith("/"):
-            ref = text[len("/start ref_"):].strip() if text.startswith("/start ref_") else None   
+            ref = text[len("/start ref_"):].strip() if text.startswith("/start ref_") else None                               
             from .billing import referrer_by_code
             data = json.dumps({"ref": referrer_by_code(c, ref)} if ref else {})
             c.execute("""INSERT INTO reg_dialog(telegram_id,step,data) VALUES (%s,'email',%s) ON CONFLICT (telegram_id)
@@ -149,15 +149,15 @@ def handle_register(bot: Bot, m: dict):
                          + (" — по реферальной ссылке" if ref_by else ""))
 
 
-
+                   
 NOTIFY: Bot | None = None
 
 
-
+                                                                                                                  
 AS_KEY = "tg_assistant_bot"
 
 
-RESCUE_KEY = "tg_rescue_bot"   
+RESCUE_KEY = "tg_rescue_bot"                                                        
 
 
 def assistant_token(c, key: str = AS_KEY) -> str | None:
@@ -167,7 +167,7 @@ def assistant_token(c, key: str = AS_KEY) -> str | None:
         return None
     try:
         return vault.decrypt(r["value"]["enc"].encode())
-    except Exception:  
+    except Exception:                
         return None
 
 
@@ -179,7 +179,7 @@ def set_assistant_token(c, token: str, key: str = AS_KEY) -> str:
         raise ValueError("Не похоже на токен бота (вида 123456:ABC…)")
     try:
         me = httpx.post(f"https://api.telegram.org/bot{token}/getMe", timeout=20).json()
-    except Exception:  
+    except Exception:                
         raise ValueError("Telegram не ответил — попробуйте ещё раз") from None
     if not me.get("ok"):
         raise ValueError("Telegram не принял токен — проверьте в @BotFather")
@@ -204,7 +204,7 @@ def notifier() -> Bot:
     return NOTIFY
 
 
-ASSIST: Bot | None = None   
+ASSIST: Bot | None = None                                                                     
 
 
 def bot_of(c, uid: int) -> Bot:
@@ -212,7 +212,7 @@ def bot_of(c, uid: int) -> Bot:
     r = c.execute("SELECT bot FROM notify_settings WHERE user_id=%s", (uid,)).fetchone()
     if r and r["bot"] == "assistant":
         global ASSIST
-        if ASSIST is None:      
+        if ASSIST is None:                                                               
             tok = assistant_token(c)
             if tok:
                 ASSIST = Bot("", tok)
@@ -232,7 +232,7 @@ def notify_admins(c, text: str):
         notify(c, r["user_id"], r["chat_id"], text)
 
 
-
+                                                                                                                              
 def in_window(s: dict, now: datetime | None = None) -> bool:
     t = (now or datetime.now(MSK)).time()
     a, b = s.get("send_from"), s.get("send_to")
@@ -342,7 +342,7 @@ def send_daily(c, uid: int, chat_id: int, force=False, only: int | None = None) 
     if not u:
         return False
     shops = auth.shops_for(c, u)
-    if not only:                                
+    if not only:                                                                                                                  
         off = muted(c, uid)
         if shops and off and all(s["id"] in off for s in shops):
             return True
@@ -352,33 +352,33 @@ def send_daily(c, uid: int, chat_id: int, force=False, only: int | None = None) 
     ns = c.execute("SELECT ai, daily_mine FROM notify_settings WHERE user_id=%s", (uid,)).fetchone()
     want_ai = bool(ns and ns["ai"])
     from .staff import mine
-    own = mine(c, uid) if ns and ns["daily_mine"] else {}     
+    own = mine(c, uid) if ns and ns["daily_mine"] else {}                                                          
     own_staff = {r["account_id"]: r["staff_id"] for r in c.execute(
         "SELECT DISTINCT a.account_id, a.staff_id FROM staff s JOIN staff_articles a ON a.staff_id=s.id WHERE s.user_id=%s", (uid,))} if own else {}
     if own:
         shops = [s for s in shops if s["id"] in own]
     if not shops:
         return bot.send(chat_id, "Магазинов пока нет — добавьте ключ API WB на сайте: «Настройки аккаунта» → «+ Добавить магазин».")
-    shops = sorted(shops, key=lambda s: s["id"] != u.get("default_shop_id"))   
-    if only:                                    
+    shops = sorted(shops, key=lambda s: s["id"] != u.get("default_shop_id"))                                  
+    if only:                                                                                         
         shops = [s for s in shops if s["id"] == only] or shops
     ok = True
-    for s in shops:   
+    for s in shops:                                                        
         name = html.escape(s["title"] or s["name"])
         nms = own.get(s["id"])
         parts = [f"<b>📊 {name} — итоги {y:%d.%m.%Y}</b>" + (f"\n👤 только мои артикулы: {len(nms)}" if nms else "")]
         if s.get("marketplace") == "ozon":
             try:
                 parts.append(_ozon_lines(c, s["id"], y, nms))
-            except Exception as e:  
+            except Exception as e:                
                 c.rollback()
                 parts.append(f"не удалось посчитать: {html.escape(str(e)[:120])}")
-            try:                       
+            try:                                                                                    
                 from . import reviews
                 neg = reviews.summary_lines(c, s["id"], y, nms)
                 if neg:
                     parts.append("\n" + html.escape(neg))
-            except Exception:  
+            except Exception:                
                 c.rollback()
                 traceback.print_exc()
             parts.append(f"\n▲▼ — к позавчера. Подробно: {SITE}")
@@ -386,7 +386,7 @@ def send_daily(c, uid: int, chat_id: int, force=False, only: int | None = None) 
             if want_ai:
                 _send_ai(c, bot, chat_id, s, y)
             continue
-        if s.get("marketplace") == "ym":           
+        if s.get("marketplace") == "ym":                                                                                
             try:
                 from .tabs.ym import HOME_ROWS as YM_ROWS
                 rows = {r["label"]: r for r in home(c, s["id"], {"nm_ids": nms})["rows"]}
@@ -399,7 +399,7 @@ def send_daily(c, uid: int, chat_id: int, force=False, only: int | None = None) 
                         arrow = f"  {'▲' if ch > 0 else '▼'} {abs(ch) * 100:.0f} %" if abs(ch) >= 0.005 else ""
                     lines.append(f"{html.escape(lab)}: <b>{_fmt(d, fmt)}</b>{arrow}")
                 parts.append("🟨 Яндекс Маркет\n" + "\n".join(lines))
-            except Exception as e:  
+            except Exception as e:                
                 c.rollback()
                 parts.append(f"не удалось посчитать: {html.escape(str(e)[:120])}")
             parts.append(f"\n▲▼ — к позавчера. Подробно: {SITE}")
@@ -422,21 +422,21 @@ def send_daily(c, uid: int, chat_id: int, force=False, only: int | None = None) 
             parts.append("\n".join(lines))
             try:
                 from . import insights
-                ins = insights.get(c, s["id"], y, staff_id=own_staff.get(s["id"]) if nms else None, actor_id=uid)   
+                ins = insights.get(c, s["id"], y, staff_id=own_staff.get(s["id"]) if nms else None, actor_id=uid)                                                 
                 head = "🤖 Разбор нейросети" if ins.get("ai_text") else "🔎 Что важно"
                 parts.append(f"\n<b>{head}</b>\n{html.escape(ins['text'][:3000])}")
-            except Exception:  
+            except Exception:                                                 
                 c.rollback()
                 traceback.print_exc()
-            try:                       
+            try:                                                                               
                 from . import reviews
                 neg = reviews.summary_lines(c, s["id"], y, nms)
                 if neg:
                     parts.append("\n" + html.escape(neg))
-            except Exception:  
+            except Exception:                
                 c.rollback()
                 traceback.print_exc()
-        except Exception as e:  
+        except Exception as e:                
             c.rollback()
             parts.append(f"не удалось посчитать: {html.escape(str(e)[:120])}")
         parts.append(f"\n▲▼ — к позавчера. Подробно: {SITE}")
@@ -449,7 +449,7 @@ def send_daily(c, uid: int, chat_id: int, force=False, only: int | None = None) 
 def _send_ai(c, bot: Bot, chat_id: int, s: dict, y):
     """Self-hosted application component."""
     secs = ["day"]
-    if y.weekday() == 6:          
+    if y.weekday() == 6:                                                        
         secs += ["money", "cabinet", "search", "competitors", "niche"]
     for sec in secs:
         r = c.execute("SELECT title, body FROM ai_reports WHERE account_id=%s AND day=%s AND section=%s", (s["id"], y, sec)).fetchone()
@@ -501,7 +501,7 @@ def alerts_for(c, u: dict) -> list[tuple[str, str, str]]:
         bad = c.execute("""SELECT collector, left(last_error, 160) err FROM collector_state WHERE account_id=%s AND last_error IS NOT NULL
                            AND last_error NOT ILIKE '%%лимит%%' AND coalesce(last_ok_at, 'epoch') < now() - interval '6 hours'""",
                         (s["id"],)).fetchall()
-        bad = [b for b in bad if b["collector"] in _live_collectors()]   
+        bad = [b for b in bad if b["collector"] in _live_collectors()]                                                                      
         if bad:
             out.append((f"collect:{s['id']}", today, f"⚠️ <b>{name}</b>: не обновляются данные ({', '.join(b['collector'] for b in bad[:5])}). "
                                                      f"Ошибка: {html.escape(bad[0]['err'] or '')}"))
@@ -514,48 +514,48 @@ def _morning_jobs():
     from .private_ai import scheduled_ai
     try:
         print("мониторинг конкурентов:", market.monitor_day(), flush=True)
-    except Exception:  
+    except Exception:                
         traceback.print_exc()
-    def _photos():   
+    def _photos():                                                                                               
         try:
             from . import photos
             print("фотоворонка:", photos.daily(), flush=True)
-        except Exception:  
+        except Exception:                
             traceback.print_exc()
     threading.Thread(target=_photos, daemon=True).start()
     with db.connect() as c, scheduled_ai(c):
         for a in c.execute("SELECT id FROM accounts WHERE is_active AND marketplace='wb'").fetchall():
             try:
                 insights.build(c, a["id"])
-            except Exception:  
+            except Exception:                
                 c.rollback()
                 traceback.print_exc()
-            try:   
+            try:                                                                                                              
                 from . import market, planning
                 if market.shop_token(c, a["id"]) and (today_msk().day == 2 or c.execute(
                         "SELECT 1 FROM plan_items WHERE account_id=%s AND query_src='subject' LIMIT 1", (a["id"],)).fetchone()):
                     print("план:", a["id"], planning.auto_build(a["id"]), flush=True)
-            except Exception:  
+            except Exception:                
                 c.rollback()
                 traceback.print_exc()
             try:
                 from . import aireport
                 if aireport.shop_key(c, a["id"]):
                     print("ИИ-сводка:", a["id"], aireport.build(c, a["id"]), flush=True)
-            except Exception:  
+            except Exception:                
                 c.rollback()
                 traceback.print_exc()
         for a in c.execute("SELECT id FROM accounts WHERE is_active AND marketplace='ozon'").fetchall():
-            try:   
+            try:                                 
                 from . import aireport
                 if aireport.shop_key(c, a["id"]):
                     print("ИИ-сводка Ozon:", a["id"], aireport.build(c, a["id"]), flush=True)
-            except Exception:  
+            except Exception:                
                 c.rollback()
                 traceback.print_exc()
 
 
-ADS_HOURS = (9, 12, 15, 18, 21)      
+ADS_HOURS = (9, 12, 15, 18, 21)                                                                  
 
 
 def _ads_jobs(morning: bool):
@@ -566,7 +566,7 @@ def _ads_jobs(morning: bool):
         for a in c.execute("SELECT id FROM accounts WHERE is_active AND marketplace='wb'").fetchall():
             try:
                 print("реклама:", a["id"], ads_ai.run(c, a["id"], note=morning, slow=morning), flush=True)
-            except Exception:  
+            except Exception:                
                 c.rollback()
                 traceback.print_exc()
 
@@ -578,7 +578,7 @@ def _calendar_jobs():
         from .calendar import send_reminders
         with db.connect() as c:
             send_reminders(c, ASSIST)
-    except Exception:  
+    except Exception:                                                
         traceback.print_exc()
 
 
@@ -587,7 +587,7 @@ def scheduler():
     from .bot_runtime import scheduler as run
     return run(sys.modules[__name__])
 
-
+                                                              
 AS_HELP = ("🧙 Я Стометрик, помощник по твоим магазинам Wildberries и Ozon. Спрашивай обычным текстом, например:\n"
            "• «Сколько заказов было вчера на ВБ и на Озоне?»\n• «Какие товары просели за неделю?»\n• «Покажи юнитку по сиропам за октябрь»\n"
            "Можно прислать скрин или файл (фото, PDF, xlsx, csv).\n\n"
@@ -614,7 +614,7 @@ def _relink(c, tg: int, uid: int):
     """Код с сайта — Telegram переходит к этому аккаунту, даже если был привязан к другому (раньше молча оставался на старом)."""
     c.execute("UPDATE users SET telegram_id=NULL WHERE telegram_id=%s AND id<>%s", (tg, uid))
     c.execute("UPDATE users SET telegram_id=%s WHERE id=%s", (tg, uid))
-    c.execute("UPDATE notify_settings SET chat_id=NULL WHERE chat_id=%s AND user_id<>%s", (tg, uid))   
+    c.execute("UPDATE notify_settings SET chat_id=NULL WHERE chat_id=%s AND user_id<>%s", (tg, uid))                                    
 
 
 def _link_user(bot: Bot, c, tg: int, text: str) -> int | None:
@@ -714,7 +714,7 @@ def _as_ask(bot: Bot, tg: int, uid: int, text: str, file_ids: list[tuple[str, st
                 return
             ns = c.execute("SELECT as_chat FROM notify_settings WHERE user_id=%s", (uid,)).fetchone()
             ch = None
-            if ns and ns["as_chat"]:   
+            if ns and ns["as_chat"]:                                                                   
                 ch = c.execute("""SELECT * FROM assistant_chats WHERE id=%s AND user_id=%s AND shop_id=%s
                                   AND updated_at > now() - interval '12 hours'""", (ns["as_chat"], uid, shop["id"])).fetchone()
             if not ch:
@@ -733,7 +733,7 @@ def _as_ask(bot: Bot, tg: int, uid: int, text: str, file_ids: list[tuple[str, st
                     c.rollback()
                     bot.send(tg, f"📎 {html.escape(name)}: {html.escape(str(e))}")
                     return
-                except Exception:  
+                except Exception:                
                     c.rollback()
                     bot.send(tg, f"📎 Не получилось скачать файл {html.escape(name)} (лимит вложения в этой установке — 10 МБ).")
                     return
@@ -752,7 +752,7 @@ def _as_ask(bot: Bot, tg: int, uid: int, text: str, file_ids: list[tuple[str, st
         while th and th.is_alive():
             try:
                 bot.api("sendChatAction", chat_id=tg, action="typing")
-            except Exception:  
+            except Exception:                
                 pass
             th.join(4)
             with db.connect() as c:
@@ -766,20 +766,20 @@ def _as_ask(bot: Bot, tg: int, uid: int, text: str, file_ids: list[tuple[str, st
         if mid:
             try:
                 bot.api("deleteMessage", chat_id=tg, message_id=mid)
-            except Exception:  
+            except Exception:                
                 pass
         body = _md_html(r["content"] or "Готово.")
         if r["status"] == "error":
             body = "😕 " + body
         chunks = [body[i:i + 3900] for i in range(0, len(body), 3900)] or [""]
         for ch_text in chunks:
-            if not bot.send(tg, ch_text):          
+            if not bot.send(tg, ch_text):                                                     
                 bot.send(tg, html.escape(re.sub(r"<[^>]+>", "", html.unescape(ch_text))))
-        for tb in ((r["data"] or {}).get("tables") or [])[-1:]:     
+        for tb in ((r["data"] or {}).get("tables") or [])[-1:]:                                                            
             name = re.sub(r"[^\w\-. ]+", "", (tb.get("title") or "таблица").replace("·", "-"))[:80].strip() or "таблица"
             note = f"\nЗаписать черновик — кнопкой «Применить» в этом чате на сайте {SITE} (Стометрик)." if tb.get("draft") else ""
             bot.doc(tg, f"{name}.xlsx", _xlsx(tb), caption=f"📊 {tb.get('title') or ''} · {len(tb['rows'])} строк{note}")
-    except Exception:  
+    except Exception:                
         traceback.print_exc()
         bot.send(tg, "Что-то пошло не так 🙈 Попробуйте ещё раз чуть позже.")
     finally:
@@ -860,7 +860,7 @@ def handle_assistant_cb(bot: Bot, cb: dict):
     data = cb.get("data") or ""
     try:
         bot.api("answerCallbackQuery", callback_query_id=cb["id"])
-    except Exception:  
+    except Exception:                
         pass
     if data.startswith("nk:"):
         from .news import KIND_KEYS
@@ -915,7 +915,7 @@ def assistant_loop():
                         {"command": "summary", "description": "Сводка сейчас"}, {"command": "help", "description": "Что я умею"},
                         {"command": "stop", "description": "Выключить уведомления"}])
                     ASSIST.poll(handle_assistant, media=True, on_cb=handle_assistant_cb)
-        except Exception:  
+        except Exception:                
             traceback.print_exc()
         time.sleep(30)
 

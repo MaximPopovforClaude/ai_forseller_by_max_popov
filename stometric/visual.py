@@ -27,7 +27,7 @@ class VisualError(ValueError):
     pass
 
 
-
+               
 def project(c, shop: int, pid: int) -> dict:
     p = c.execute("SELECT * FROM vis_projects WHERE id=%s AND account_id=%s", (pid, shop)).fetchone()
     if not p:
@@ -56,7 +56,7 @@ def touch(c, pid: int):
     c.execute("UPDATE vis_projects SET updated_at=now() WHERE id=%s", (pid,))
 
 
-
+             
 def _ext(name: str, mime: str | None) -> str:
     e = Path(name or "").suffix.lower()
     if e in IMG or e in DOC:
@@ -80,7 +80,7 @@ def save(c, shop: int, pid: int | None, kind: str, name: str, raw: bytes, uid: i
         try:
             with Image.open(io.BytesIO(raw)) as im:
                 meta = {"w": im.width, "h": im.height}
-        except Exception:  
+        except Exception:                
             raise VisualError(f"«{name}» не открывается как картинка") from None
     sha = hashlib.sha256(raw).hexdigest()
     if pid and kind == "source":
@@ -128,7 +128,7 @@ def thumb(c, shop: int, fid: int, size: int = 360) -> bytes:
     return t.read_bytes()
 
 
-
+                          
 def _get(url: str, **kw) -> httpx.Response:
     """GET с проверкой каждого перехода: только https/http на публичные адреса."""
     from .kb import _public_host
@@ -236,7 +236,7 @@ def ensure_sources(c, shop: int, pid: int, uid: int | None) -> int:
         return 0
     try:
         return import_card_photos(c, shop, pid, p["nm_id"], uid)
-    except Exception:  
+    except Exception:                                                               
         c.rollback()
         return 0
 
@@ -250,7 +250,7 @@ def import_card_photos(c, shop: int, pid: int, nm: int, uid: int) -> int:
     base = ph.split("/images/")[0]
     try:
         cnt = int(((httpx.get(f"{base}/info/ru/card.json", timeout=15).json().get("media") or {}).get("photo_count")) or 0)
-    except Exception:  
+    except Exception:                
         cnt = 0
     n = 0
     for i in range(1, min(cnt or 10, 30) + 1):
@@ -262,7 +262,7 @@ def import_card_photos(c, shop: int, pid: int, nm: int, uid: int) -> int:
     return n
 
 
-
+               
 def doc_text(path: str, mime: str) -> str:
     """Текст из Excel / Word / TXT (PDF и фото читает нейросеть)."""
     p = Path(path)
@@ -302,13 +302,13 @@ def passports(c, shop: int) -> list[dict]:
                         FROM vis_files f WHERE f.account_id=%s AND f.kind='passport' ORDER BY f.id DESC""", (shop,)).fetchall()
 
 
-
+                    
 def brand(c, shop: int) -> dict:
-    return c.execute("SELECT colors, fonts, notes, logo_id FROM vis_brand WHERE account_id=%s", (shop,)).fetchone() or\
+    return c.execute("SELECT colors, fonts, notes, logo_id FROM vis_brand WHERE account_id=%s", (shop,)).fetchone() or \
         {"colors": "", "fonts": "", "notes": "", "logo_id": None}
 
 
-
+                 
 def briefs(c, shop: int, pid: int | None = None) -> list[dict]:
     return c.execute(f"""SELECT b.id, b.project_id, b.nm_id, b.kind, b.version, b.state, b.created_at, b.updated_at, b.reviewed_at,
                                 p.title, n.vendor_code, jsonb_array_length(coalesce(b.data->'slides','[]')) slides

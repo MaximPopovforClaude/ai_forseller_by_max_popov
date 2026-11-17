@@ -8,6 +8,7 @@ import re
 import time
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
@@ -23,13 +24,13 @@ DIST = Path(__file__).resolve().parents[1] / "web" / "frontend" / "dist"
 COOKIE = "ais_session"
 
 app = FastAPI(title="AI-100metric", docs_url=None, redoc_url=None, openapi_url=None)
-
-from fastapi.middleware.gzip import GZipMiddleware  
+                                                                                                                                  
+from fastapi.middleware.gzip import GZipMiddleware              
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 
 def conn():
-    c = db.connect(timeout_s=55)     
+    c = db.connect(timeout_s=55)                                                     
     try:
         yield c
     finally:
@@ -105,7 +106,7 @@ async def mcp_guard(request: Request, call_next):
 
 def current_user(request: Request, c=Depends(conn)):
     g = getattr(request.state, "mcp", None)
-    if g:                                   
+    if g:                                                                                                                     
         u = c.execute("SELECT * FROM users WHERE id=%s AND is_active", (g["user_id"],)).fetchone()
         if not u:
             raise HTTPException(401, "Нужно войти")
@@ -123,7 +124,7 @@ class Login(BaseModel):
     password: str
 
 
-_fails: dict[str, list[float]] = {}     
+_fails: dict[str, list[float]] = {}                                                                                             
 FAIL_WINDOW, FAIL_EMAIL, FAIL_IP = 900, 8, 30
 
 
@@ -176,7 +177,7 @@ def logout(request: Request, response: Response, c=Depends(conn)):
 def me(u=Depends(current_user), c=Depends(conn)):
     shops = auth.shops_for(c, u)
     dflt = u.get("default_shop_id")
-    shops.sort(key=lambda s: s["id"] != dflt)          
+    shops.sort(key=lambda s: s["id"] != dflt)                                         
     return {"user": {"id": u["id"], "email": u["email"], "name": u["name"], "superadmin": u["is_superadmin"], "google_email": u.get("google_email")},
             "default_shop": dflt if any(s["id"] == dflt for s in shops) else None,
             "shops": shops, "workspaces": auth.workspaces_for(c, u),
@@ -218,7 +219,7 @@ def set_hidden_tabs(body: HiddenIn, u=Depends(current_user), c=Depends(conn)):
     return {"mp": body.mp, "keys": keys}
 
 
-
+                                          
 @app.get("/api/public/about")
 def public_about(c=Depends(conn)):
     v = legal.get(c)
@@ -277,7 +278,7 @@ def workspace(ws_id: int, u=Depends(current_user), c=Depends(conn)):
         if not auth.can(role, "admin"):
             sh.pop("token", None)
             sh.pop("ad_token", None)
-        elif not sh["token"] and sh["token_server"]:   
+        elif not sh["token"] and sh["token_server"]:                                                                      
             from . import vault
             from .config import env as _env
             tok = _env().get(c.execute("SELECT token_env FROM accounts WHERE id=%s", (sh["id"],)).fetchone()["token_env"] or "")
@@ -369,13 +370,13 @@ def set_google_email(body: GmailIn, u=Depends(current_user), c=Depends(conn)):
     return {"ok": True}
 
 
-
+                                                               
 class ShopIn(BaseModel):
     title: str
     token: str
     marketplace: str = "wb"
-    client_id: str | None = None      
-    ad_client_id: str | None = None   
+    client_id: str | None = None                                         
+    ad_client_id: str | None = None                                                                    
     ad_client_secret: str | None = None
 
 
@@ -396,7 +397,7 @@ def _start_first_load(name: str) -> bool:
     try:
         subprocess.run(["systemctl", "--user", "start", "--no-block", f"ai-stometric-onboard@{name}.service"], check=True, timeout=20)
         return True
-    except Exception:  
+    except Exception:                                                                            
         return False
 
 
@@ -493,7 +494,7 @@ def _add_ym(c, u, ws_id: int, title: str, body: ShopIn):
 class TokenIn(BaseModel):
     token: str
     client_id: str | None = None
-    provider: str | None = None      
+    provider: str | None = None                                                                              
     model: str | None = None
 
 
@@ -573,7 +574,7 @@ def replace_ad_token(shop_id: int, body: AdTokenIn, u=Depends(current_user), c=D
     return {"ok": True, **inf}
 
 
-
+                                                                                  
 INVITE_DAYS = 7
 from .config import site_url
 SITE = site_url()
@@ -654,8 +655,8 @@ class MemberIn(BaseModel):
 def add_existing_member(ws_id: int, body: InviteIn, u=Depends(current_user), c=Depends(conn)):
     """Connect an existing login to this workspace; never move its shops or copy a plan."""
     _admin_of(c, u, ws_id)
-    
-    
+                                                                                 
+                                                                                 
     actor = c.execute("SELECT role, shop_ids FROM memberships WHERE workspace_id=%s AND user_id=%s FOR SHARE",
                       (ws_id, u["id"])).fetchone()
     if not actor or not auth.can(actor["role"], "admin") or actor["shop_ids"] is not None:
@@ -748,7 +749,7 @@ def invite_accept(tok: str, body: AcceptIn, request: Request, response: Response
             _failed(request, inv["email"])
             raise HTTPException(401, "Неверный пароль от вашего аккаунта")
         uid = user["id"]
-    elif user:   
+    elif user:                                                                                                                               
         raise HTTPException(409, "Аккаунт с этой почтой уже есть, но пароль ещё не задан — задайте его по ссылке из бота регистрации "
                                  "(/start), войдите и откройте приглашение снова")
     else:
@@ -759,7 +760,7 @@ def invite_accept(tok: str, body: AcceptIn, request: Request, response: Response
         if not r:
             raise HTTPException(409, "Аккаунт с этой почтой уже есть — войдите и откройте приглашение снова")
         uid = r["id"]
-    
+                                                                               
     added = c.execute("""INSERT INTO memberships(user_id,workspace_id,role,shop_ids) VALUES (%s,%s,%s,%s)
                          ON CONFLICT (user_id,workspace_id) DO NOTHING RETURNING user_id""",
                       (uid, inv["workspace_id"], inv["role"], inv["shop_ids"])).fetchone()
@@ -772,7 +773,7 @@ def invite_accept(tok: str, body: AcceptIn, request: Request, response: Response
     return {"ok": True}
 
 
-
+                                                                                 
 def _magic(c, tok: str, lock: bool = False) -> dict:
     if lock:
         target = c.execute("SELECT user_id FROM login_tokens WHERE token_hash=%s",
@@ -805,7 +806,7 @@ def magic_use(tok: str, body: MagicIn, request: Request, response: Response, c=D
         if not body.password or len(body.password) < 10:
             raise HTTPException(400, "Пароль — не короче 10 символов")
         c.execute("UPDATE users SET password_hash=%s WHERE id=%s", (auth.hash_password(body.password), r["user_id"]))
-        c.execute("DELETE FROM sessions WHERE user_id=%s", (r["user_id"],))      
+        c.execute("DELETE FROM sessions WHERE user_id=%s", (r["user_id"],))                                             
         c.execute("UPDATE login_tokens SET used_at=clock_timestamp() WHERE user_id=%s AND used_at IS NULL", (r["user_id"],))
         c.execute("UPDATE password_reset_tokens SET used_at=clock_timestamp() WHERE user_id=%s AND used_at IS NULL", (r["user_id"],))
     c.execute("UPDATE login_tokens SET used_at=now() WHERE token_hash=%s", (r["token_hash"],))
@@ -823,7 +824,7 @@ def _notify_bot_username() -> str | None:
         from .bots import Bot
         try:
             _BOT_NAME["n"] = Bot("TG_BOT_NOTIFY_TOKEN").username
-        except Exception:  
+        except Exception:                
             return None
     return _BOT_NAME["n"]
 
@@ -837,8 +838,8 @@ def notify_get(u=Depends(current_user), c=Depends(conn)):
     c.commit()
     from .bots import assistant_username
     asb = assistant_username(c)
-    bot = asb or _notify_bot_username()      
-    
+    bot = asb or _notify_bot_username()                                                                 
+                                                                                                 
     on = s["chat_id"] is not None and (not asb or (s["bot"] == "assistant" and u.get("telegram_id") == s["chat_id"]))
     from .news import KINDS
     return {"connected": on, "old_bot": s["chat_id"] is not None and not on, "assistant": bool(asb),
@@ -857,10 +858,10 @@ class NotifyIn(BaseModel):
     alerts: bool
     ai: bool = True
     kinds: dict[str, bool] | None = None
-    send_from: str | None = None       
+    send_from: str | None = None                                                                              
     send_to: str | None = None
-    daily_mine: bool | None = None     
-    muted_shops: list[int] | None = None   
+    daily_mine: bool | None = None                                                 
+    muted_shops: list[int] | None = None                             
 
 
 @app.put("/api/me/notify")
@@ -899,44 +900,50 @@ def notify_test(u=Depends(current_user), c=Depends(conn)):
 @app.get("/api/shops/{shop_id}/tab/{key}")
 def tab(shop_id: int, key: str, date_from: date | None = None, date_to: date | None = None, nm_ids: str | None = None, group: str | None = None,
         p1_from: date | None = None, p1_to: date | None = None, per_unit: bool = False, campaign: int | None = None,
-        limit: int = 0, offset: int = 0, sort: str | None = None, desc: bool = False, staff: int | None = None,
-        u=Depends(current_user), c=Depends(conn)):
+        limit: int = 0, offset: int = 0, sort: str | None = None, desc: bool = False, staff: str | None = None,
+        u=Depends(current_user), c=Depends(conn), order_source: Literal["funnel", "statistics"] = "funnel"):
     if not auth.can(auth.shop_role(c, u, shop_id), "viewer"):
         raise HTTPException(403, "Нет доступа к магазину")
     if key not in BY_KEY:
         raise HTTPException(404, "Нет такой вкладки")
+    if order_source not in ("funnel", "statistics"):
+        raise HTTPException(422, "Неизвестный источник заказов")
     dt = date_to or today_msk()
     f = {"date_from": date_from or dt - timedelta(days=29), "date_to": dt,
          "nm_ids": [int(x) for x in nm_ids.split(",") if x.strip().isdigit()] if nm_ids else None, "group": group}
-    if staff:                                   
+    if key in {"dash5", "dash_nm", "dash_nm_days", "dash_group", "by_days"} and order_source == "statistics":
+        f["order_source"] = order_source
+    if staff:                                                                                            
         from . import staff as _staff
         f["nm_ids"] = _staff.narrow(c, shop_id, staff, f["nm_ids"])
-    if p1_from and p1_to:                       
+    if p1_from and p1_to:                                                   
         f["p1_from"], f["p1_to"] = p1_from, p1_to
-    if per_unit:                                
+    if per_unit:                                                              
         f["per_unit"] = True
-    if campaign:                                
+    if campaign:                                                         
         f["campaign"] = campaign
     f["user_id"] = u["id"]
     import psycopg
     from .materialize import CostRebuildPending, NotReady
     try:
         res = _cached(c, key, shop_id, f)
-    except (NotReady, psycopg.errors.QueryCanceled) as e:     
+    except (NotReady, psycopg.errors.QueryCanceled) as e:                                                          
         c.rollback()
         msg = str(e) if isinstance(e, NotReady) else ("В связи с большим объёмом артикулов данные на этой вкладке появятся позже: "
                                                      "расчёт не уложился в минуту. Попробуйте позже или выберите меньший период / артикулы.")
         res = {"columns": [{"field": "msg", "title": "Данные готовятся", "type": "text"}], "rows": [{"msg": msg}], "plain": True, "note": msg}
         if isinstance(e, CostRebuildPending):
-            
-            
+                                                                           
+                                                                                
             msg += " Вкладка проверяет готовность каждые 15 секунд и обновится автоматически."
             res.update(note=msg, rows=[{"msg": msg}], retry=15)
     f.pop("user_id", None)
     from .exclusions import excluded
     ex = excluded(c, shop_id)
-    if ex and res.get("rows") and isinstance(res["rows"][0], dict) and "nm_id" in res["rows"][0]:   
+    if ex and res.get("rows") and isinstance(res["rows"][0], dict) and "nm_id" in res["rows"][0]:                                    
         res = {**res, "rows": [r for r in res["rows"] if r.get("nm_id") not in ex]}
+    if staff and key in {"pnl_real_w", "pnl_real_m", "pnl_alt_m"}:
+        res = {**res, "note": "Этот финансовый отчёт показывает весь магазин: общие удержания и налог не распределяются по менеджерам. Для выборки используйте PnL по артикулам. " + (res.get("note") or "")}
     res = _page(res, limit, offset, sort, desc)
     return JSONResponse(jsonable_encoder({"key": key, "title": BY_KEY[key][1], "filters": {k: str(v) if v else None for k, v in f.items()},
                          **res}), headers={"Cache-Control": "no-store"})
@@ -945,25 +952,28 @@ def tab(shop_id: int, key: str, date_from: date | None = None, date_to: date | N
 @app.get("/api/shops/{shop_id}/tab/{key}/xlsx")
 def tab_xlsx(shop_id: int, key: str, date_from: date | None = None, date_to: date | None = None, nm_ids: str | None = None, group: str | None = None,
              p1_from: date | None = None, p1_to: date | None = None, per_unit: bool = False, campaign: int | None = None,
-             sort: str | None = None, desc: bool = False, staff: int | None = None, cols: str | None = None,
-             u=Depends(current_user), c=Depends(conn)):
+             sort: str | None = None, desc: bool = False, staff: str | None = None, cols: str | None = None,
+             u=Depends(current_user), c=Depends(conn), order_source: Literal["funnel", "statistics"] = "funnel"):
     """Self-hosted application component."""
     from urllib.parse import quote
-    body, name = _xlsx(shop_id, key, date_from, date_to, nm_ids, group, p1_from, p1_to, per_unit, campaign, sort, desc, staff, cols, u, c)
+    body, name = _xlsx(shop_id, key, date_from, date_to, nm_ids, group, p1_from, p1_to, per_unit, campaign, sort, desc, staff, cols, u, c, order_source=order_source)
     return Response(body, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f"attachment; filename=\"export.xlsx\"; filename*=UTF-8''{quote(name)}",
                              "Cache-Control": "no-store"})
 
 
-def _xlsx(shop_id, key, date_from, date_to, nm_ids, group, p1_from, p1_to, per_unit, campaign, sort, desc, staff, cols, u, c) -> tuple[bytes, str]:
+def _xlsx(shop_id, key, date_from, date_to, nm_ids, group, p1_from, p1_to, per_unit, campaign, sort, desc, staff, cols, u, c, *, order_source="funnel") -> tuple[bytes, str]:
     from . import export
-    r = tab(shop_id, key, date_from, date_to, nm_ids, group, p1_from, p1_to, per_unit, campaign, -1, 0, sort, desc, staff, u=u, c=c)
+    r = tab(shop_id, key, date_from, date_to, nm_ids, group, p1_from, p1_to, per_unit, campaign, -1, 0, sort, desc, staff, u=u, c=c, order_source=order_source)
     res = json.loads(r.body)
     if res.get("custom") or not res.get("columns"):
         raise HTTPException(400, "Эту вкладку выгрузить пока нельзя — это не таблица")
     acc = c.execute("SELECT coalesce(title, name) t FROM accounts WHERE id=%s", (shop_id,)).fetchone()
     dt = date_to or today_msk()
     name = export.filename(acc["t"] if acc else str(shop_id), res["title"], date_from or dt - timedelta(days=29), dt)
+    if key == 'svodwb':
+        calendar_day = date.fromisoformat(res['calendar_day'])
+        name = export.filename(acc['t'] if acc else str(shop_id), f"{res['title']} на {calendar_day:%d.%m.%Y}", None, None)
     return export.build(res, [x for x in (cols or "").split(",") if x], res["title"]), name
 
 
@@ -971,20 +981,20 @@ def _gsheet_ready(c) -> bool:
     from . import gdrive
     try:
         return gdrive.ready(c)
-    except Exception:  
+    except Exception:                                                             
         return False
 
 
 @app.post("/api/shops/{shop_id}/tab/{key}/gsheet")
 def tab_gsheet(shop_id: int, key: str, date_from: date | None = None, date_to: date | None = None, nm_ids: str | None = None, group: str | None = None,
                p1_from: date | None = None, p1_to: date | None = None, per_unit: bool = False, campaign: int | None = None,
-               sort: str | None = None, desc: bool = False, staff: int | None = None, cols: str | None = None,
-               u=Depends(current_user), c=Depends(conn)):
+               sort: str | None = None, desc: bool = False, staff: str | None = None, cols: str | None = None,
+               u=Depends(current_user), c=Depends(conn), order_source: Literal["funnel", "statistics"] = "funnel"):
     """Вкладка → новая Google Таблица в папке выгрузок (Диск владельца сервиса), доступ — на почту пользователя."""
     from . import gdrive
     if not gdrive.ready(c):
         raise HTTPException(400, "Выгрузка в Google Таблицы ещё не подключена")
-    body, name = _xlsx(shop_id, key, date_from, date_to, nm_ids, group, p1_from, p1_to, per_unit, campaign, sort, desc, staff, cols, u, c)
+    body, name = _xlsx(shop_id, key, date_from, date_to, nm_ids, group, p1_from, p1_to, per_unit, campaign, sort, desc, staff, cols, u, c, order_source=order_source)
     from datetime import datetime
     from zoneinfo import ZoneInfo
     try:
@@ -997,18 +1007,18 @@ def tab_gsheet(shop_id: int, key: str, date_from: date | None = None, date_to: d
     return out
 
 
-PAGE_FROM = 300      
+PAGE_FROM = 300                                                                                      
 PAGE = 100
 
 
 def _page(res: dict, limit: int, offset: int, sort: str | None, desc: bool) -> dict:
     """Большая таблица: сортировка по всем строкам на сервере, отдаём страницу; ИТОГО — по всем строкам (суммы ₽ и штук)."""
     rows = res.get("rows") or []
-    if res.get("layout") == "sheet" or res.get("editable") or not rows or not isinstance(rows[0], dict) or (len(rows) <= PAGE_FROM and not limit):
+    if res.get("custom") == "jam_deep" or res.get("layout") == "sheet" or res.get("editable") or not rows or not isinstance(rows[0], dict) or (len(rows) <= PAGE_FROM and not limit):
         return res
     if sort and sort in rows[0]:
         num = all(isinstance(r.get(sort), (int, float)) or r.get(sort) is None for r in rows[:200])
-        key = (lambda r: (r.get(sort) is None, -(r[sort] or 0) if desc else (r[sort] or 0))) if num else\
+        key = (lambda r: (r.get(sort) is None, -(r[sort] or 0) if desc else (r[sort] or 0))) if num else \
               (lambda r: (r.get(sort) is None, str(r.get(sort) or "")))
         rows = sorted(rows, key=key)
         if desc and not num:
@@ -1058,6 +1068,16 @@ def set_check(shop_id: int, body: CheckIn, u=Depends(current_user), c=Depends(co
 
 class PrefIn(BaseModel):
     value: list | dict | None
+    revision: str | None = None
+
+
+@app.get("/api/shops/{shop_id}/prefs/svodwb_presets")
+def get_svodwb_presets(shop_id: int, u=Depends(current_user), c=Depends(conn)):
+    if not auth.can(auth.shop_role(c, u, shop_id), "viewer"):
+        raise HTTPException(403, "Нет доступа к магазину")
+    row = c.execute("SELECT value, updated_at FROM user_prefs WHERE user_id=%s AND shop_id=%s AND key='svodwb_presets'",
+                    (u['id'], shop_id)).fetchone()
+    return {'items': row['value']['items'] if row else [], 'revision': row['updated_at'].isoformat() if row else None}
 
 
 @app.put("/api/shops/{shop_id}/prefs/{key}")
@@ -1065,8 +1085,23 @@ def set_pref(shop_id: int, key: str, body: PrefIn, u=Depends(current_user), c=De
     """Личные настройки вида (раскладка колонок и т.п.); value=null — сбросить к стандартной."""
     if not auth.can(auth.shop_role(c, u, shop_id), "viewer"):
         raise HTTPException(403, "Нет доступа к магазину")
-    if key not in ("svodwb_layout", "pnl_ads"):
+    if key not in ("svodwb_layout", "svodwb_presets", "pnl_ads"):
         raise HTTPException(400, "Неизвестная настройка")
+    if key == 'svodwb_presets':
+        from .svodwb_presets import normalize
+        try:
+            value = normalize(body.value)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        c.execute('SELECT pg_advisory_xact_lock(hashtext(%s))', (f'svodwb-presets:{u["id"]}:{shop_id}',))
+        row = c.execute("SELECT updated_at FROM user_prefs WHERE user_id=%s AND shop_id=%s AND key=%s", (u['id'], shop_id, key)).fetchone()
+        if (row['updated_at'].isoformat() if row else None) != body.revision:
+            raise HTTPException(409, 'Пресеты изменились в другом окне. Перечитайте список перед сохранением')
+        saved = c.execute("""INSERT INTO user_prefs(user_id,shop_id,key,value) VALUES (%s,%s,%s,%s)
+            ON CONFLICT (user_id,shop_id,key) DO UPDATE SET value=EXCLUDED.value,updated_at=clock_timestamp()
+            RETURNING updated_at""", (u['id'], shop_id, key, json.dumps(value, ensure_ascii=False))).fetchone()
+        c.commit()
+        return {'items': value['items'], 'revision': saved['updated_at'].isoformat()}
     if body.value is None:
         c.execute("DELETE FROM user_prefs WHERE user_id=%s AND shop_id=%s AND key=%s", (u["id"], shop_id, key))
     else:
@@ -1102,8 +1137,8 @@ def set_tax(shop_id: int, body: TaxIn, u=Depends(current_user), c=Depends(conn))
     c.execute("INSERT INTO audit_log(user_id,workspace_id,action,details) SELECT %s, workspace_id, 'tax', %s FROM accounts WHERE id=%s",
               (u["id"], json.dumps({"shop": shop_id, **body.model_dump(mode="json"), "valid_from": str(vf)}, ensure_ascii=False), shop_id))
     from .materialize import mark_cost_dirty
-    
-    
+                                                                        
+                                                                                
     mark_cost_dirty(c, shop_id, date(2000, 1, 1))
     c.commit()
     return {"ok": True}
@@ -1198,7 +1233,7 @@ def set_cost(shop_id: int, body: CostIn, u=Depends(current_user), c=Depends(conn
         raise HTTPException(400, "Странная себестоимость")
     vf = body.valid_from or today_msk()
     if not c.execute("SELECT 1 FROM cost_price WHERE account_id=%s AND nm_id=%s", (shop_id, body.nm_id)).fetchone():
-        vf = date(2000, 1, 1)          
+        vf = date(2000, 1, 1)                                                        
     c.execute("""INSERT INTO cost_price(account_id,nm_id,valid_from,cost,note) VALUES (%s,%s,%s,%s,%s)
                  ON CONFLICT (account_id,nm_id,valid_from) DO UPDATE SET cost=EXCLUDED.cost, note=EXCLUDED.note""",
               (shop_id, body.nm_id, vf, body.cost, f"вручную: {u['email']}"))
@@ -1230,7 +1265,7 @@ def health(c=Depends(conn)):
     return {"ok": True}
 
 
-from . import api_actions, api_ads, api_assistant, api_billing, api_cards, api_compare, api_kb, api_manager, api_questions, api_rnp, api_seo, api_service_news, api_staff, api_total, api_visual, api_mcp, api_plugin, api_ai_tasks  
+from . import api_actions, api_ads, api_assistant, api_billing, api_cards, api_compare, api_kb, api_manager, api_questions, api_rnp, api_seo, api_service_news, api_staff, api_total, api_visual, api_mcp, api_plugin, api_ai_tasks                                                       
 
 app.include_router(api_manager.router)
 app.include_router(api_plugin.router)
@@ -1244,6 +1279,8 @@ app.include_router(api_actions.router)
 app.include_router(api_questions.router)
 app.include_router(api_ads.router)
 app.include_router(api_total.router)
+from . import api_balance              
+app.include_router(api_balance.router)
 app.include_router(api_kb.router)
 app.include_router(api_visual.router)
 app.include_router(api_staff.router)
@@ -1252,9 +1289,9 @@ app.include_router(api_seo.router)
 app.include_router(api_service_news.router)
 app.include_router(api_mcp.router)
 app.include_router(api_ai_tasks.router)
-from . import api_calendar  
+from . import api_calendar                                                      
 app.include_router(api_calendar.router)
-from . import api_password_reset  
+from . import api_password_reset              
 app.include_router(api_password_reset.router)
 
 if DIST.exists():

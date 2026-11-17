@@ -69,20 +69,20 @@ def run(ctx) -> dict:
                     open_ids.append(f["id"])
             n += len(items)
             ctx.c.commit()
-    
-    still = set(open_ids)          
+                                                                                                                         
+    still = set(open_ids)                                                                                                             
     done = [r["id"] for r in ctx.c.execute("SELECT id FROM wb_feedbacks WHERE account_id=%s AND NOT answered", (acc,)).fetchall()
             if r["id"] not in still]
     if done:
         ctx.c.execute("UPDATE wb_feedbacks SET answered=true, updated_at=now() WHERE account_id=%s AND id = ANY(%s)", (acc, done))
     ctx.c.commit()
     res = {"feedbacks": n, "new": new, "cursor": {"backfilled": True}}
-    try:                                       
+    try:                                                                                                              
         from .. import reviews
         from ..private_ai import scheduled_ai
         with scheduled_ai(ctx.c):
             res["auto"] = reviews.process(ctx.c, acc)
-    except Exception as e:  
+    except Exception as e:                                                               
         ctx.c.rollback()
         res["auto_error"] = str(e)[:200]
     return res
@@ -115,7 +115,7 @@ def run_rating(ctx) -> dict:
     acc, day = ctx.acc["id"], today_msk()
     head, tot = _item_rating(ctx, 364)
     for it in tot:
-        g = lambda o, k: (o.get(k) or {}).get("current")  
+        g = lambda o, k: (o.get(k) or {}).get("current")              
         fr = it.get("feedbackRating") or {}
         ctx.c.execute(
             """INSERT INTO wb_item_rating(account_id,nm_id,day,rating,percentile,card_rating,s5,s4,s3,s2,s1,disqualified,pinned,shadowed)

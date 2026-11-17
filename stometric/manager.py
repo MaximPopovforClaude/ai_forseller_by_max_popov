@@ -4,9 +4,9 @@ from datetime import date, timedelta
 
 from .config import today_msk
 
-
-
-
+                                                                                                
+                                                                                                                 
+                                                                                    
 GREEN, RED, PINK, BLUE, YELLOW, TEAL = "#16a34a", "#dc2626", "#db2777", "#2563eb", "#ca8a04", "#0d9488"
 KINDS = [
     {"key": "price_down", "title": "Цена ↓", "color": RED, "unit": "₽"},
@@ -40,6 +40,10 @@ CHANGE_TITLE = {"title": "Название", "description": "Описание", 
 def change_color(r: dict) -> str | None:
     """Цвет автоматического изменения по смыслу: цена вверх / вниз, вход / выход из акции, характеристики."""
     f, k = r["field"], r["kind"]
+    if k in ('ad_setting', 'ad_product', 'ad_budget', 'ad_limit', 'ad_command', 'ad_config'):
+        return YELLOW
+    if k in ('ad_kw_bid', 'ad_kw_minus', 'ad_kw_status'):
+        return YELLOW
     if k == "price" or f == "marketing_price":
         o, n = r["old_value"] or {}, r["new_value"] or {}
         if o.get("final") and n.get("final") and o["final"] != n["final"]:
@@ -57,7 +61,13 @@ def change_color(r: dict) -> str | None:
 def change_label(r: dict) -> str:
     """Короткая подпись изменения карточки для таблицы и доски действий."""
     f = r["field"]
-    if f == "marketing_price":          
+    from .ad_history import KINDS as AD_KINDS, label as ad_label
+    if r["kind"] in AD_KINDS:
+        return ad_label(r)
+    if r['kind'] in ('ad_kw_bid', 'ad_kw_minus', 'ad_kw_status'):
+        from .ad_keyword_history import label
+        return label(r)
+    if f == "marketing_price":                                                  
         o, n = (r["old_value"] or {}).get("final") or 0, (r["new_value"] or {}).get("final") or 0
         return f"Цена с акциями Ozon {'↑' if n > o else '↓'} {abs(n - o):,.0f} ₽ → {n:,.0f}".replace(",", " ")
     if f == "archived":
@@ -84,7 +94,7 @@ def change_label(r: dict) -> str:
         return f"Вышел из акции «{v.get('name') or v.get('promo')}»" + (" (акция закончилась)" if v.get("ended") else "")
     if r["kind"] == "ad_status":
         o, n = r["old_value"] or {}, r["new_value"] or {}
-        return f"Реклама «{n.get('campaign', '')}»: " + (f"{o.get('status')} → " if o else "новая, ") + str(n.get("status"))
+        return f"Реклама «{n.get('campaign', '')}»: " + (f"{o.get('status')} → " if o else "впервые получена, ") + str(n.get("status"))
     if r["kind"] == "ad_bid":
         o, n = r["old_value"] or {}, r["new_value"] or {}
         parts = [f"{'поиск' if k == 'search' else 'реком.' if k == 'recommendations' else k} {o.get(k, 0):g} → {v:g} ₽"
@@ -114,7 +124,7 @@ def stocks(c, shop: int) -> dict[int, dict]:
 
 def other_pct(c, shop: int) -> float:
     r = c.execute("SELECT value FROM shop_settings WHERE account_id=%s AND key='other_pct'", (shop,)).fetchone()
-    return float(r["value"]) if r else 0.03   
+    return float(r["value"]) if r else 0.03                                                            
 
 
 def _unit_inputs(c, shop: int) -> dict[int, dict]:
@@ -218,7 +228,7 @@ def price_lab(c, shop: int) -> dict:
     return {"other_pct": other, "rows": rows}
 
 
-def ad_split(c, shop: int, df: date, dt: date) -> dict:
+def ad_split(c, shop: int, df: date, dt: date, nms=None) -> dict:
     """Self-hosted application component."""
     info = {}
     for r in c.execute("""SELECT DISTINCT ON ((data->>'advertId')::bigint) (data->>'advertId')::bigint id, data->'info'->>'bid_type' bt,
@@ -226,14 +236,14 @@ def ad_split(c, shop: int, df: date, dt: date) -> dict:
         pl = r["pl"] or {}
         info[r["id"]] = ("ark" if r["bt"] == "unified" else "prk", pl.get("search", True), pl.get("recommendations", True))
     kw = {(r["advert_id"], r["nm_id"], r["day"]): float(r["s"] or 0) for r in c.execute(
-        """SELECT advert_id, nm_id, day, sum(spend) s FROM wb_ad_kw_daily WHERE account_id=%s AND day BETWEEN %s AND %s GROUP BY 1, 2, 3""",
-        (shop, df, dt))}
+        """SELECT advert_id, nm_id, day, sum(spend) s FROM wb_ad_kw_daily WHERE account_id=%s AND day BETWEEN %s AND %s AND (%s::bigint[] IS NULL OR nm_id=ANY(%s::bigint[])) GROUP BY 1, 2, 3""",
+        (shop, df, dt, nms, nms))}
     out: dict = {}
     for r in c.execute("""
         SELECT (data->>'advertId')::bigint id, (nm->>'nmId')::bigint nm, row_date d, sum((nm->>'sum')::numeric) spend
         FROM raw_rows, jsonb_array_elements(CASE WHEN jsonb_typeof(data->'apps')='array' THEN data->'apps' ELSE '[]'::jsonb END) app,
              jsonb_array_elements(CASE WHEN jsonb_typeof(app->'nms')='array' THEN app->'nms' ELSE '[]'::jsonb END) nm
-        WHERE account_id=%s AND source='ad_stats' AND row_date BETWEEN %s AND %s GROUP BY 1, 2, 3""", (shop, df, dt)):
+        WHERE account_id=%s AND source='ad_stats' AND row_date BETWEEN %s AND %s AND (%s::bigint[] IS NULL OR (nm->>'nmId')::bigint=ANY(%s::bigint[])) GROUP BY 1, 2, 3""", (shop, df, dt, nms, nms)):
         sp = float(r["spend"] or 0)
         if not sp:
             continue
@@ -252,16 +262,78 @@ def ad_split(c, shop: int, df: date, dt: date) -> dict:
     return out
 
 
-def board(c, shop: int, days: int = 14, date_to: date | None = None, ads: bool = False) -> dict:
+def day_cells(c, shop, df, dt, *, nms=None, metric_nms=None, ads=False, prices=False, ad_metrics=False):
+    """Shared daily cells for the action board and single-SKU entry overlay.
+    Only saved observations; no current-price substitution or collection.
+    """
+    from . import wb_demand
+    orders = wb_demand.daily(c,shop,df-timedelta(days=1),dt, nms) if nms is not None else wb_demand.daily(c,shop,df-timedelta(days=1),dt)
+    def read(query, params, column="nm_id"):
+        if nms is not None:
+            end = query.find(" ORDER BY")
+            if end < 0: end = len(query)
+            query = query[:end] + f" AND {column}=ANY(%s::bigint[])" + query[end:]
+            params = (*params, nms)
+        return c.execute(query, params)
+    acts = {}
+    for r in read("""SELECT a.id, a.nm_id, a.day, a.kind, a.value, a.note, a.user_id, coalesce(u.name, u.email) who, a.created_at
+                          FROM nm_actions a LEFT JOIN users u ON u.id=a.user_id
+                          WHERE a.account_id=%s AND a.day BETWEEN %s AND %s ORDER BY a.created_at""", (shop, df, dt), "a.nm_id"):
+        acts.setdefault(r["nm_id"], {}).setdefault(r["day"].isoformat(), []).append(
+            {"id": r["id"], "kind": r["kind"], "value": r["value"], "note": r["note"], "who": r["who"], "user_id": r["user_id"], "created_at": r.get("created_at")})
+    for r in read("""SELECT id, nm_id, (detected_at AT TIME ZONE 'Europe/Moscow')::date d, kind, field, old_value, new_value, detected_at, wb_updated_at
+                          FROM card_changes WHERE account_id=%s AND (detected_at AT TIME ZONE 'Europe/Moscow')::date BETWEEN %s AND %s
+                          ORDER BY detected_at""", (shop, df, dt)):
+        acts.setdefault(r["nm_id"], {}).setdefault(r["d"].isoformat(), []).append(
+            {"id": f"c{r['id']}", "kind": "auto:" + r["kind"], "value": change_label(r), "auto": True, "color": change_color(r),
+             "detected_at": r.get("detected_at"), "wb_updated_at": r.get("wb_updated_at")})
+    for r in read("SELECT nm_id, day, promos FROM wb_promo_days WHERE account_id=%s AND day BETWEEN %s AND %s", (shop, df, dt)):
+        acts.setdefault(r["nm_id"], {}).setdefault(r["day"].isoformat(), []).append(                                                    
+            {"id": f"p{r['nm_id']}_{r['day']:%Y%m%d}", "kind": "auto:promo_day", "value": "В акции: " + ", ".join(sorted(r["promos"])), "auto": True})
+    import zlib
+    for r in read("""SELECT nm_id, day, section, point, clicks, clicks_avg, change_pct FROM entry_alerts
+                          WHERE account_id=%s AND day BETWEEN %s AND %s ORDER BY abs(clicks - clicks_avg) DESC""", (shop, df, dt)):
+        up = r["clicks"] > r["clicks_avg"]                                                                                   
+        acts.setdefault(r["nm_id"], {}).setdefault(r["day"].isoformat(), []).append(
+            {"id": f"e{r['nm_id']}_{r['day']:%Y%m%d}_{zlib.crc32((r['section'] + '|' + r['point']).encode()) & 0xffffff}", "kind": "auto:entry", "auto": True,
+             "color": GREEN if up else RED,
+             "value": f"Точка входа {r['section']} / {r['point']}: {float(r['clicks_avg']):.0f} → {float(r['clicks']):.0f} переходов "
+                      f"({'+' if up else ''}{r['change_pct']} %)"})
+    ad_day, osum_day = {}, {}
+    if ads:
+        ad_day = ad_split(c, shop, df, dt, nms) if nms is not None else ad_split(c, shop, df, dt)
+        for r in read("""SELECT nm_id, day, (data->>'orders_sum')::numeric s FROM agg_nm_day WHERE account_id=%s AND day BETWEEN %s AND %s""",
+                           (shop, df, dt)):
+            if r["s"]:
+                osum_day.setdefault(r["nm_id"], {})[r["day"].isoformat()] = float(r["s"])
+    price_days = {}
+    if prices:
+        from .action_charts import daily_prices
+        price_days = daily_prices(c, shop, df, dt, nms) if nms is not None else daily_prices(c, shop, df, dt)
+    metrics = {}
+    if ad_metrics:
+        from . import action_ads
+        metrics = action_ads.read(c, shop, df, dt, metric_nms if metric_nms is not None else nms)
+
+    ids = set(nms or []) | set(metric_nms or []) | set(orders) | set(acts) | set(ad_day) | set(price_days) | set(metrics)
+    return {nm: {
+        "orders": orders.get(nm, {}), "actions": acts.get(nm, {}),
+        **({"price_spp_days": price_days.get(nm, {})} if prices else {}),
+        **({"ad_metrics": metrics.get(nm, {})} if ad_metrics else {}),
+        **({"ads": {d: {**v, "osum": osum_day.get(nm, {}).get(d)} for d, v in ad_day.get(nm, {}).items()}} if ads else {}),
+    } for nm in ids}
+
+
+def board(c, shop: int, days: int = 14, date_to: date | None = None, ads: bool = False, prices: bool = False, ad_metrics: bool = False) -> dict:
     """Лист «ДействияПоАртикулам»: ключевые данные артикула + заказы и действия по дням (новые дни — слева, как в листе).
-    ads — ДРР по дням в ячейках (сумма заказов дня и расход с разбивкой ad_split)."""
+    ads — ДРР по дням; prices — средняя цена с СПП в заказах дня, как на графике РНП."""
     if _ozon(c, shop):
         from . import manager_oz
         return manager_oz.board(c, shop, days, date_to)
     dt = date_to or today_msk()
     df = dt - timedelta(days=days - 1)
     y = today_msk() - timedelta(days=1)
-    w0 = y - timedelta(days=6)                   
+    w0 = y - timedelta(days=6)                                                                                  
     other = other_pct(c, shop)
     units = _unit_inputs(c, shop)
     k7 = {r["nm_id"]: r for r in c.execute(
@@ -276,43 +348,13 @@ def board(c, shop: int, days: int = 14, date_to: date | None = None, ads: bool =
     spp_price = {r["nm_id"]: r["fp"] for r in c.execute(
         """SELECT DISTINCT ON (nm_id) nm_id, finished_price fp FROM orders WHERE account_id=%s AND order_dt >= now() - interval '14 days'
            ORDER BY nm_id, order_dt DESC""", (shop,))}
-    spp_price.update({nm: w["price"] for nm, w in showcase(c, shop).items()})     
+    spp_price.update({nm: w["price"] for nm, w in showcase(c, shop).items()})                                       
     plan = {r["nm_id"]: float(r["qty"]) for r in c.execute(
         "SELECT nm_id, qty FROM nm_plans WHERE account_id=%s AND month=%s", (shop, dt.replace(day=1)))}
     from . import wb_demand
-    orders = wb_demand.daily(c,shop,df-timedelta(days=1),dt)
     demand = wb_demand.summary(c,shop,w0,y)
-    acts = {}
-    for r in c.execute("""SELECT a.id, a.nm_id, a.day, a.kind, a.value, a.note, a.user_id, coalesce(u.name, u.email) who, a.created_at
-                          FROM nm_actions a LEFT JOIN users u ON u.id=a.user_id
-                          WHERE a.account_id=%s AND a.day BETWEEN %s AND %s ORDER BY a.created_at""", (shop, df, dt)):
-        acts.setdefault(r["nm_id"], {}).setdefault(r["day"].isoformat(), []).append(
-            {"id": r["id"], "kind": r["kind"], "value": r["value"], "note": r["note"], "who": r["who"], "user_id": r["user_id"]})
-    for r in c.execute("""SELECT id, nm_id, (detected_at AT TIME ZONE 'Europe/Moscow')::date d, kind, field, old_value, new_value
-                          FROM card_changes WHERE account_id=%s AND (detected_at AT TIME ZONE 'Europe/Moscow')::date BETWEEN %s AND %s
-                          ORDER BY detected_at""", (shop, df, dt)):
-        acts.setdefault(r["nm_id"], {}).setdefault(r["d"].isoformat(), []).append(
-            {"id": f"c{r['id']}", "kind": "auto:" + r["kind"], "value": change_label(r), "auto": True, "color": change_color(r)})
-    for r in c.execute("SELECT nm_id, day, promos FROM wb_promo_days WHERE account_id=%s AND day BETWEEN %s AND %s", (shop, df, dt)):
-        acts.setdefault(r["nm_id"], {}).setdefault(r["day"].isoformat(), []).append(       
-            {"id": f"p{r['nm_id']}_{r['day']:%Y%m%d}", "kind": "auto:promo_day", "value": "В акции: " + ", ".join(sorted(r["promos"])), "auto": True})
-    import zlib
-    for r in c.execute("""SELECT nm_id, day, section, point, clicks, clicks_avg, change_pct FROM entry_alerts
-                          WHERE account_id=%s AND day BETWEEN %s AND %s ORDER BY abs(clicks - clicks_avg) DESC""", (shop, df, dt)):
-        up = r["clicks"] > r["clicks_avg"]                 
-        acts.setdefault(r["nm_id"], {}).setdefault(r["day"].isoformat(), []).append(
-            {"id": f"e{r['nm_id']}_{r['day']:%Y%m%d}_{zlib.crc32((r['section'] + '|' + r['point']).encode()) & 0xffffff}", "kind": "auto:entry", "auto": True,
-             "color": GREEN if up else RED,
-             "value": f"Точка входа {r['section']} / {r['point']}: {float(r['clicks_avg']):.0f} → {float(r['clicks']):.0f} переходов "
-                      f"({'+' if up else ''}{r['change_pct']} %)"})
-    ad_day, osum_day = {}, {}
-    if ads:
-        ad_day = ad_split(c, shop, df, dt)
-        for r in c.execute("""SELECT nm_id, day, (data->>'orders_sum')::numeric s FROM agg_nm_day WHERE account_id=%s AND day BETWEEN %s AND %s""",
-                           (shop, df, dt)):
-            if r["s"]:
-                osum_day.setdefault(r["nm_id"], {})[r["day"].isoformat()] = float(r["s"])
     stk = stocks(c, shop)
+    daily = day_cells(c, shop, df, dt, metric_nms=list(units), ads=ads, prices=prices, ad_metrics=ad_metrics)
     out = []
     for nm, u in units.items():
         k = k7.get(nm) or {}
@@ -322,7 +364,7 @@ def board(c, shop: int, days: int = 14, date_to: date | None = None, ads: bool =
         stock = sk.get("total")
         calc = unit_calc(u, other, None)
         osum, osum_spp = _f(k.get("osum")), _f(k.get("osum_spp"))
-        ads, bsum = _f(k.get("ads")) or 0.0, _f(k.get("bsum"))
+        ad_cost, bsum = _f(k.get("ads")) or 0.0, _f(k.get("bsum"))
         fo, fc, fr = _f(k.get("f_open")), _f(k.get("f_cart")), _f(k.get("f_orders"))
         out.append({
             "nm_id": nm, "vendor_code": u["vendor_code"], "title": u["title"], "subject": u["subject"], "photo": u["photo"],
@@ -330,10 +372,9 @@ def board(c, shop: int, days: int = 14, date_to: date | None = None, ads: bool =
             "rating": _f(rating.get(nm)), "orders_avg": wb_demand.rounded(avg, 2), "stock_days": round(stock / avg, 1) if stock is not None and avg else None,
             'demand': dm, 'orders_source':'wb_funnel',
             "spp": round(1 - osum_spp / osum, 4) if osum and osum_spp is not None else None, "plan": plan.get(nm),
-            "drr_orders": round(ads / osum, 4) if osum else None, "drr_buyouts": round(ads / bsum, 4) if bsum else None,
+            "drr_orders": round(ad_cost / osum, 4) if osum else None, "drr_buyouts": round(ad_cost / bsum, 4) if bsum else None,
             "conv_cart": wb_demand.rounded(dm['conv_cart'],4), "conv_order": wb_demand.rounded(dm['conv_order'],4),
-            "orders": orders.get(nm, {}), "actions": acts.get(nm, {}),
-            **({"ads": {d: {**v, "osum": osum_day.get(nm, {}).get(d)} for d, v in ad_day.get(nm, {}).items()}} if ads else {}),
+            **daily.get(nm, {"orders": {}, "actions": {}}),
         })
     out.sort(key=lambda x: (-(sum(x["orders"].values())), x["vendor_code"] or ""))
     return {"days": [(dt - timedelta(days=i)).isoformat() for i in range(days)], "kinds": KINDS, "rows": out,

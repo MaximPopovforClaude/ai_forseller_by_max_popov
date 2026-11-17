@@ -11,8 +11,8 @@ from . import config, db, visual, visual_rules as R
 
 STEPS = ["passport", "competitors", "answers", "goals", "brief"]
 STEP_RU = {"passport": "паспорт", "competitors": "конкуренты", "answers": "товар и ЦА", "goals": "цели и воронки", "brief": "ТЗ"}
-COMPS = 8                 
-COMP_SLIDES = 8           
+COMPS = 8                                        
+COMP_SLIDES = 8                                   
 TMP = config.DATA / "visual" / "tmp"
 SYSTEM = ("Ты - сильный маркетолог и арт-директор маркетплейсов (Wildberries, Ozon) с многолетним опытом, работаешь строго по регламенту "
           "создания инфографики компании продавца. Думаешь о конверсиях (CTR, в корзину, в заказ), а не о красоте ради красоты. "
@@ -24,7 +24,7 @@ class StepError(RuntimeError):
     pass
 
 
-_CUR = threading.local()      
+_CUR = threading.local()                                                                      
 
 
 def progress(text: str):
@@ -36,7 +36,7 @@ def progress(text: str):
         with db.connect() as c:
             c.execute("UPDATE vis_jobs SET summary=%s WHERE project_id=%s AND step=%s AND state='running'", (text[:200], pid, step))
             c.commit()
-    except Exception:  
+    except Exception:                                                
         pass
 
 
@@ -64,11 +64,11 @@ def _key(c, shop: int):
     a = assistant.access(c, shop)
     if not a.get("ok"):
         raise StepError(a.get("reason") or "Нейросеть недоступна")
-    c.commit()                  
+    c.commit()                                                                            
     return a["key"]
 
 
-
+                       
 def _card(c, shop: int, nm: int | None) -> str:
     if not nm:
         return ""
@@ -151,7 +151,7 @@ def _head(c, shop: int, p: dict) -> str:
         f"УТОЧНЕНИЯ МЕНЕДЖЕРА (учесть обязательно): {p['note']}" if p["note"] else "") if x)
 
 
-
+                    
 def step_passport(c, shop: int, p: dict) -> str:
     if not p["passport_id"]:
         raise StepError("Паспорт не прикреплён")
@@ -182,7 +182,7 @@ def step_passport(c, shop: int, p: dict) -> str:
     return f"Паспорт: моделей {len(models)}, похоже наша — «{g.get('model')}». Подтвердите модель."
 
 
-
+                       
 def _comp_list(c, shop: int, p: dict, key_phrase: str | None) -> list[dict]:
     from . import market
     out, seen = [], {p["nm_id"]}
@@ -226,7 +226,7 @@ def _wb_card(c, nm: int) -> dict | None:
     base = ph.split("/images/")[0]
     try:
         d = httpx.get(f"{base}/info/ru/card.json", timeout=15).json()
-    except Exception:  
+    except Exception:                
         return None
     return {"base": base, "name": d.get("imt_name"), "brand": (d.get("selling") or {}).get("brand_name"), "imt": d.get("imt_id"),
             "photos": int(((d.get("media") or {}).get("photo_count")) or 0), "subject": d.get("subj_name")}
@@ -243,7 +243,7 @@ def _sheet(base: str, n: int, out: Path) -> int:
             if r.status_code != 200:
                 break
             ims.append(Image.open(io.BytesIO(r.content)).convert("RGB").resize((W, H)))
-        except Exception:  
+        except Exception:                
             break
     if not ims:
         return 0
@@ -266,7 +266,7 @@ def _reviews_pub(imt: int | None) -> dict:
         return {}
     try:
         j = httpx.get(f"https://feedbacks1.wb.ru/feedbacks/v1/{imt}", timeout=20).json()
-    except Exception:  
+    except Exception:                
         return {}
     fb = j.get("feedbacks") or []
     good = [" ".join(x for x in (f.get("text"), f.get("pros")) if x)[:200] for f in fb if (f.get("productValuation") or 0) >= 4][:25]
@@ -296,7 +296,7 @@ def step_competitors(c, shop: int, p: dict) -> str:
         raise StepError("Не удалось скачать фото конкурентов с витрины WB")
     key = _key(c, shop)
     analyzed = []
-    for i in range(0, len(got), 4):                       
+    for i in range(0, len(got), 4):                                                                    
         part = got[i:i + 4]
         progress(f"нейросеть разбирает слайды конкурентов {i + 1}–{i + len(part)} из {len(got)} (1–3 мин)")
         desc = "\n".join(f"Вложение {k + 1}: конкурент {x['id']} «{x['name']}» ({x['brand']}), источник: {x['src']}, слайдов на картинке: {x['slides_n']}. "
@@ -328,7 +328,7 @@ def step_competitors(c, shop: int, p: dict) -> str:
     return f"Разобрал {len(analyzed)} конкурентов ({sum(x.get('slides_n', 0) or 0 for x in got)} слайдов)"
 
 
-
+                       
 def step_answers(c, shop: int, p: dict) -> str:
     comp = p["competitors"] or {}
     qs = "\n".join(f"[{g}] {R.GROUPS[g]}:\n" + "\n".join(f"- {q}" for q in R.QUESTIONS[g]) for g in R.QUESTIONS)
@@ -350,7 +350,7 @@ def step_answers(c, shop: int, p: dict) -> str:
     return f"Ответы на {sum(len(res.get(g) or []) for g in R.QUESTIONS)} вопросов, болей: {len(res.get('pains') or [])}"
 
 
-
+                           
 def step_goals(c, shop: int, p: dict, first_n: int = 3) -> str:
     if not (p["answers"] or {}).get("product"):
         raise StepError("Сначала шаг «Товар и ЦА»")
@@ -375,7 +375,7 @@ def step_goals(c, shop: int, p: dict, first_n: int = 3) -> str:
     return f"Целей: {len(goals)}, воронок: {len(res.get('funnels') or [])}, вариантов первого слайда: {len(res.get('first_variants') or [])}"
 
 
-
+               
 def step_brief(c, shop: int, p: dict, uid: int | None) -> str:
     g = p["goals"] or {}
     if g.get("adapt_from"):
@@ -389,7 +389,7 @@ def step_brief(c, shop: int, p: dict, uid: int | None) -> str:
         for s in f.get("slides") or []:
             if s not in used:
                 used.append(s)
-    for x in g["goals"]:                                       
+    for x in g["goals"]:                                                                                
         if x.get("applicable", True) and x.get("kind") in ("использование", "подсветка", "анатомия") and x["id"] not in used:
             used.append(x["id"])
     goals = {x["id"]: x for x in g["goals"]}
@@ -420,7 +420,7 @@ def step_brief(c, shop: int, p: dict, uid: int | None) -> str:
     return f"ТЗ v{b['version']}: вариантов первого слайда {len(res.get('first_slides') or [])}, слайдов {len(res['slides'])}"
 
 
-
+                                                                                                                        
 def step_adapt(c, shop: int, p: dict, uid: int | None, bid: int) -> str:
     src = c.execute("""SELECT b.data, b.version, p.title, p.nm_id FROM vis_briefs b JOIN vis_projects p ON p.id=b.project_id
                        WHERE b.id=%s AND b.account_id=%s""", (bid, shop)).fetchone()
@@ -508,7 +508,7 @@ def start(shop: int, pid: int, steps: list[str], uid: int | None, first_n: int =
                     visual.touch(c2, pid)
                     c2.execute("UPDATE vis_jobs SET state='done', summary=%s, finished_at=now() WHERE project_id=%s AND step=%s", (txt, pid, s))
                     c2.commit()
-                except Exception as e:  
+                except Exception as e:                
                     c2.rollback()
                     msg = str(e)[:400] if isinstance(e, (StepError, visual.VisualError)) else f"{type(e).__name__}: {str(e)[:300]}"
                     c2.execute("UPDATE vis_jobs SET state='error', error=%s, finished_at=now() WHERE project_id=%s AND step=%s", (msg, pid, s))
@@ -528,7 +528,7 @@ def start(shop: int, pid: int, steps: list[str], uid: int | None, first_n: int =
                                (f"ТЗ согласовано автоматически, рисую {n} картинок — вкладка «5. Отрисовка»", pid))
                     c2.commit()
                     vr.kick()
-                except Exception as e:  
+                except Exception as e:                
                     c2.rollback()
                     c2.execute("UPDATE vis_jobs SET state='error', error=%s, finished_at=now() WHERE project_id=%s AND step='render'",
                                (str(e)[:400], pid))

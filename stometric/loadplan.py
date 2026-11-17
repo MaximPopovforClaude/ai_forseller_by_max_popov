@@ -3,11 +3,11 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-BIG_SHOP = 1000                   
+BIG_SHOP = 1000                              
 SHALLOW_DAYS = 60
-NIGHT_FROM, NIGHT_TO = 0, 7       
-DEEP = {"ad_stats", "ad_upd", "ad_kw", "funnel_days", "paid_storage", "acceptance", "realization"}   
-MULTI_RUN = {"funnel_days", "ad_kw"}                                   
+NIGHT_FROM, NIGHT_TO = 0, 7                 
+DEEP = {"ad_stats", "ad_upd", "ad_kw", "funnel_days", "paid_storage", "acceptance", "realization"}                                 
+MULTI_RUN = {"funnel_days", "ad_kw"}                                                                                   
 _BIG: dict[int, tuple[float, bool]] = {}
 
 

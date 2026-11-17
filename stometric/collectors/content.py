@@ -23,13 +23,13 @@ def run(ctx) -> dict:
         for card in cards:
             upd = card.get("updatedAt") or ""
             max_upd = max(max_upd, upd)
-            if since and upd and upd <= since:      
+            if since and upd and upd <= since:                                                       
                 stop = True
                 break
             prev = ctx.c.execute("SELECT data FROM nomenclature WHERE account_id=%s AND nm_id=%s",
                                  (ctx.acc["id"], card["nmID"])).fetchone()
             first_run = not ctx.state("nomenclature").get("seeded")
-            if not first_run:  
+            if not first_run:                                                          
                 changes += history.card_diff(ctx.c, ctx.acc["id"], prev["data"] if prev else None, card)
             ctx.c.execute(
                 """INSERT INTO nomenclature(account_id,nm_id,imt_id,vendor_code,brand,title,subject_id,subject,created_at,updated_at,data)

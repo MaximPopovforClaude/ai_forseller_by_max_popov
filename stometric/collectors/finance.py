@@ -26,8 +26,8 @@ def _month_windows(frm: date, to: date):
 def run(ctx) -> dict:
     st = ctx.state("realization")
     today = today_msk()
-    frm = date.fromisoformat(st["done_to"]) - timedelta(days=OVERLAP_DAYS) if st.get("done_to") else\
-        (today - timedelta(days=ctx.depth(10 ** 5)) if getattr(ctx, "shallow", False) else START)   
+    frm = date.fromisoformat(st["done_to"]) - timedelta(days=OVERLAP_DAYS) if st.get("done_to") else \
+        (today - timedelta(days=ctx.depth(10 ** 5)) if getattr(ctx, "shallow", False) else START)                                   
     n = 0
     for beg, end in _month_windows(max(frm, START, ctx.acc.get("history_from") or START), today):
         rrd = 0
@@ -43,7 +43,7 @@ def run(ctx) -> dict:
                 break
             rrd = rows[-1]["rrdId"]
         ctx.save_state("realization", {**st, "done_to": end.isoformat()})
-    
+                                                                                                                                   
     gap = (ctx.state("realization") or {}).get("gap")
     from ..loadplan import night
     while gap and night():

@@ -7,7 +7,7 @@ columns: [{"field","title","type": "text|int|money|pct|date"}]. Цифры сч�
 from . import basic, jam, manage, ozads, ozon, wbads, ym
 
 TABS = [
-    
+                                                     
     ("home", "Главная", "Магазин", basic.home),
     ("news", "📰 Лента новостей", "Магазин", manage.news),
     ("dash5", "5#Дашборд", "Дашборды", basic.dash5),
@@ -23,10 +23,10 @@ TABS = [
     ("pnl_month", "PnL#РасчетОперативноПомесячно", "PnL", basic.pnl_month),
     ("no_cost", "PnL#ТоварыБезСебестоимости", "PnL", basic.no_cost),
     ("pnl_week", "PnL#РасчетОперативноПонедельно", "PnL", basic.pnl_week),
-    ("pnl_nm", "PnL#ПоАртикулам", "PnL", basic.pnl_nm),     
-    ("fin_sku", "Финотчёт по SKU", "PnL", basic.fin_sku),   
-    ("opiu_wb", "ОПиУ", "PnL", basic.opiu_wb),   
-    ("pnl_alt_m", "АльтPnL#ПоМесяцам", "Альтернативный PNL", basic.pnl_alt_month),   
+    ("pnl_nm", "PnL#ПоАртикулам", "PnL", basic.pnl_nm),                                      
+    ("fin_sku", "Финотчёт по SKU", "PnL", basic.fin_sku),                                
+    ("opiu_wb", "ОПиУ", "PnL", basic.opiu_wb),                                
+    ("pnl_alt_m", "АльтPnL#ПоМесяцам", "Альтернативный PNL", basic.pnl_alt_month),                                            
     ("pnl_alt_nm", "АльтPnL#ПоАртикулам", "Альтернативный PNL", basic.pnl_alt_nm),
     ("pnl_alt_nm_m", "АльтPnL#ПоАртикуламПоМесяцам", "Альтернативный PNL", basic.pnl_alt_nm_month),
     ("ads_kw", "Реклама: кампании и ключи", "Реклама", wbads.ads_campaigns),
@@ -35,10 +35,13 @@ TABS = [
     ("ads", "1#СводнаяПоРекламе", "Реклама", basic.ads_summary),
     ("ads_conv", "РекламаКонверсииПонедельно", "Реклама", basic.ads_conv_week),
     ("jam", "Джем", "Джем", jam.jam_tab),
-    ("seo", "SEO за 5 минут", "Джем", manage.seo),   
+    ("jam_deep", "Джем глубокий", "Джем", jam.deep_tab),
+    ("query_heatmap", "Тепловая карта запросов", "Джем", manage.query_heatmap),
+    ("seo", "SEO за 5 минут", "Джем", manage.seo),                                                                                                           
     ("orders_daily", "ЗаказыПоДням", "Заказы", basic.orders_daily),
     ("orders_hours", "ДашбордЗаказыПоЧасамПоАртикулу", "Заказы", basic.orders_hours),
-    ("spp", "Дашборд#СППпоПредмету", "Заказы", basic.spp_subject),
+    ("spp", "СПП по предметам · дни", "Заказы", basic.spp_subject),
+    ("spp_hours", "СПП по предметам · часы", "Заказы", basic.spp_hours),
     ("logistics_week", "ЛогистикаПонедельно", "Склады", basic.logistics_week),
     ("stock_plan", "3#ОстаткиРегионСклады", "Склады", basic.stock_plan),
     ("stocks_wh", "2#ОстаткиПоСкладам", "Склады", basic.stocks_by_wh),
@@ -46,40 +49,40 @@ TABS = [
     ("stocks", "БД#ОстаткиТекущиеПоСкладам", "Склады", basic.stocks_current),
     ("mgr_actions", "ДействияПоАртикулам", "Управление", manage.actions),
     ("mgr_prices", "ОнлайнЦена", "Управление", manage.prices),
-    ("item_rating", "Оценки товаров", "Управление", manage.item_rating),   
+    ("item_rating", "Оценки товаров", "Управление", manage.item_rating),                                           
     ("changes", "ЖурналИзмененийКарточек", "Управление", manage.changes),
     ("competitors", "Конкуренты", "Управление", manage.competitors),
     ("comp_monitor", "МониторингКонкурентов", "Управление", manage.comp_monitor),
     ("insights", "ИИ-разбор", "Управление", manage.insights),
     ("photo_funnel", "Фотоворонка", "Управление", manage.photo_funnel),
-    ("entry_points", "Точки входа", "Управление", manage.entry_points),   
+    ("entry_points", "Точки входа", "Управление", manage.entry_points),                                                        
     ("planning", "Планирование", "Планирование", manage.planning),
-    ("unit_wb", "UNIT-экономика", "Управление", basic.unit_wb),   
+    ("unit_wb", "UNIT-экономика", "Управление", basic.unit_wb),                               
     ("rnp", "РНП", "Магазин", manage.rnp),
-    ("checklist", "Чек-лист", "Управление", manage.checklist),   
-    ("checklist_svod", "Сводный чек-лист (ABC)", "Управление", manage.checklist_summary),   
-    ("hypotheses", "Гипотезы", "Управление", manage.hypotheses),   
+    ("checklist", "Чек-лист", "Управление", manage.checklist),                                              
+    ("checklist_svod", "Сводный чек-лист (ABC)", "Управление", manage.checklist_summary),                 
+    ("hypotheses", "Гипотезы", "Управление", manage.hypotheses),                  
     ("ext_costs", "Внешние расходы и раздачи", "Управление", manage.ext_costs),
-    ("promo", "Расчёт акций", "Управление", manage.promo),   
+    ("promo", "Расчёт акций", "Управление", manage.promo),                                                                                                 
     ("mrc", "Контроль МРЦ", "Управление", manage.mrc),
-    ("shelves", "Полки", "Управление", manage.shelves),   
+    ("shelves", "Полки", "Управление", manage.shelves),                                                                                                                      
     ("settings", "Настройки магазина (СНО)", "Настройки", basic.settings),
     ("exclusions", "Артикулы в работе", "Настройки", manage.exclusions),
     ("staff", "Менеджеры", "Настройки", manage.staff),
     ("cost", "Себестоимость", "Настройки", basic.cost_tab),
     ("status", "СтатусОбновления", "Служебные", basic.update_status),
-    
+                                                                        
     ("nomenclature", "БД#Номенклатура", "Данные", basic.nomenclature),
     ("prices_now", "Сайт#ТекущиеЦеныОстатки", "Данные", basic.prices_now),
-    
+                                                                                                                                                         
     ("real_week", "БД#РеализацияПонедельно", "Данные", basic.real_week_tab),
 ]
-
+                                                                                        
 OZ_TABS = [
-    ("home", "Главная", "Магазин", basic.home),     
+    ("home", "Главная", "Магазин", basic.home),                                                   
     ("news", "📰 Лента новостей", "Магазин", manage.news),
     ("oz_dash", "3#Дашборд", "Дашборды", ozon.dash),
-    ("rnp", "РНП", "Магазин", manage.rnp),       
+    ("rnp", "РНП", "Магазин", manage.rnp),                                                                                 
     ("oz_svod", "2#СводнаяПоАртикулам", "Сводные", ozon.svod),
     ("oz_stocks", "FBO#ТекущиеОстаткиПоКластерам", "Склады", ozon.stocks),
     ("oz_ads_kw", "Реклама: кампании и фразы", "Реклама", ozads.oz_campaigns),
@@ -87,7 +90,7 @@ OZ_TABS = [
     ("oz_ad_phrases", "Фразы РК с расходом", "Реклама", ozads.oz_ad_phrases),
     ("oz_ads", "Реклама#Кампании", "Реклама", ozon.ads),
     ("oz_accruals", "БД#Начисления", "Финансы", ozon.accruals),
-    
+                                                
     ("mgr_actions", "ДействияПоАртикулам", "Управление", manage.actions),
     ("mgr_prices", "ОнлайнЦена", "Управление", manage.prices),
     ("changes", "ЖурналИзмененийКарточек", "Управление", manage.changes),
@@ -96,7 +99,7 @@ OZ_TABS = [
     ("staff", "Менеджеры", "Настройки", manage.staff),
     ("status", "СтатусОбновления", "Служебные", basic.update_status),
     ("oz_products", "БД#Номенклатура", "Данные", ozon.products),
-    
+                                                                                         
     ("v2_day", "По дням", "Управление", ozon.v2_day),
     ("v2_week", "По неделям", "Управление", ozon.v2_week),
     ("v2_month", "По месяцам", "Управление", ozon.v2_month),
@@ -109,12 +112,12 @@ OZ_TABS = [
     ("v2_queries", "Продажи по запросам", "Управление", ozon.v2_queries),
     ("v2_check", "Чек-лист", "Управление", ozon.v2_check),
 ]
-YM_TABS = [   
-    ("home", "Главная", "Магазин", basic.home),     
+YM_TABS = [                                                          
+    ("home", "Главная", "Магазин", basic.home),                                        
     ("ym_dash5", "5#Дашборд", "Дашборды", ym.dash5),
     ("ym_dash", "Дашборд по дням", "Дашборды", ym.dash),
     ("ym_dash_nm", "Дашборд по артикулу", "Дашборды", ym.dash_nm),
-    ("rnp", "РНП", "Магазин", manage.rnp),       
+    ("rnp", "РНП", "Магазин", manage.rnp),                                                        
     ("ym_svod", "2#СводнаяПоАртикулам", "Сводные", ym.svod),
     ("ym_abc", "Сводная#ABC#ОперативныеДанные", "Сводные", ym.abc),
     ("ym_fin_sku", "Финотчёт по SKU", "PnL", ym.fin_sku),

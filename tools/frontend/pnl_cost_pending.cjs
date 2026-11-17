@@ -5,6 +5,9 @@ const {document}=require('./test_dom.cjs'),React=require(path.join(deps,'react')
 const {createRoot}=require(path.join(deps,'react-dom/client')),{flushSync}=require(path.join(deps,'react-dom'));
 const ts=require(path.join(deps,'typescript')),h=React.createElement;
 const requests=[],timers=new Map();let timerId=0;
+const visibility=new Set();
+document.addEventListener=(kind,fn)=>{if(kind==='visibilitychange')visibility.add(fn)};
+document.removeEventListener=(kind,fn)=>{if(kind==='visibilitychange')visibility.delete(fn)};
 const setTimer=(fn,ms)=>{timers.set(++timerId,{fn,ms});return timerId},clearTimer=id=>timers.delete(id);
 const api={tab:(shop,tab,query,signal)=>new Promise((resolve,reject)=>requests.push({shop,tab,signal,resolve,reject}))};
 const mod={exports:{}};
@@ -14,19 +17,19 @@ new Function('require','module','exports','setTimeout','clearTimeout',code)(n=>n
 const source=fs.readFileSync(path.join(base,'web/frontend/src/App.tsx'),'utf8');
 const ast=ts.createSourceFile('App.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 let retry;
-function visit(n){if(ts.isExpressionStatement(n)&&n.getText(ast).startsWith('useEffect(')&&n.getText(ast).includes('if (!data?.retry)'))retry=n.getText(ast);ts.forEachChild(n,visit)}
+function visit(n){if(ts.isExpressionStatement(n)&&n.getText(ast).startsWith('useEffect(')&&n.getText(ast).includes('!data?.retry'))retry=n.getText(ast);ts.forEachChild(n,visit)}
 visit(ast);assert.ok(retry,'test must exercise the actual App polling effect');
 const effect=ts.transpileModule(retry,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText;
-const Screen=new Function('React','useTabData','setTimeout','clearTimeout',`return function Screen({shop,tab}){
+const Screen=new Function('React','useTabData','setTimeout','clearTimeout',`return function Screen({shop,tab,page='tab'}){
  const {useState,useEffect}=React;const [reload,setReload]=useState(0);
- const {data,error,loading}=useTabData(shop,tab,{from:'2026-10-15',to:'2026-11-13'},true,reload);
+ const {data,error,loading}=useTabData(shop,tab,{from:'2026-10-15',to:'2026-11-13'},page==='tab',reload);
  ${effect}
- return React.createElement('div',null,error||data?.note||(loading?'loading':JSON.stringify(data?.rows)));
+ return React.createElement('div',null,error, data?.note||(loading&&!data?'loading':JSON.stringify(data?.rows)));
 }`)(React,mod.exports.useTabData,setTimer,clearTimer);
 const box=document.body.appendChild(document.createElement('main')),root=createRoot(box);
 const tick=()=>new Promise(r=>setImmediate(r));
 async function act(fn){flushSync(fn);await tick();await tick();await tick()}
-async function render(shop=3,tab='opiu_wb'){await act(()=>root.render(h(Screen,{shop,tab})))}
+async function render(shop=3,tab='opiu_wb',page='tab'){await act(()=>root.render(h(Screen,{shop,tab,page})))}
 const pending=tab=>({key:tab,columns:[],rows:[],note:'Ожидаем пересчёта себестоимости',retry:15});
 const poll=()=>[...timers].find(([,t])=>t.ms===15000);
 (async()=>{try{
@@ -47,6 +50,20 @@ const poll=()=>[...timers].find(([,t])=>t.ms===15000);
  await act(()=>requests.at(-1).resolve({key:'pnl_real_w',columns:[],rows:[],note:'Другой тип ожидания'}));
  assert.equal(poll(),undefined,'generic waiting is not polled without server instruction');
  await render(3,'pnl_alt_nm');await act(()=>requests.at(-1).resolve(pending('pnl_alt_nm')));assert.ok(poll());
+ await render(3,'jam_deep');
+ await act(()=>requests.at(-1).resolve({key:'jam_deep',rows:[{clicks:555}],retry:30}));
+ const pollJam=()=>[...timers].find(([,t])=>t.ms===30000);
+ assert.ok(pollJam());let [jid,jt]=pollJam();timers.delete(jid);await act(()=>jt.fn());
+ assert.equal(pollJam(),undefined,'no overlapping poll while a request is running');
+ await act(()=>requests.at(-1).reject(new Error('temporary failure')));
+ assert.ok(box.textContent.includes('555'));assert.ok(box.textContent.includes('temporary failure'));
+ assert.ok(pollJam(),'same-view Jam history continues polling after a temporary error');
+ [jid,jt]=pollJam();timers.delete(jid);await act(()=>jt.fn());
+ await act(()=>requests.at(-1).resolve({key:'jam_deep',rows:[{clicks:777}],retry:30}));
+ assert.ok(box.textContent.includes('777'));assert.ok(!box.textContent.includes('temporary failure'));
+ await act(()=>{document.hidden=true;for(const fn of visibility)fn()});assert.equal(pollJam(),undefined);
+ await act(()=>{document.hidden=false;for(const fn of visibility)fn()});assert.ok(pollJam());
+ await render(3,'jam_deep','account');assert.equal(timers.size,0);assert.equal(visibility.size,0);
  await act(()=>root.unmount());assert.equal(timers.size,0,'unmount clears polling and request deadline');
  console.log('Financial waiting: actual App poll -> ready, no stale amounts, stops on ready/navigation/shop/unmount OK');
 }finally{flushSync(()=>root.unmount())}})().catch(e=>{console.error(e);process.exitCode=1});

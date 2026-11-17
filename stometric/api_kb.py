@@ -153,3 +153,20 @@ def kb_file(iid: int, dl: bool = False, u=Depends(current_user), c=Depends(conn)
     return FileResponse(p, media_type=it["mime"] or "application/octet-stream", filename=it["file_name"] or p.name,
                         content_disposition_type="inline" if inline else "attachment",
                         headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get('/api/kb/items/{iid}/slides')
+def kb_slides_read(iid: int, u=Depends(current_user), c=Depends(conn)):
+    from . import kb_slides
+    result = kb_slides.read(c,u,iid)
+    if result['status'] == 'empty':
+        kb_slides.start(c,u,iid,automatic=True)
+        result = kb_slides.read(c,u,iid)
+    return jsonable_encoder(result)
+
+
+@router.post('/api/kb/items/{iid}/slides')
+def kb_slides_refresh(iid: int, u=Depends(current_user), c=Depends(conn)):
+    from . import kb_slides
+    kb_slides.start(c,u,iid)
+    return jsonable_encoder(kb_slides.read(c,u,iid))

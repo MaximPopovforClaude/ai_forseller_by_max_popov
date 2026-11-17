@@ -18,7 +18,7 @@ def _ym(c, shop: int, lo: date, end: date) -> dict:
     nom = {r["market_sku"]: {"vendor_code": r["offer_id"], "title": r["name"], "brand": r["vendor"], "subject": r["category"], "photo": r["photo"]}
            for r in c.execute("SELECT market_sku, offer_id, name, vendor, category, photo FROM ym_offers WHERE account_id=%s AND market_sku IS NOT NULL",
                               (shop,))}
-    
+                                                                                
     t = end - timedelta(days=60)
     rate, brate = {}, {}
     sales = defaultdict(float)
@@ -39,7 +39,7 @@ def _ym(c, shop: int, lo: date, end: date) -> dict:
         X0 += -(x["x_total"] - x["x_boost"])
         B0 += -x["x_boost"]
     r0, b0 = (X0 / S0, B0 / S0) if S0 else (0.0, 0.0)
-    
+                          
     fin = defaultdict(lambda: [0.0, 0.0])
     for r in ymdash.items(c, shop, end - timedelta(days=60), end - timedelta(days=15), "order_day"):
         if r["sku"] and r["status"] in ymdash.FINAL:

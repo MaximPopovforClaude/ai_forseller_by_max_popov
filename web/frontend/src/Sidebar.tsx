@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { Me, Tab, Workspace } from "./api";
 import { Logo } from "./Logo";
 
-export type Page = "tab" | "account" | "calendar" | "members" | "billing" | "referral" | "admin" | "about" | "service_news" | "reviews" | "questions" | "actions" | "cards" | "seo" | "visual" | "ads" | "total" | "kb" | "ai" | "compare";
+export type Page = "tab" | "account" | "calendar" | "members" | "billing" | "referral" | "admin" | "about" | "service_news" | "reviews" | "questions" | "actions" | "cards" | "seo" | "visual" | "ads" | "total" | "kb" | "ai" | "compare" | "balance";
 
 // Also applies to the frozen demo's saved tab registry.
 export const navigationGroup = (t: Tab): Tab => ({ ...t, group: t.key === "rnp" ? "Магазин" : t.group === "Version2" ? "Управление" : t.group });
@@ -21,10 +21,10 @@ type Props = {
   page: Page; tab: string; onTab: (k: string) => void; onPage: (p: Page) => void;
   theme: "light" | "dark"; onTheme: () => void; onLogout: () => void; onAssistant?: () => void;
   allTabs?: Tab[]; hidden?: string[]; onHidden?: (keys: string[]) => void;
-  compareEnabled?: boolean; logoutLabel?: string; homeInWork?: boolean;
+  compareEnabled?: boolean; balanceEnabled?: boolean; logoutLabel?: string; homeInWork?: boolean;
 };
 
-export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, theme, onTheme, onLogout, onAssistant, allTabs, hidden = [], onHidden, compareEnabled = true, logoutLabel = 'Выйти', homeInWork = true }: Props) {
+export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, theme, onTheme, onLogout, onAssistant, allTabs, hidden = [], onHidden, compareEnabled = true, balanceEnabled = true, logoutLabel = 'Выйти', homeInWork = true }: Props) {
   const [q, setQ] = useState("");
   const [edit, setEdit] = useState(false);       // настройка: какие вкладки показывать
   const hide = (keys: string[], on: boolean) => onHidden?.(on ? [...new Set([...hidden, ...keys])] : hidden.filter((k) => !keys.includes(k)));
@@ -43,7 +43,7 @@ export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, them
   const workSearch = Boolean(ql) && WORK_TABS.some((item) => me.tabs.some((t) =>
     t.key === item.key && (t.title.toLowerCase().includes(ql) || item.title.toLowerCase().includes(ql)))) || Boolean(ql && homeInWork && "главная".includes(ql));
   const item = (key: Page, icon: string, title: string) => (
-    <button className={"side-item" + (page === key ? " on" : "")} title={title} onClick={() => onPage(key)}>
+    <button className={"side-item" + (page === key || (key === "account" && (page === "billing" || page === "ai")) ? " on" : "")} title={title} onClick={() => onPage(key)}>
       <span className="ic">{icon}</span>{open && <span className="tx">{title}</span>}
     </button>
   );
@@ -72,12 +72,16 @@ export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, them
         {item("account", "⚙️", "Настройки аккаунта")}
         {item("calendar", "📅", "Календарь")}
         {item("members", "👥", "Пользователи и права")}
-        {item("billing", "💳", "Тариф и оплата")}
-        {item("ai", "🔌", "Нейросети (MCP)")}
         {onAssistant && <button className="side-item" title="Стометрик — умный помощник по магазину" onClick={onAssistant}>
           <span className="ic">🧙</span>{open && <span className="tx">Стометрик</span>}</button>}
         {item("total", "📊", "Сумма магазинов")}
-        {item("kb", "📚", "База знаний")}</>}
+        {balanceEnabled && item("balance", "⚖️", "Баланс")}
+        {item("kb", "📚", "База знаний")}
+        <button className={"side-item" + (page === "service_news" ? " on" : "")} title="Новости сервиса: что нового и что улучшили"
+          onClick={() => onPage("service_news")}><span className="ic">📣</span>{open && <span className="tx">Новости сервиса</span>}
+          {!!me.news_unread && <span className="side-badge">{me.news_unread}</span>}</button>
+        {item("about", "ℹ️", "О сервисе")}
+        {me.user.superadmin && item("admin", "🛠", "Админка сервиса")}</>}
         {open && <button className="side-h side-h-btn" onClick={() => flip("__work")}>{shut.__work ? "▸" : "▾"} Работа с кабинетом</button>}
         {(!(open && shut.__work) || workSearch) && <>
         {homeInWork && <button className={"side-item" + (page === "tab" && tab === "home" ? " on" : "")} title="Главная" onClick={() => onTab("home")}>
@@ -96,12 +100,6 @@ export function Sidebar({ me, ws, open, onToggle, page, tab, onTab, onPage, them
         ))}
         {compareEnabled && item("compare", "⚖️", "Сравнение карточек")}
         {item("actions", "🤝", "Взаимодействия")}</>}
-        {open && <div className="side-h" />}
-        <button className={"side-item" + (page === "service_news" ? " on" : "")} title="Новости сервиса: что нового и что улучшили"
-          onClick={() => onPage("service_news")}><span className="ic">📣</span>{open && <span className="tx">Новости сервиса</span>}
-          {!!me.news_unread && <span className="side-badge">{me.news_unread}</span>}</button>
-        {item("about", "ℹ️", "О сервисе")}
-        {me.user.superadmin && item("admin", "🛠", "Админка сервиса")}
       </div>}
       <div className="side-sec side-tabs">
         {open ? (

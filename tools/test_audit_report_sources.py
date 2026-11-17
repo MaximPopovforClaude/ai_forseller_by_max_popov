@@ -1,5 +1,5 @@
 """Synthetic regression of the confirmed checklist failure and WB summary cost."""
-import stometric.web  
+import stometric.web              
 from contextlib import ExitStack
 from datetime import date, timedelta
 from decimal import Decimal
@@ -71,8 +71,8 @@ class ReportRegression(unittest.TestCase):
         for case in cases:
             with self.subTest(regime=case['regime'],fallback=case['fallback'],layout=case['layout'],nms=case['nms']):
                 actual = run_report(svodwb,case['regime'],case['fallback'],layouts()[case['layout']],case['nms'])
-                
-                
+                                                                                    
+                                                                                    
                 payload=json.dumps(actual,default=float,sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()
                 self.assertEqual(len(actual['rows']),case['rows'])
                 self.assertEqual(len(actual['columns']),case['columns'])
@@ -109,15 +109,15 @@ class ReportSQL(unittest.TestCase):
         execute = self.c.execute
         def native_numeric(sql,args=()):
             cur = execute(sql,args)
-            
+                                                                                   
             if 'conversion_days' in sql and 'squares' in sql:
                 for row in cur.rows:
                     for k in ('orders','squares','orders_sum','views','cart','conv_orders'):
                         if row.get(k) is not None: row[k] = Decimal(str(row[k]))
             return cur
         self.c.execute = native_numeric
-        with patch.object(rnp,'buyout_pct',return_value=({},.8)),\
-             patch.object(rnp,'_tax',return_value={'regime':'Другая СНО','rate':0,'vat':0,'vat_wb':0}),\
+        with patch.object(rnp,'buyout_pct',return_value=({},.8)), \
+             patch.object(rnp,'_tax',return_value={'regime':'Другая СНО','rate':0,'vat':0,'vat_wb':0}), \
              patch('stometric.exclusions.excluded',return_value=set()):
             out = manage.checklist_summary(self.c,7,{'date_from':date(2026,11,1),'date_to':DAY})
         row = next(r for r in out['rows'] if r['nm_id']==1)
@@ -133,7 +133,7 @@ class ReportSQL(unittest.TestCase):
         for row in source:
             self.c.execute('INSERT INTO agg_real_week VALUES(%s,%s)',(7,json.dumps(row)))
         self.c.execute('INSERT INTO agg_real_week VALUES(%s,%s)',(8,json.dumps({**source[0],'deliveries':999999})))
-        with patch('stometric.materialize.ensure_cost_ready'),\
+        with patch('stometric.materialize.ensure_cost_ready'), \
              patch.object(real_week,'cached',side_effect=AssertionError('materialized path must not load full JSON')):
             got=svodwb._buyout_last4(self.c,7)
             selected=svodwb._buyout_last4(self.c,7,[2,4])

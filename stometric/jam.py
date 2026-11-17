@@ -4,6 +4,7 @@ import threading
 from datetime import timedelta
 
 from .config import today_msk
+from . import jam_scope
 
 PATH = "/api/v2/search-report/product/search-texts"
 FRESH = timedelta(hours=2)
@@ -53,11 +54,12 @@ def start(shop: int, nm: int, a, b) -> bool:
     """Загрузить отчёт в фоне; False — уже грузится."""
     from . import db
     with db.connect() as c:
+        jam_scope.require(c,shop,nm)
         r = c.execute("""INSERT INTO jam_cache(account_id,nm_id,date_from,date_to,state) VALUES (%s,%s,%s,%s,'running')
                          ON CONFLICT (account_id,nm_id,date_from,date_to) DO UPDATE SET state='running', error=NULL, started_at=now()
                          WHERE jam_cache.state<>'running' OR jam_cache.started_at < now() - interval '10 minutes'
                          RETURNING 1""", (shop, nm, a, b)).fetchone()
-        
+                                                              
         c.execute("DELETE FROM jam_cache WHERE account_id=%s AND coalesce(fetched_at, started_at) < now() - interval '7 days'", (shop,))
         c.commit()
     if not r:
@@ -71,9 +73,10 @@ def _run(shop: int, nm: int, a, b):
     with db.connect() as c:
         try:
             items = fetch(c, shop, nm, a, b)
+            jam_scope.require(c,shop,nm)
             c.execute("UPDATE jam_cache SET state='done', items=%s::jsonb, fetched_at=now() WHERE account_id=%s AND nm_id=%s AND date_from=%s "
                       "AND date_to=%s", (_json(items), shop, nm, a, b))
-        except Exception as e:  
+        except Exception as e:                                           
             c.rollback()
             c.execute("UPDATE jam_cache SET state='error', error=%s, fetched_at=now() WHERE account_id=%s AND nm_id=%s AND date_from=%s "
                       "AND date_to=%s", (str(e)[:500], shop, nm, a, b))
@@ -88,6 +91,7 @@ def _json(x):
 def fetch(c, shop: int, nm: int, a, b) -> list[dict]:
     """Топы запросов артикула за период, объединённые по тексту запроса."""
     from .wb import WB, RateLimited, WBError
+    jam_scope.require(c,shop,nm)
     acc = c.execute("SELECT * FROM accounts WHERE id=%s", (shop,)).fetchone()
     wb = WB(c, acc)
     known = access(c, shop)
@@ -96,6 +100,7 @@ def fetch(c, shop: int, nm: int, a, b) -> list[dict]:
     tops = TOPS if lim < 100 else TOPS[:2]
     i = 0
     while i < len(tops):
+        jam_scope.require(c,shop,nm)
         top = tops[i]
         body = {"currentPeriod": {"start": str(a), "end": str(b)}, "nmIds": [nm], "topOrderBy": top, "includeSubstitutedSKUs": True,
                 "includeSearchTexts": True, "orderBy": {"field": top, "mode": "desc"}, "limit": lim}
@@ -105,7 +110,7 @@ def fetch(c, shop: int, nm: int, a, b) -> list[dict]:
             raise
         except WBError as e:
             k = _kind(str(e))
-            if k == "limit" and lim > 30:          
+            if k == "limit" and lim > 30:                                                  
                 lim, tops = 30, TOPS
                 continue
             if k in ("no_jam", "no_scope", "limit"):

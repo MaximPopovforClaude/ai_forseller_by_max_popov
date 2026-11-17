@@ -74,7 +74,7 @@ def vis_create(shop_id: int, body: NewIn, u=Depends(current_user), c=Depends(con
     pid = _err(visual.create, c, shop_id, u["id"], body.nm_id, body.title, body.description)
     _audit(c, u, s["workspace_id"], "visual/create", {"shop": shop_id, "project": pid, "nm": body.nm_id})
     c.commit()
-    added = visual.ensure_sources(c, shop_id, pid, u["id"])      
+    added = visual.ensure_sources(c, shop_id, pid, u["id"])                                                     
     c.commit()
     return {"id": pid, "card_photos": added}
 
@@ -254,7 +254,7 @@ def vis_passport(shop_id: int, pid: int, body: PassIn, u=Depends(current_user), 
 @router.get("/api/shops/{shop_id}/visual_file/{fid}")
 def vis_file(shop_id: int, fid: int, thumb: int = 0, w: int = 0, u=Depends(current_user), c=Depends(conn)):
     _shop(c, u, shop_id, "viewer")
-    if thumb or w:            
+    if thumb or w:                                                                                                      
         size = 1600 if w else 360
         return Response(_err(visual.thumb, c, shop_id, fid, size), media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
     r = _err(visual.file_path, c, shop_id, fid)
@@ -264,8 +264,8 @@ def vis_file(shop_id: int, fid: int, thumb: int = 0, w: int = 0, u=Depends(curre
 class RunIn(BaseModel):
     steps: list[str]
     first_n: int = 3
-    render_models: list[str] = []      
-    render_scope: str = "all"          
+    render_models: list[str] = []                                                                                     
+    render_scope: str = "all"                                                                       
 
 
 @router.post("/api/shops/{shop_id}/visual/{pid}/run")
@@ -286,7 +286,7 @@ def vis_run(shop_id: int, pid: int, body: RunIn, u=Depends(current_user), c=Depe
         from . import visual_render as vr
         mods = _rerr(vr.selected, c, shop_id, body.render_models, u["id"])
         render = {"models": mods, "scope": "first" if body.render_scope == "first" else "all"}
-    visual.ensure_sources(c, shop_id, pid, u["id"])              
+    visual.ensure_sources(c, shop_id, pid, u["id"])                                                                           
     _audit(c, u, s["workspace_id"], "visual/run", {"shop": shop_id, "project": pid, "steps": steps, "render": render})
     c.commit()
     if not visual_ai.start(shop_id, pid, steps, u["id"], max(1, min(6, body.first_n)), render):
@@ -294,7 +294,7 @@ def vis_run(shop_id: int, pid: int, body: RunIn, u=Depends(current_user), c=Depe
     return _state(c, u, shop_id, pid)
 
 
-
+                 
 @router.get("/api/shops/{shop_id}/visual_briefs")
 def vis_briefs(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     _shop(c, u, shop_id, "viewer")
@@ -502,7 +502,7 @@ def vis_brief_zip(shop_id: int, bid: int, u=Depends(current_user), c=Depends(con
                   (bid, shop_id)).fetchone()
     if not b:
         raise HTTPException(404, "Нет такого ТЗ")
-    safe = lambda x: re.sub(r'[\\/:*?"<>|\s]+', "_", x).strip("_")[:80] or "file"   
+    safe = lambda x: re.sub(r'[\\/:*?"<>|\s]+', "_", x).strip("_")[:80] or "file"               
     files = [("исходники", r) for r in c.execute("SELECT id, name, path FROM vis_files WHERE project_id=%s AND kind='source' ORDER BY id",
                                                    (b["project_id"],))]
     if b["passport_id"]:
@@ -522,7 +522,7 @@ def vis_brief_zip(shop_id: int, bid: int, u=Depends(current_user), c=Depends(con
                         background=BackgroundTask(lambda: Path(tmp.name).unlink(missing_ok=True)))
 
 
-
+                    
 class BrandIn(BaseModel):
     colors: str = ""
     fonts: str = ""
@@ -546,7 +546,7 @@ def vis_brand_save(shop_id: int, body: BrandIn, u=Depends(current_user), c=Depen
     return {"ok": True}
 
 
-
+                                                             
 def _rerr(fn, *a, **kw):
     from . import visual_render as vr
     try:
@@ -717,7 +717,7 @@ def card_from_visual(shop_id: int, nm: int, body: PhotoIn, u=Depends(current_use
     return {"media": media}
 
 
-
+                                                                              
 @router.get("/api/workspaces/{ws_id}/higgsfield")
 def hf_status(ws_id: int, u=Depends(current_user), c=Depends(conn)):
     if not auth.can(auth.workspace_role(c, u, ws_id), "viewer"):
@@ -772,12 +772,12 @@ def _resume_renders():
     from . import db, visual_render as vr
 
     def go():
-        try:                                   
+        try:                                                                                                 
             visual_ai.resume_all()
-        except Exception:  
+        except Exception:                
             pass
         with db.connect() as c:
-            q = c.execute("SELECT 1 FROM vis_renders WHERE state='queued' LIMIT 1").fetchone()   
-        if q:                                                                                       
+            q = c.execute("SELECT 1 FROM vis_renders WHERE state='queued' LIMIT 1").fetchone()                                          
+        if q:                                                                                                                           
             vr.kick()
     threading.Thread(target=go, daemon=True).start()

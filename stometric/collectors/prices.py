@@ -36,8 +36,8 @@ def run_promotions(ctx) -> dict:
     Только чтение (Расчёт акций, видео 10X №16). Автоакции товары по API не отдают — для них только сама акция."""
     from datetime import timedelta
     now = datetime.now(timezone.utc).replace(microsecond=0)
-    fmt = lambda d: d.strftime("%Y-%m-%dT%H:%M:%SZ")  
-    
+    fmt = lambda d: d.strftime("%Y-%m-%dT%H:%M:%SZ")              
+                                                                           
     lst, seen, offset = [], set(), 0
     while True:
         page = _promo_rows(ctx.wb.call("calendar", "/api/v1/calendar/promotions", params={
@@ -54,8 +54,8 @@ def run_promotions(ctx) -> dict:
         if len(page) < 1000:
             break
         offset += len(page)
-    
-    
+                                                                           
+                                                                            
     _save_promotions(ctx, lst)
     ids = [p["id"] for p in lst]
     det = {}
@@ -63,9 +63,9 @@ def run_promotions(ctx) -> dict:
         for d in _promo_rows(ctx.wb.call("calendar", "/api/v1/calendar/promotions/details",
                                        params=[("promotionIDs", x) for x in ids[i:i + 100]]), "promotions"):
             det[d["id"]] = d
-    
-    
-    
+                                                                               
+                                                                              
+                                                                                 
     lst = [{**p, **{k: v for k, v in det.get(p["id"], {}).items() if v is not None}} for p in lst]
     _save_promotions(ctx, lst)
     items = 0
@@ -87,7 +87,7 @@ def run_promotions(ctx) -> dict:
                                   (ctx.acc["id"], p["id"], x.get("id"), x.get("inAction", in_action), x.get("price"), x.get("discount"),
                                    x.get("planPrice"), x.get("planDiscount")))
                 items += len(r)
-                for x in r:                     
+                for x in r:                                                                                                       
                     now_in = bool(x.get("inAction", in_action))
                     if (x.get("id") in was and bool(was[x["id"]]) != now_in) or (was and x.get("id") not in was and now_in):
                         _promo_change(ctx, x["id"], p, now_in)
@@ -96,7 +96,7 @@ def run_promotions(ctx) -> dict:
                 if len(r) < 1000:
                     break
                 off += 1000
-    
+                                                                                      
     for r in ctx.c.execute("""SELECT i.nm_id, p.promo_id, p.name FROM wb_promo_items i JOIN wb_promotions p ON p.account_id=i.account_id
                               AND p.promo_id=i.promo_id WHERE i.account_id=%s AND i.in_action AND p.end_at < now()""", (ctx.acc["id"],)).fetchall():
         _promo_change(ctx, r["nm_id"], {"id": r["promo_id"], "name": r["name"]}, False, ended=True)

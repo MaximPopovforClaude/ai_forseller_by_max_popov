@@ -110,8 +110,8 @@ class Sql(unittest.TestCase):
           CREATE TABLE stocks_wb_snap(account_id int,nm_id bigint,snap_at timestamptz,quantity numeric,in_way_to_client numeric,in_way_from_client numeric);
         """)
         tax={'regime':'Другая СНО','rate':0,'vat':0,'vat_wb':0}
-        with patch.object(ck,'_potentials'),patch.object(ck,'_score10x'),\
-             patch.object(rnp,'buyout_pct',return_value=({},.8)),patch.object(rnp,'_tax',return_value=tax),\
+        with patch.object(ck,'_potentials'),patch.object(ck,'_score10x'), \
+             patch.object(rnp,'buyout_pct',return_value=({},.8)),patch.object(rnp,'_tax',return_value=tax), \
              patch('stometric.exclusions.excluded',return_value=set()),patch.object(xyz,'today_msk',return_value=DAY):
             rows=ck.summary(self.c,7,date(2026,11,1),DAY)
             by={r['nm_id']:r for r in rows}
@@ -135,8 +135,8 @@ class Sql(unittest.TestCase):
 
     def test_chart_sql_scope_coverage_and_exclusion(self):
         tax={'regime':'Другая СНО','rate':0,'vat':0,'vat_wb':0}
-        with patch.object(charts,'ensure_cost_ready'), patch.object(charts,'today_msk',return_value=DAY),\
-             patch.object(rnp,'_tax',return_value=tax),patch.object(rnp,'buyout_pct',return_value=({1:.8},.8)),\
+        with patch.object(charts,'ensure_cost_ready'), patch.object(charts,'today_msk',return_value=DAY), \
+             patch.object(rnp,'_tax',return_value=tax),patch.object(rnp,'buyout_pct',return_value=({1:.8},.8)), \
              patch('stometric.exclusions.excluded',return_value={2}):
             r=charts.get(self.c,7)
         self.assertEqual(len(r['days']),30); self.assertNotIn(2,r['rows'])

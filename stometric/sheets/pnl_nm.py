@@ -33,7 +33,7 @@ def _monday(d: date) -> date:
 def _tax_at(hist: list[dict], day: str) -> dict:
     """Настройка СНО на дату; раньше первой записи — первая (её обычно вносят задним числом)."""
     cur = None
-    for t in hist:                       
+    for t in hist:                                                  
         if t["valid_from"].isoformat() <= day:
             cur = t
     return cur or (hist[0] if hist else NONE_TAX)
@@ -41,12 +41,12 @@ def _tax_at(hist: list[dict], day: str) -> dict:
 
 def compute(c, shop: int, d_from: date, d_to: date, nm_ids: list[int] | None = None) -> dict:
     hist = c.execute("SELECT * FROM tax_settings WHERE account_id=%s ORDER BY valid_from", (shop,)).fetchall()
-    
-    
+                                                                                 
+                                                                                   
     has_ip = any(t["regime"] == pnl_real.IP for t in hist)
     context_from = date(d_from.year, 1, 1) if has_ip else d_from
-    W = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))      
-    ads_w = defaultdict(float)                                           
+    W = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))                                                   
+    ads_w = defaultdict(float)                                                                                                 
     week_to = {}
     for g in real_week.cached(c, shop, context_from, d_to):
         if not g["date_from"] or g["date_to"] < context_from.isoformat() or g["date_from"] > d_to.isoformat():
@@ -56,16 +56,16 @@ def compute(c, shop: int, d_from: date, d_to: date, nm_ids: list[int] | None = N
         bt = g["bonus_type"] or ""
         if ("Продвижение" in bt or "Медиа" in bt) and not g["nm_id"]:
             ads_w[w] += g["deduction"]
-            W[w]       
+            W[w]                                                                   
             continue
         pnl_real.accumulate(W[w][g["nm_id"] or 0], g)
     if not week_to:
         return {"rows": [], "total": None, "weeks": []}
     lo, hi = min(week_to), max(week_to.values())
-    acct = pnl_real.ads_fact(c, shop, lo, hi, only="Счет")             
+    acct = pnl_real.ads_fact(c, shop, lo, hi, only="Счет")                                                            
     for w, wt in week_to.items():
         ads_w[w] += pnl_real.days_sum(acct, w, wt)
-    upd = defaultdict(lambda: defaultdict(float))                        
+    upd = defaultdict(lambda: defaultdict(float))                                                                                    
     for r in c.execute("""SELECT nm_id, day, (data->>'ads_upd')::numeric s FROM agg_nm_day
                           WHERE account_id=%s AND day BETWEEN %s AND %s AND coalesce((data->>'ads_upd')::numeric, 0) <> 0""", (shop, lo, hi)):
         upd[_monday(r["day"]).isoformat()][r["nm_id"]] += float(r["s"])
@@ -83,8 +83,8 @@ def compute(c, shop: int, d_from: date, d_to: date, nm_ids: list[int] | None = N
                         dst[nm][k] += x * v / tw
         return True
 
-    S = defaultdict(lambda: defaultdict(float))       
-    A = defaultdict(lambda: defaultdict(float))       
+    S = defaultdict(lambda: defaultdict(float))                                                            
+    A = defaultdict(lambda: defaultdict(float))                                                            
     cumulative = defaultdict(float)
     for w, per in sorted(W.items()):
         sales = {nm: a["retail_s"] - a["retail_r"] for nm, a in per.items() if nm}

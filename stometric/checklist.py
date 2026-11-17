@@ -19,7 +19,7 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
     from .agg import nm_day
     from .materialize import ensure_ready
     end = min(d_to, today_msk())
-    lo = d_from - timedelta(days=14)            
+    lo = d_from - timedelta(days=14)                                                       
     st = c.execute("SELECT covered_from, covered_to FROM agg_state WHERE account_id=%s AND name='nm_day'", (shop,)).fetchone()
     if not st or not st["covered_to"]:
         ensure_ready(c, shop, False)
@@ -28,17 +28,17 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
     day = {r["day"]: r for r in c.execute(f"SELECT day, {sel} FROM agg_nm_day WHERE account_id=%s AND nm_id=%s AND day BETWEEN %s AND %s",
                                           (shop, nm, lo, end))}
     if st and st["covered_to"] and end > st["covered_to"]:
-        for r in nm_day.compute(c, shop, st["covered_to"] + timedelta(days=1), end):    
+        for r in nm_day.compute(c, shop, st["covered_to"] + timedelta(days=1), end):                       
             if r["nm_id"] == nm:
                 day[r["day"]] = {k: r.get(k) for k in keys}
-    
-    bid = {}     
+                                                         
+    bid = {}                                                                                         
     for r in c.execute("SELECT (data->>'advertId')::bigint id, data->'info'->>'bid_type' bt FROM raw_rows WHERE account_id=%s AND source='adverts'",
                        (shop,)):
         bid[r["id"]] = "a" if r["bt"] == "unified" else "p"
     ad = defaultdict(lambda: {f"{t}_{k}": 0.0 for t in "aps" for k in ("views", "clicks", "sum")})
-    
-    
+                                                                                                                                       
+                                                                         
     pos = defaultdict(lambda: [0.0, 0.0])
     for r in c.execute("""SELECT day, advert_id, sum(views) v, sum(clicks) cl, sum(spend) s, sum(avg_pos * views) pv
                           FROM wb_ad_kw_daily WHERE account_id=%s AND nm_id=%s AND day BETWEEN %s AND %s GROUP BY 1, 2""", (shop, nm, lo, end)):
@@ -72,7 +72,7 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
                 x["ext_sum"] += float(e["cost"] or 0) / n; x["ext_clicks"] += float(e["clicks"] or 0) / n
                 if e["source"] and e["source"] not in x["ext_src"]:
                     x["ext_src"].append(e["source"])
-    
+                                                                                                                                        
     ev = defaultdict(lambda: {k: 0.0 for k in ("cx_n", "cx_sum", "rt_n", "rt_sum", "ob_n", "ob_sum", "oc_n", "oc_sum", "or_n", "or_sum", "o_n")})
     for r in c.execute("""SELECT (cancel_dt AT TIME ZONE 'Europe/Moscow')::date d, count(*) n, sum(price_with_disc) s FROM orders
                           WHERE account_id=%s AND nm_id=%s AND is_cancel AND cancel_dt >= %s GROUP BY 1""", (shop, nm, lo)):
@@ -100,7 +100,7 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
     bp_all, bp0 = rnp.buyout_pct(c, shop)
     b = bp_all.get(nm, bp0)
     tx = rnp._tax(c, shop, end)
-    
+                                                                                                                         
     sr = c.execute("""SELECT sum(e.orders) FILTER (WHERE e.section='Поиск') s, sum(e.orders) t FROM entry_rows e
                       JOIN entry_reports r ON r.id=e.report_id WHERE r.account_id=%s AND e.nm_id=%s
                       AND r.id=(SELECT id FROM entry_reports WHERE account_id=%s ORDER BY d_to DESC, d_from LIMIT 1)""", (shop, nm, shop)).fetchone()
@@ -114,7 +114,7 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
     d = end
     while d >= d_from:
         r = day.get(d) or {}
-        g = lambda k: float(r.get(k) or 0)  
+        g = lambda k: float(r.get(k) or 0)              
         prev = day.get(d - timedelta(days=1)) or {}
         S = {k: r.get(k) for k in rnp.F}
         p_with = rnp.profit(S, b, tx)
@@ -123,9 +123,9 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
         a = ad.get(d) or {}
         x = ext.get(d) or {}
         e = ev.get(d) or {}
-        p_with -= float(x.get("ext_sum") or 0)                    
-        ads = g("ads_upd") + float(x.get("ext_sum") or 0)       
-        ad_cl = a.get("a_clicks", 0) + a.get("p_clicks", 0)          
+        p_with -= float(x.get("ext_sum") or 0)                                                                
+        ads = g("ads_upd") + float(x.get("ext_sum") or 0)                                                                    
+        ad_cl = a.get("a_clicks", 0) + a.get("p_clicks", 0)                                                  
         ad_sum = a.get("a_sum", 0) + a.get("p_sum", 0)
         dm = wb_demand.records(day,d,d)
         speed = wb_demand.records(day,d-timedelta(days=13),d)['orders_day'] if d < today_msk() else None
@@ -171,7 +171,7 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
             "price": _d(g("orders_sum"), g("orders")), "spp": 1 - g("orders_sum_spp") / g("orders_sum") if g("orders_sum") else None,
             "price_spp": _d(g("orders_sum_spp"), g("orders")),
             "unit_cost": _d(g("orders_sum"), g("orders")) * (1 - p_pre / r15) if r15 and g("orders") else None,
-            
+                                                                                                                              
             "u_cost": _d(g("cost_orders"), g("orders")), "u_comm": _d(g("commission_offer_orders"), g("orders")),
             "u_log": _d(g("logistics_orders"), g("orders") * b), "u_storage": _d(g("storage"), g("orders") * b),
             "u_accept": _d(g("acceptance_sum"), g("orders") * b), "u_vat": _d(g("vat_orders"), g("orders")),
@@ -188,7 +188,7 @@ def compute(c, shop: int, nm: int, d_from, d_to) -> dict:
     return {"rows": rows, "bp": b}
 
 
-GROUPS = [  
+GROUPS = [                                      
     ("", [("day", "Дата", "date")]),
     ('Спрос (воронка WB)', [('demand_orders','Заказы воронки, шт','int'),('demand_sum','Сумма воронки, ₽','money'),('demand_days','Дней с данными воронки','int')]),
     ("Гипотезы", [("hyp_ind", "Тест показателя", "text"), ("hyp", "Гипотеза", "text")]),
@@ -225,14 +225,14 @@ GROUPS = [
     ("Прибыль (расчётная)", [("margin_pre", "Маржа до ДРР", "pct"), ("margin", "Маржа с ДРР", "pct"), ("profit_pre", "Прибыль до ДРР", "money"),
                              ("profit", "Прибыль с ДРР", "money"), ("kem", "КЭМ", "pct")]),
 ]
-BONUS_FIELDS = {"bonus", "drr_bonus", "drr_all"}   
+BONUS_FIELDS = {"bonus", "drr_bonus", "drr_all"}                                                   
 SUM = {"sh_clicks", "sh_sum", "clicks", "a_views", "p_views", "a_clicks", "a_sum", "p_clicks", "p_sum", "s_clicks", "s_sum", "ext_clicks", "ext_sum", "ads", "low_reviews", "carts",
        "orders_sum", "orders", "give_qty", "give_sum", "buyouts_sum", "buyouts", "cx_sum", "cx_n", "rt_sum", "rt_n", "ob_sum", "ob_n",
        "oc_sum", "oc_n", "or_sum", "or_n", "profit_pre", "profit", "bonus"}
 HEAT = ["clicks", "a_clicks", "p_clicks", "s_clicks", "carts", "orders", "orders_sum", "profit", "profit_pre", "speed14", "organic", "cart_rate",
         "order_rate", "cr", "margin", "kem", "bp_day"]
 
-
+                                                                                                                             
 MAX_FIELDS = [("a_cpc", "Цена клика АРК, ₽"), ("p_cpc", "Цена клика ПРК, ₽"), ("drr", "ДРР, %"), ("cart_cost", "Цена корзины, ₽"),
               ("order_cost", "Цена заказа, ₽")]
 CUT = "Снизьте ставки CPM, почистите кластеры, сузьте количество продвигаемых нерелевантных кластеров"
@@ -245,7 +245,7 @@ def auto_max(t: dict) -> dict:
     cart = po * t["order_rate"] if po and t.get("order_rate") else None
     cpc = cart * t["cart_rate"] if cart and t.get("cart_rate") else None
     drr = t["profit_pre"] / t["orders_sum"] * 100 if t.get("orders_sum") and t.get("profit_pre") else None
-    r = lambda v, k=2: round(v, k) if v is not None and v > 0 else None  
+    r = lambda v, k=2: round(v, k) if v is not None and v > 0 else None              
     return {"order_cost": r(po), "cart_cost": r(cart), "a_cpc": r(cpc), "p_cpc": r(cpc), "drr": r(drr)}
 
 
@@ -275,7 +275,7 @@ def dangers(t3: dict, mx: dict) -> list[dict]:
 def total(rows: list[dict]) -> dict:
     """Строка «ИТОГО» периода: суммы, доли — по формулам из сумм (а не среднее процентов)."""
     t = {k: sum(float(r[k] or 0) for r in rows) for k in SUM}
-    f = lambda a, b: a / b if b else None  
+    f = lambda a, b: a / b if b else None              
     a_v = t["a_views"]
     p_v = t["p_views"]
     s_v = sum(float(r["s_clicks"] or 0) / r["s_ctr"] for r in rows if r["s_ctr"])
@@ -307,10 +307,10 @@ def total(rows: list[dict]) -> dict:
     return t
 
 
-
-
-
-
+                                                                                                          
+                                                                                                                          
+                                                                                                                         
+                                                                                                
 def _abc_cum(vals: dict) -> dict:
     tot = sum(v for v in vals.values() if v > 0)
     out, acc = {}, 0.0
@@ -384,7 +384,7 @@ def summary(c, shop: int, d_from, d_to, nms: list[int] | None = None) -> list[di
     for nm, r in S.items():
         if nm in ex or (nms and nm not in nms):
             continue
-        g = lambda k: float(r.get(k) or 0)  
+        g = lambda k: float(r.get(k) or 0)              
         b = bp_all.get(nm, bp0)
         Sd = {k: r.get(k) for k in rnp.F}
         p_pre = rnp.profit({**Sd, "ads_upd": 0}, b, tx)
@@ -456,7 +456,7 @@ def _potentials(c, shop: int, rows: list[dict], ad: dict):
         items = [i for i in (j["items"] or []) if (i.get("openCard") or 0) > 0]
         freq = sum(float(i.get("frequency") or 0) for i in items)
         jclicks = sum(float(i.get("openCard") or 0) for i in items)
-        
+                                                                                                            
         views = sum(float(i.get("frequency") or 0) * float(i.get("visibility") or 0) / 100 for i in items) or (jclicks / ctr if ctr else None)
         ctr = jclicks / views if views else ctr
         cov = min(1.0, views / freq) if views and freq else None

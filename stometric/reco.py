@@ -6,9 +6,9 @@ from datetime import datetime, timedelta, timezone
 
 MIN_RATING = 4.5
 FRESH_DAYS = 7
-
-
-
+                                                                                                                  
+                                                                                                                                  
+                                                                                                                        
 REGS = {"heat": "Регламент: тепловое оборудование → сопутствующий → локомотив (правило магазина)"}
 HEAT_MIN_RATING = 4.7
 HEAT_SUBJECTS = {"Тепловые пушки", "Конвекторы", "Обогреватели", "Тепловентиляторы", "Тепловые завесы", "Котлы газовые и топливные"}
@@ -65,7 +65,7 @@ def build(c, shop: int, nm: int, key: str) -> list[dict]:
         return []
     heat = reg(c, shop) == "heat"
     cat = [x for x in _catalog(c, shop) if x["nm_id"] != nm]
-    if heat:                    
+    if heat:                                                                                                                   
         cat = [x for x in cat if x["subject"] != me["subject"] and x["subject"] not in HEAT_SUBJECTS]
     cat.sort(key=lambda x: -int(x["orders"] or 0))
     cand = cat[:250]
@@ -82,7 +82,7 @@ def build(c, shop: int, nm: int, key: str) -> list[dict]:
     try:
         txt = aireport.complete(key, SYSTEM, prompt, max_tokens=800)
         d = json.loads(re.search(r"\{.*\}", txt, re.S).group(0))
-    except Exception:  
+    except Exception:                                                
         return []
     ok = {x["nm_id"] for x in cand}
     ai = [{"nm_id": int(x["nm_id"]), "kind": "alt" if x.get("kind") == "alt" and not heat else "pair", "why": str(x.get("why") or "")[:120]}
@@ -133,7 +133,7 @@ def ordered(c, shop: int, nm: int, m: dict | None = None) -> list[dict]:
         rec = _recent(c, shop)
         heats = sorted((x for x in cat if x["subject"] in HEAT_SUBJECTS), key=lambda x: (rec.get(x["nm_id"], 0), -int(x["orders"] or 0)))
         seen = set()
-        for x in heats:                     
+        for x in heats:                                                            
             if x["subject"] not in seen:
                 seen.add(x["subject"])
                 out.append({"nm_id": x["nm_id"], "kind": "heat", "why": f"{x['subject']} нашего магазина"})

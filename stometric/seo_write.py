@@ -59,7 +59,7 @@ def _comp_texts(c, comps: list[dict]) -> dict[int, str]:
                 d = httpx.get(ph.split("/images/")[0] + "/info/ru/card.json", timeout=10).json()
                 if d.get("description"):
                     out[int(x["id"])] = d["description"]
-        except Exception:  
+        except Exception:                                                                       
             continue
     return out
 
@@ -179,7 +179,7 @@ def start(shop: int, nm: int, uid: int, note: str | None = None) -> bool:
                 txt = (f"Готово: покрытие ключей {k['coverage']} %, описание {k['desc_len']} знаков"
                        + ("" if k["main_in_lead"] else ", главный ключ не в начале") + (f". Не вошли: {', '.join(k['missing'])}" if k["missing"] else ""))
                 c2.execute("UPDATE seo_jobs SET state='done', summary=%s, finished_at=now() WHERE account_id=%s AND nm_id=%s", (txt, shop, nm))
-            except Exception as e:  
+            except Exception as e:                
                 c2.rollback()
                 c2.execute("UPDATE seo_jobs SET state='error', error=%s, finished_at=now() WHERE account_id=%s AND nm_id=%s", (str(e)[:400], shop, nm))
             c2.commit()
@@ -220,7 +220,7 @@ def pipeline_start(shop: int, nm: int, uid: int, note: str | None = None, submit
                     who = seo_review.submit(c2, shop, nm, uid)["reviewers"]
                     txt += ", отправлено на согласование: " + ", ".join(who)
                 c2.execute("UPDATE seo_jobs SET state='done', summary=%s, finished_at=now() WHERE account_id=%s AND nm_id=%s", (txt, shop, nm))
-            except Exception as e:  
+            except Exception as e:                
                 c2.rollback()
                 c2.execute("UPDATE seo_jobs SET state='error', error=%s, finished_at=now() WHERE account_id=%s AND nm_id=%s", (str(e)[:400], shop, nm))
             c2.commit()

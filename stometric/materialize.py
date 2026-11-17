@@ -12,7 +12,7 @@ from .agg import nm_day, real_week
 from .config import today_msk
 
 RECENT_DAYS = 45
-BIG_SHOP = 1000          
+BIG_SHOP = 1000                                                                                                      
 
 
 class NotReady(RuntimeError):
@@ -67,7 +67,7 @@ SHORT_DAYS = 10
 
 
 def _first_day(c, acc_id) -> date:
-    
+                                                                                                                                            
     r = c.execute("""SELECT least((SELECT min(order_dt)::date FROM orders WHERE account_id=%(a)s),
                                   (SELECT min(row_date) FROM raw_rows WHERE account_id=%(a)s AND source='ad_stats'),
                                   (SELECT min(row_date) FROM raw_rows WHERE account_id=%(a)s AND source='funnel_day'),
@@ -79,7 +79,7 @@ def _first_day(c, acc_id) -> date:
 
 
 def build_nm_day(c, acc_id: int, df: date | None = None, dt: date | None = None) -> int:
-    c.execute("SELECT pg_advisory_lock(%s)", (880000 + acc_id,))   
+    c.execute("SELECT pg_advisory_lock(%s)", (880000 + acc_id,))                                                                      
     try:
         return _build_nm_day(c, acc_id, df, dt)
     finally:
@@ -93,8 +93,8 @@ def _build_nm_day(c, acc_id: int, df: date | None, dt: date | None) -> int:
     df = df or _first_day(c, acc_id)
     n = 0
     cur = df
-    
-    
+                                                                                                                           
+                                                                                     
     arts = c.execute("SELECT count(*) n FROM nomenclature WHERE account_id=%s", (acc_id,)).fetchone()["n"] or 1
     step = max(1, min(60, 40000 // arts))
     while cur <= dt:
@@ -118,7 +118,7 @@ def _build_nm_day(c, acc_id: int, df: date | None, dt: date | None) -> int:
 
 
 def build_real_week(c, acc_id: int) -> int:
-    
+                                                                              
     c.execute("SELECT pg_advisory_lock(%s)", (880000 + acc_id,))
     try:
         return _build_real_week(c, acc_id)
@@ -149,7 +149,7 @@ def _j(o):
 def after_collect(c, acc_id: int, ran: set[str]) -> dict:
     out = {}
     st = c.execute("SELECT * FROM agg_state WHERE account_id=%s AND name='nm_day'", (acc_id,)).fetchone()
-    full = st is None or st["built_at"].date() < today_msk()      
+    full = st is None or st["built_at"].date() < today_msk()                               
     from . import loadplan
     shallow = full and loadplan.shallow(c, acc_id)
     deep = bool(ran & {"realization", "realization_daily", "ad_upd", "paid_storage", "acceptance", "funnel_days"})
@@ -158,7 +158,7 @@ def after_collect(c, acc_id: int, ran: set[str]) -> dict:
     dirty = cost_dirty(c, acc_id)
     if dirty:
         first = _first_day(c, acc_id)
-        
+                                                                                 
         start = max(min(date.fromisoformat(dirty["from"]), normal_from or first), first)
         out["nm_day"] = build_nm_day(c, acc_id, start)
         out["real_week"] = build_real_week(c, acc_id)
@@ -167,14 +167,14 @@ def after_collect(c, acc_id: int, ran: set[str]) -> dict:
                   (acc_id, dirty["revision"]))
         c.commit()
         return out
-    if shallow:                       
+    if shallow:                                                                                          
         out["nm_day"] = build_nm_day(c, acc_id, normal_from)
         if not c.execute("SELECT 1 FROM agg_state WHERE account_id=%s AND name='real_week'", (acc_id,)).fetchone():
             out["real_week"] = "ночью"
         return out
-    
+                                                                                                                                       
     out["nm_day"] = build_nm_day(c, acc_id, normal_from)
-    
+                                                                                                                                          
     rw = c.execute("SELECT built_at FROM agg_state WHERE account_id=%s AND name='real_week'", (acc_id,)).fetchone()
     if "realization" in ran or "realization_daily" in ran or not rw or rw["built_at"].date() < today_msk():
         out["real_week"] = build_real_week(c, acc_id)

@@ -6,13 +6,17 @@ import { copyCell } from "./copy";
 import { ChartPanel } from "./Chart";
 import { LayoutEditor } from "./LayoutEditor";
 import { TaxForm } from "./TaxForm";
+import { QueryHeatmap } from "./QueryHeatmap";
+import { JamDeep, JamLoading } from "./JamDeep";
 import { Home } from "./Home";
 import { Sidebar, navigationGroup, type Page } from "./Sidebar";
+import { Balance } from './Balance';
 import { AiLinks, OAuthConsent } from "./AiLinks";
 import { Kb } from "./Kb";
 import { AboutPage, LegalNote, LegalPage, TermsGate } from "./Legal";
 import { Assistant, Gnome, GNOME_ACTS } from "./Assistant";
 import { Account } from "./Account";
+import { ManagerPicker } from "./ManagerPicker";
 import { ArtPicker } from "./ArtPicker";
 import { InvitePage } from "./Members";
 import { MagicPage } from "./Notify";
@@ -230,11 +234,23 @@ function Login({ onDone }: { onDone: () => void }) {
   );
 }
 
+
+const pageIsDashboard = (tab: string) => ["dash5", "dash_nm", "dash_nm_days", "dash_group", "by_days"].includes(tab);
+
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [need, setNeed] = useState(false);
   const [shop, setShop] = useState<number | null>(null);
   const [tab, setTab] = useState("home");
+  const [orderSource, setOrderSource] = useState<"funnel" | "statistics">(() => {
+    try { return localStorage.getItem("dashboard_order_source") === "statistics" ? "statistics" : "funnel"; }
+    catch { return "funnel"; }
+  });
+  const orderSourceEnabled = pageIsDashboard(tab);
+  const changeOrderSource = (value: "funnel" | "statistics") => {
+    setOrderSource(value);
+    try { localStorage.setItem("dashboard_order_source", value); } catch { /* no storage */ }
+  };
   // «Визуал» → «Открыть в Карточках»: переход с артикулом (событие ais:cards)
   const [cardsNm, setCardsNm] = useState<number | null>(null);
   useEffect(() => {
@@ -256,6 +272,14 @@ export default function App() {
     if (page === "compare" && !comparing) window.history.pushState(null, "", "/compare");
     else if (page !== "compare" && comparing) window.history.pushState(null, "", "/");
   }, [page]);
+  const [totalPresentation, setTotalPresentation] = useState(() => {
+    try { return localStorage.getItem("total_presentation") === "1"; } catch { return false; }
+  });
+  const presentingTotal = page === "total" && totalPresentation;
+  const changeTotalPresentation = (value: boolean) => {
+    setTotalPresentation(value);
+    try { localStorage.setItem("total_presentation", value ? "1" : "0"); } catch { /* no storage */ }
+  };
   const [calendarDay, setCalendarDay] = useState<string | undefined>();
   useEffect(() => { if (page !== "cards") setCardsNm(null); }, [page]);
   useEffect(() => {
@@ -341,17 +365,23 @@ export default function App() {
   const [nm, setNm] = useState("");
   const [err, setErr] = useState("");
   const [reload, setReload] = useState(0);
-  const [staffSel, setStaffSel] = useState<number | null>(null);    // фильтр «Менеджер» (по умолчанию — все; Example, 22.10)
+  const [staffSel, setStaffSel] = useState<string>("");    // фильтр «Менеджер» (по умолчанию — все; Example, 22.10)
   const [shopStaff, setShopStaff] = useState<ShopStaff | null>(null);
+  const [staffShop, setStaffShop] = useState<number | null>(null);
   useEffect(() => {
     if (!shop) return;
     let live = true;
-    api.shopStaff(shop).then((s) => { if (!live) return; setShopStaff(s);
-      setStaffSel((cur) => (cur && s.staff.some((x) => x.id === cur && x.n > 0) ? cur : null)); }).catch(() => { if (live) setShopStaff(null); });
+    api.shopStaff(shop).then((s) => { if (!live) return; setShopStaff(s); setStaffShop(shop);
+      setStaffSel((cur) => cur.split(",").filter(id => s.staff.some(x => x.id === Number(id) && x.n > 0)).join(",")); }).catch(() => { if (live) setShopStaff(null); });
     return () => { live = false; };
   }, [shop, reload]);
-  const staffOnly = useMemo(() => (staffSel && shopStaff
-    ? new Set(Object.entries(shopStaff.assign).filter(([, v]) => v === staffSel).map(([k]) => Number(k))) : null), [staffSel, shopStaff]);
+  const staffOnly = useMemo(() => !staffSel ? null : staffShop !== shop || !shopStaff ? new Set<number>()
+    : new Set(Object.entries(shopStaff.assign).filter(([, v]) => staffSel.split(",").map(Number).includes(v)).map(([k]) => Number(k))), [staffSel, shopStaff, staffShop, shop]);
+  const effectiveNm = useMemo(() => {
+    if (!staffOnly) return nm;
+    const chosen = nm.split(",").map(x => Number(x.trim())).filter(x => x > 0);
+    return (chosen.length ? chosen.filter(x => staffOnly.has(x)) : [...staffOnly]).join(",") || "0";
+  }, [nm, staffOnly]);
   const [group, setGroup] = useState("");
   const [p1, setP1] = useState({ from: "", to: "" });     // Юнитка: первый период (пусто — столько же дней перед вторым)
   const [perUnit, setPerUnit] = useState(false);          // Юнитка: на 1 проданную штуку
@@ -382,10 +412,11 @@ export default function App() {
   const setHelpOff = (v: boolean) => { setHelpOffState(v); try { localStorage.setItem("help_off", v ? "1" : "0"); } catch { /* приватный режим */ } };
   const [pageLimit, setPageLimit] = useState(0);                 // 0 — по умолчанию (сервер отдаёт 100 строк большой таблицы), -1 — все
   const [srvSort, setSrvSort] = useState<{ field: string; desc: boolean } | null>(null);
-  useEffect(() => { setPageLimit(0); setSrvSort(null); }, [shop, tab, from, to, nm, group, staffSel]);
-  const tabQ: TabQ = { from, to, nm, group: GROUP_TABS.has(tab) ? group : "", ...(tab === "v2_unit" ? { p1from: p1.from, p1to: p1.to, perUnit } : {}),
+  useEffect(() => { setPageLimit(0); setSrvSort(null); }, [shop, tab, from, to, nm, group, staffSel, orderSource]);
+  const tabQ: TabQ = { from, to, nm, ...(orderSourceEnabled ? { orderSource } : {}), group: GROUP_TABS.has(tab) ? group : "", ...(tab === "v2_unit" ? { p1from: p1.from, p1to: p1.to, perUnit } : {}),
     limit: pageLimit || undefined, sort: srvSort?.field, desc: srvSort?.desc, staff: staffSel };
-  const { data, loading, error: tabError } = useTabData(shop, tab, tabQ, page === "tab", reload);
+  const { data, loading, error: tabError } = useTabData(shop, tab,
+    tab === "mgr_actions" ? { from, to, nm: "" } : tabQ, page === "tab", reload);
   useEffect(() => setErr(""), [shop, tab, page]);
   const partial = !!data?.rows_total && data.rows_total > data.rows.length;
   const [costMissing, setCostMissing] = useState(false);       // лист «Себестоимость»: только товары без себестоимости
@@ -393,10 +424,15 @@ export default function App() {
   const gridRows = isCost && costMissing ? (data?.rows || []).filter((r) => r.cost == null) : data?.rows || [];
   useEffect(() => { if (!loading) fit(); }, [loading, data]);
   useEffect(() => {      // вкладка ещё грузит данные (Джем) — перезапросить сама
-    if (!data?.retry) return;
-    const t = setTimeout(() => setReload((x) => x + 1), data.retry * 1000);
-    return () => clearTimeout(t);
-  }, [data]);
+    if (!data?.retry || loading || page !== "tab" || data.key !== tab) return;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      clearTimeout(t);
+      if (!document.hidden) t = setTimeout(() => setReload((x) => x + 1), data.retry! * 1000);
+    };
+    schedule(); document.addEventListener("visibilitychange", schedule);
+    return () => { clearTimeout(t); document.removeEventListener("visibilitychange", schedule); };
+  }, [data, loading, page, tab]);
 
   const hasPeriods = !!data?.columns.some((c) => c.metric && c.metric !== "разница");
   // закреплённые столбцы: по вкладке, в браузере пользователя; true — закреплён слева, false — откреплён (в т.ч. закреплённый по умолчанию)
@@ -691,7 +727,7 @@ export default function App() {
   const scrollNav = (dx: number) => navRef.current?.scrollBy({ left: dx, behavior: "smooth" });
   return (
     <div className="app">
-      {full && <div className="modal-back" onClick={() => setFull(null)}>
+      {!presentingTotal && full && <div className="modal-back" onClick={() => setFull(null)}>
         <div className="modal full" onClick={(e) => e.stopPropagation()}>
           <h3>{full.title}</h3>
           <div className="full-text">{full.text}</div>
@@ -702,17 +738,18 @@ export default function App() {
         </div>
       </div>}
       {me.terms_need && <TermsGate onDone={loadMe} />}
-      <Sidebar homeInWork={true} me={{ ...me, tabs: tabsList }} allTabs={allTabs} hidden={hiddenKeys} onHidden={saveHidden} ws={ws} open={sideOpen} onToggle={() => setSideOpen((x) => !x)} page={page} tab={tab} onTab={openTab}
+      {!presentingTotal && <Sidebar homeInWork={true} me={{ ...me, tabs: tabsList }} allTabs={allTabs} hidden={hiddenKeys} onHidden={saveHidden} ws={ws} open={sideOpen} onToggle={() => setSideOpen((x) => !x)} page={page} tab={tab} onTab={openTab}
         onPage={(p) => { setPage(p); if (narrow()) setSideOpen(false); }} theme={theme}
         onTheme={() => setTheme(theme === "dark" ? "light" : "dark")} onLogout={() => api.logout().then(() => setNeed(true))}
-        onAssistant={() => { setAsOpen((x) => !x); if (narrow()) setSideOpen(false); }} />
-      {gnome && !asOpen && shop && <button className={"gnome-fab" + (gAct ? " busy" : "")} title="Стометрик — спроси про свой магазин" onClick={() => setAsOpen(true)}>
+        onAssistant={() => { setAsOpen((x) => !x); if (narrow()) setSideOpen(false); }} />}
+      {!presentingTotal && gnome && !asOpen && shop && <button className={"gnome-fab" + (gAct ? " busy" : "")} title="Стометрик — спроси про свой магазин" onClick={() => setAsOpen(true)}>
         <Gnome size={64} act={gAct?.act} /><span className="gnome-hi">{gAct?.say || "Спроси меня!"}</span>
         <span className="gnome-x" title="Скрыть гномика (вернуть — в чате Стометрика или пункт меню)" onClick={(e) => { e.stopPropagation(); setGnome(false); }}>×</span>
       </button>}
-      <Assistant shop={shop} open={asOpen} onClose={() => setAsOpen(false)} gnome={gnome} onGnome={setGnome} />
-      {sideOpen && <div className="side-shade" onClick={() => setSideOpen(false)} />}
+      {!presentingTotal && <Assistant shop={shop} open={asOpen} onClose={() => setAsOpen(false)} gnome={gnome} onGnome={setGnome} />}
+      {!presentingTotal && sideOpen && <div className="side-shade" onClick={() => setSideOpen(false)} />}
       <div className="body">
+      {!presentingTotal && <>
       <header>
         <button className="burger-m" title="Меню" onClick={() => setSideOpen(true)}>☰</button>
         <select value={shop ?? ""} onChange={(e) => { setShop(Number(e.target.value)); setNm(""); }}>   {/* артикулы другого магазина не переносим */}
@@ -720,12 +757,9 @@ export default function App() {
         </select>
         <label>с <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
         <label>по <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
-        {shopStaff && shopStaff.staff.some((s) => s.n > 0) && (
-          <select title="Менеджер: все вкладки — по его артикулам этого магазина" value={staffSel ?? ""}
-            onChange={(e) => { setStaffSel(e.target.value ? Number(e.target.value) : null); setNm(""); }}>
-            <option value="">👤 Все менеджеры</option>
-            {shopStaff.staff.filter((s) => s.n > 0).map((s) => <option key={s.id} value={s.id}>👤 {s.name}{s.id === shopStaff.me ? " (я)" : ""} · {s.n}</option>)}
-          </select>)}
+        {staffShop === shop && shopStaff && shopStaff.staff.some((s) => s.n > 0) && (
+          <ManagerPicker value={staffSel} items={shopStaff.staff.filter(s => s.n > 0).map(s => ({ id: s.id, name: `${s.name}${s.id === shopStaff.me ? " (я)" : ""} · ${s.n}` }))}
+            onChange={value => { setStaffSel(value); setNm(""); }} />)}
         {shop && <ArtPicker shop={shop} value={nm} onChange={setNm} only={staffOnly} />}
         {hasPeriods && (
           <select title="Как показывать вчера / позавчера / разницу" value={stacked ? "1" : "0"} onChange={(e) => setStacked(e.target.value === "1")}>
@@ -766,6 +800,11 @@ export default function App() {
               }).catch((e) => { w?.close(); alert(e.message); }).finally(() => setGBusy(false));
             }}>{gBusy ? "Создаю таблицу…" : "📗 Google Таблица"}</button>}
         </>}
+        {page === "tab" && orderSourceEnabled && <label>Расчёт по заказам: <select aria-label="Источник заказов для расчёта" value={orderSource}
+          onChange={(e) => changeOrderSource(e.target.value as "funnel" | "statistics")}>
+          <option value="funnel">Воронка WB</option>
+          <option value="statistics">Статистика WB</option>
+        </select></label>}
         <select title="Ширина столбцов таблицы" value={colMode} onChange={(e) => setColMode(e.target.value as ColMode)}>
           <option value="auto">Столбцы: по содержимому</option>
           <option value="narrow">Столбцы: узкие</option>
@@ -809,7 +848,14 @@ export default function App() {
         <button className="tb-btn" title="Настроить панель: какие вкладки показывать и в каком порядке" onClick={() => setTbEdit(true)}>⚙</button>
         {tbEdit && <TabBarEdit all={navTabs} keys={barKeys} onSave={saveBar} onClose={() => setTbEdit(false)} />}
       </div>
+      </>}
       <main>
+        {wsId && (page === "account" || page === "billing" || page === "ai") &&
+          <nav className="adm-tabs account-sections" aria-label="Разделы настроек аккаунта">
+            {([['account', 'Профиль и настройки'], ['billing', 'Тариф и оплата'], ['ai', 'Нейросети (MCP)']] as const).map(([key, title]) =>
+              <button key={key} type="button" className={page === key ? "on" : ""} aria-current={page === key ? "page" : undefined}
+                onClick={() => setPage(key)}>{title}</button>)}
+          </nav>}
         {(page === "account" || page === "members") && wsId && (<Account key={`account:${wsId}`} me={me} wsId={wsId} page={page} onChanged={loadMe} />)}
         {page === "calendar" && wsId && <Calendar key={`calendar:${wsId}:${calendarDay || ''}`} wsId={wsId} workspaces={me.workspaces} initialDay={calendarDay} />}
         {page === "billing" && wsId && <Billing wsId={wsId} />}
@@ -826,7 +872,8 @@ export default function App() {
           : <Questions shop={shop} onSettings={() => setPage("actions")} />)}
         {page === "actions" && shop && (isYm ? <div className="hint">Взаимодействия с кабинетом Яндекс Маркета — позже. Магазин Маркета пока только для аналитики.</div>
           : <Actions shop={shop} />)}
-        {page === "total" && <Total dark={theme === "dark"} />}
+        {page === "total" && <Total dark={theme === "dark"} presentation={totalPresentation} onPresentationChange={changeTotalPresentation} shopIds={me.shops.map(s => s.id)} />}
+        {page === 'balance' && wsId && <Balance key={wsId} wsId={wsId} />}
         {page === "kb" && wsId && <Kb wsId={wsId} />}
         {page === "ads" && shop && (isOz || isYm ? <div className="hint">Управление рекламой Ozon — следующим шагом. Выберите магазин WB.</div>
           : <Ads shop={shop} onSettings={() => setPage("actions")} />)}
@@ -853,32 +900,35 @@ export default function App() {
           <label><input type="checkbox" checked={perUnit} onChange={(e) => setPerUnit(e.target.checked)} /> На 1 шт</label>
           {p1.from && <button className="link" onClick={() => setP1({ from: "", to: "" })}>Период 1 — авто</button>}
         </div>}
+        {data?.key === tab && <JamLoading text={data.loading_status} />}
         {data?.stale && <div className="hint">Пришли новые данные — показан расчёт на {new Date(data.cached_at!).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}, свежий считается (обновите страницу через минуту).</div>}
         {data?.dangers && shop && <ChecklistTop shop={shop} dangers={data.dangers} editor={data.max_editor} onSaved={() => setReload((x) => x + 1)} />}
         {data && data.form === "tax" && shop && <TaxForm shop={shop} data={data} onSaved={() => setReload((x) => x + 1)} />}
         {data?.switch && data.key === tab && shop && <div className="row tab-switch"><b>{data.switch.title}:</b>
           {data.switch.options.map(([v, t]) => <label key={v}><input type="radio" name={data.switch!.key} checked={data.switch!.value === v}
             onChange={() => api.setPref(shop, data.switch!.key, { mode: v }).then(() => setReload((x) => x + 1))} /> {t}</label>)}</div>}
-        {data && data.layout_editor && shop && (
-          <LayoutEditor data={data} onSave={(v) => api.setPref(shop, data.layout_editor!, v).then(() => setReload((x) => x + 1))} />
+        {data && data.key === tab && data.layout_editor && shop && (
+          <LayoutEditor key={`${shop}:${data.layout_editor}`} shop={shop} presetsEnabled={true} data={data} onSave={(v) => api.setPref(shop, data.layout_editor!, v).then(() => setReload((x) => x + 1))} />
         )}
         {data && data.layout !== "sheet" && !data.form && !data.custom && !data.plain && <ChartPanel data={data} dark={theme === "dark"} />}
         {tab === "home" && data?.home && shop && <HomeTasks key={`tasks:${shop}`} shop={shop} />}
         {tab === "home" && wsId && <HomeCalendar key={`calendar-due:${wsId}:${me.user.id}`} wsId={wsId} onOpen={day => { setCalendarDay(day); setPage("calendar"); }} />}
         {tab === "home" && data?.home && shop && <HomeAI key={`reports:${shop}`} shop={shop} />}
         {tab === "home" && data?.home && <Home data={data} hideChg={hideChg} />}
-        {shop && data?.custom === "actions" && data.key === tab && <ActionsBoard enableCharts={true} shop={shop}
+        {shop && data?.custom === "actions" && data.key === tab && <ActionsBoard enableCharts={true} shop={shop} nm={nm} only={staffOnly}
           shops={me.shops.filter((x) => x.workspace_id === wsId).map((x) => ({ id: x.id, title: x.title || x.name }))} />}
+        {shop && data?.custom === "query_heatmap" && data.key === tab && <QueryHeatmap key={`${shop}:${effectiveNm}`} shop={shop} nm={effectiveNm} demo={false} />}
+        {shop && data?.custom === "jam_deep" && data.key === tab && <JamDeep key={`${shop}:${data.jam_deep?.nm_id}:${data.jam_deep?.from}:${data.jam_deep?.to}`} shop={shop} data={data} />}
         {shop && data?.custom === "prices" && data.key === tab && <PriceLab shop={shop} />}
         {shop && data?.custom === "competitors" && data.key === tab && <Competitors shop={shop} />}
         {shop && data?.custom === "insights" && data.key === tab && <Insights shop={shop} staff={staffSel} />}
         {shop && data?.custom === "planning" && data.key === tab && <Planning shop={shop} />}
         {shop && data?.custom === "exclusions" && data.key === tab && <Exclusions shop={shop} />}
         {shop && data?.custom === "staff" && data.key === tab && <Staff shop={shop} onChange={() => api.shopStaff(shop).then(setShopStaff).catch(() => {})} />}
-        {shop && data?.custom === "photos" && data.key === tab && <PhotoFunnel shop={shop} />}
+        {shop && data?.custom === "photos" && data.key === tab && <PhotoFunnel key={shop} shop={shop} selected={nm} only={staffOnly} />}
         {shop && data?.custom === "rnp" && data.key === tab && <Rnp shop={shop} hideChg={hideChg} nm={nm} staff={staffSel} />}
         {shop && data?.custom === "news" && data.key === tab && <News shop={shop} />}
-        {shop && data?.custom === "entry" && data.key === tab && <EntryPoints enablePin={true} enableGrowth={true} shop={shop} nm={nm} hideChg={hideChg} />}
+        {shop && data?.custom === "entry" && data.key === tab && <EntryPoints enablePin={true} enableGrowth={true} shop={shop} nm={staffOnly && nm && effectiveNm === "0" ? "0" : nm} staff={staffSel} hideChg={hideChg} />}
         {shop && data?.custom === "ext_costs" && data.key === tab && <ExtCosts shop={shop} />}
         {shop && data?.custom === "mrc" && data.key === tab && <Mrc shop={shop} />}
         {shop && data?.custom === "shelves" && data.key === tab && <Shelves shop={shop} />}

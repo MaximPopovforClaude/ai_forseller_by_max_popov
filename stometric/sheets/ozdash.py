@@ -11,9 +11,9 @@ from collections import defaultdict
 from datetime import date, timedelta
 from .. import ozon_order_prices as order_prices
 
-BUYOUT_LAG = (15, 60)       
+BUYOUT_LAG = (15, 60)                                                                                       
 
-CLASS = [   
+CLASS = [                                                                     
     ("ads", r"promotion|marketingaction|продвиж|реклам|трафарет|бонусы продавца|pay ?per ?click|cpc|cpo"),
     ("acquiring", r"acquiring|эквайринг"),
     ("storage", r"storage|хранени|размещени"),
@@ -191,12 +191,12 @@ def compute(c, shop: int, d_from: date, d_to: date, skus: list[int] | None = Non
     flt = (lambda s: skus is None or s in skus)
     V = defaultdict(lambda: defaultdict(float))
 
-    
+                                              
     post = c.execute("""SELECT order_day, sku, scheme, qty, price, status,
                                raw#>'{financial_data,products}' AS financial_products FROM oz_postings
                         WHERE account_id=%s AND order_day BETWEEN %s AND %s""", (shop, lo, d_to)).fetchall()
     order_days = order_prices.daily(post, skus)
-    fin_q = defaultdict(lambda: [0.0, 0.0])          
+    fin_q = defaultdict(lambda: [0.0, 0.0])                                                                
     for p in post:
         if not flt(p["sku"]):
             continue
@@ -227,7 +227,7 @@ def compute(c, shop: int, d_from: date, d_to: date, skus: list[int] | None = Non
         v["a_sess"] += float(m.get("session_view") or 0)
         v["a_cart"] += float(m.get("hits_tocart") or 0)
 
-    
+                                  
     for t in c.execute("""SELECT op_day, operation_type, type_name, tx_type, amount, accruals_for_sale, sale_commission, delivery_charge,
                                  return_delivery_charge, services_total, skus, qty, raw, raw->'services' services
                           FROM oz_transactions WHERE account_id=%s AND op_day BETWEEN %s AND %s""", (shop, min(days), d_to)):
@@ -261,8 +261,8 @@ def compute(c, shop: int, d_from: date, d_to: date, skus: list[int] | None = Non
                "crossdock": "x_cross", "utilization": "x_util", "compensation": "x_comp", "insurance": "x_ins"}.get(k, "x_other")
         v[key] += amt
 
-    
-    
+                                                                                                                      
+                                                                                                               
     perf = c.execute("SELECT 1 FROM oz_ad_daily WHERE account_id=%s LIMIT 1", (shop,)).fetchone() is not None
     if perf:
         for r in c.execute("""SELECT d.day, d.views, d.clicks, d.spent, d.orders, d.orders_money, k.skus FROM oz_ad_daily d
@@ -299,7 +299,7 @@ def compute(c, shop: int, d_from: date, d_to: date, skus: list[int] | None = Non
         v["o_com"] = -v["_com"] * share
         v["o_log"] = -v["_log"] * share
         v["o_cost"] = v["_cost"] * share
-        v["ads"] = v["p_ads"] if perf else v["f_ads"]      
+        v["ads"] = v["p_ads"] if perf else v["f_ads"]                                                                           
         v["ad_ctr"] = v["ad_clicks"] / v["ad_views"] if v["ad_views"] else 0
         v["drr"] = -v["ads"] / v["o_sum"] if v["o_sum"] else 0
         if regime == "УСН доход":

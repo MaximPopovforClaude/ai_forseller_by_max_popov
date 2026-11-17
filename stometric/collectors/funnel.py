@@ -7,15 +7,15 @@ from datetime import date, timedelta
 from . import raw
 
 
-MAX_REQ_PER_RUN = 15    
+MAX_REQ_PER_RUN = 15                                                                                                                        
 
 
 def run(ctx) -> dict:
     from ..exclusions import excluded
     ex = excluded(ctx.c, ctx.acc["id"])
     st = ctx.state("funnel")
-    
-    
+                                                                                                                               
+                                                                              
     weekly = not st.get("full_on") or (today_msk() - date.fromisoformat(st["full_on"])).days >= 7
     full = weekly and not st.get("offset") or st.get("full_pass")
     if full:
@@ -50,13 +50,13 @@ def run(ctx) -> dict:
     nxt = stop if stop < len(nms) else 0
     cur = {"offset": nxt, "full_on": st.get("full_on")}
     if full:
-        cur["full_pass"] = bool(nxt)               
+        cur["full_pass"] = bool(nxt)                                                              
         if not nxt:
             cur["full_on"] = str(today_msk())
     return {"nm": stop - start, "of": len(nms), "day_rows": n, "full": bool(full), "cursor": cur}
 
 
-BACKFILL_PER_RUN = 45   
+BACKFILL_PER_RUN = 45                                                                                               
 
 
 def run_days(ctx) -> dict:
@@ -67,7 +67,7 @@ def run_days(ctx) -> dict:
     today = today_msk()
     tail_at = st.get("tail_at")
     if st.get("backfilled"):
-        full, tail_at = ctx.tail("funnel_days")     
+        full, tail_at = ctx.tail("funnel_days")                                                                              
         days = [today - timedelta(days=i) for i in range(0, 8 if full else 2)]
     else:
         start = date.fromisoformat(st["done_back_to"]) - timedelta(days=1) if st.get("done_back_to") else today
@@ -80,8 +80,8 @@ def run_days(ctx) -> dict:
                     "limit": 1000, "offset": offset}
             data = ctx.wb.call("analytics", "/api/analytics/v3/sales-funnel/products", "POST", body=body, max_wait=60) or {}
             prods = (data.get("data") or {}).get("products") or []
-            
-            
+                                                                                                                              
+                                                                                                      
             seen = {r["row_key"]: r["data"] for r in ctx.c.execute(
                 "SELECT row_key, data FROM raw_rows WHERE account_id=%s AND source='funnel_day' AND row_date=%s", (ctx.acc["id"], d))}
             for p in prods:

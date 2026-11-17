@@ -7,7 +7,7 @@ import urllib.request
 import zipfile
 from datetime import date
 
-VIEWS_PER_SHARED = 2          
+VIEWS_PER_SHARED = 2                                                             
 MAX_FILE = 15 * 1024 * 1024
 
 
@@ -49,7 +49,7 @@ def parse(raw: bytes) -> dict:
     if len(raw) > MAX_FILE:
         raise BadFile("Файл больше 15 МБ")
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(_xlsx_bytes(raw)), data_only=True)   
+        wb = openpyxl.load_workbook(io.BytesIO(_xlsx_bytes(raw)), data_only=True)                                                         
     except Exception:
         raise BadFile("Это не xlsx-файл. Загрузите файл «Сравнение карточек», скачанный из ЛК WB (можно в zip)") from None
     need = {"Общая информация", "Показатели", "Поисковые запросы"}
@@ -61,7 +61,7 @@ def parse(raw: bytes) -> dict:
         raise BadFile("В сравнении должно быть от 2 до 5 артикулов")
     rows = list(wb["Показатели"].iter_rows(values_only=True))
     head = [str(x or "") for x in rows[1]]
-    col = {}   
+    col = {}                                                
     for j, h in enumerate(head):
         m = re.match(r"Артикул WB (\d+)( \(предыдущ)?", h)
         if m:
@@ -115,7 +115,7 @@ def parse(raw: bytes) -> dict:
             "cards": [cards[nm] for nm in nms], "metric_order": order, "queries": queries}
 
 
-
+                                                                                                              
 _BASKET: dict[int, int] = {}
 
 
@@ -124,7 +124,7 @@ def _probe(host: int, vol: int, part: int, nm: int) -> bool:
     try:
         with urllib.request.urlopen(urllib.request.Request(url, method="HEAD"), timeout=5) as r:
             return r.status == 200
-    except Exception:  
+    except Exception:                
         return False
 
 
@@ -135,7 +135,7 @@ def photo(c, nm: int) -> str | None:
         r = c.execute("SELECT value FROM app_settings WHERE key=%s", (f"wbbasket:{vol}",)).fetchone()
         host = int(r["value"]) if r else None
     if host is None:
-        
+                                                                                                                     
         est = max(1, min(60, round(1 + vol / 230)))
         for h in sorted(range(1, 61), key=lambda x: abs(x - est)):
             if _probe(h, vol, part, nm):

@@ -91,8 +91,8 @@ def _period_metrics(result, periods, cov, sku_days=None, sku_full_days=None):
             for key in FUNNEL:
                 if key not in ("ordered", "ordered_sum"):
                     row[key] = None
-        
-        
+                                                                               
+                                                                                 
         for key in FINANCE if missing["realization"] or missing["transactions"] else ():
             row[key] = None
         for key in ADS if missing["ads"] else ():
@@ -218,8 +218,8 @@ def build(c, shop: int, day: date) -> str:
         (shop, datetime.combine(start, datetime.min.time(), timezone(timedelta(hours=3))),
          datetime.combine(day, datetime.min.time(), timezone(timedelta(hours=3))),
          ["price", "photo", "content", "ad_status"], ["price", "photos", "title", "vendorCode", "archived", "created"]), 100)
-    
-    
+                                                                                
+                                                                    
     dossier["past_tasks"] = _rows(c, "История задач", """SELECT day,tag,certainty,title,status,status_by,status_note,outcome,effect_week
         FROM ai_tasks WHERE account_id=%s AND active AND day >= %s AND day < %s
         ORDER BY day DESC,priority DESC,id DESC""", (shop, day - timedelta(days=7), day), 100)
@@ -231,7 +231,7 @@ def build(c, shop: int, day: date) -> str:
         datetime.combine(day, datetime.min.time(), timezone(timedelta(hours=3)))), 60)
     text = json.dumps(dossier, ensure_ascii=False, default=_json_default, allow_nan=False)
     if len(text) > 550_000:
-        
+                                                                             
         for key in ("queries", "ad_phrases", "changes", "stocks_current", "ad_daily"):
             section = dossier[key]
             if section.get("rows"):
@@ -247,7 +247,7 @@ def build(c, shop: int, day: date) -> str:
 
 def main():
     import sys
-    import stometric.web  
+    import stometric.web                                                                    
     from stometric.config import today_msk
     from stometric.db import connect
     shop = int(sys.argv[1])

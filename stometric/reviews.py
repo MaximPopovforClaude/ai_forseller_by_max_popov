@@ -20,7 +20,7 @@ TONES = {
     "formal": "Официально, на «Вы»",
     "thanks": "Благодарить за фото и подробный отзыв",
     "cross": "Советовать товары нашего магазина по смыслу (не чаще настройки «каждый N-й ответ», один товар)",
-    
+                                                                                                                               
     "emoji": "Смайлики по смыслу: 1-2 уместных эмодзи на ответ; в ответ на негатив - только сочувствующие, без весёлых",
 }
 SYSTEM = ("Ты пишешь ответ продавца на отзыв покупателя на маркетплейсе (Wildberries или Ozon). Пиши по-русски, от лица магазина, живым человеческим языком, "
@@ -45,7 +45,7 @@ def mode_for(settings: dict, valuation) -> str:
     return settings["neg_mode" if is_neg(valuation) else "pos_mode"]
 
 
-
+               
 def rules(c, shop: int, nm: int = 0) -> dict:
     r = c.execute("SELECT tones, text, updated_at FROM review_rules WHERE account_id=%s AND nm_id=%s", (shop, nm)).fetchone()
     return {"nm_id": nm, "tones": (r or {}).get("tones") or ([] if nm else ["friendly", "deep"]), "text": (r or {}).get("text") or "",
@@ -59,9 +59,9 @@ def save_rules(c, shop: int, nm: int, tones: list, text: str, uid: int):
                    updated_at=now()""", (shop, nm, json.dumps(tones), (text or "")[:4000], uid))
 
 
-
+               
 def rating_now(c, shop: int, nm) -> float | None:
-    if mp(c, shop) == "ozon":     
+    if mp(c, shop) == "ozon":                                                                                        
         r = c.execute("SELECT avg(valuation) a FROM wb_feedbacks WHERE account_id=%s AND nm_id=%s AND coalesce(in_rating,true)",
                       (shop, nm)).fetchone()
         return round(float(r["a"]), 2) if r and r["a"] is not None else None
@@ -76,13 +76,13 @@ def rating_drop(c, shop: int, f: dict) -> dict | None:
     if not is_neg(f.get("valuation")) or f.get("rating_before") is None:
         return None
     now = rating_now(c, shop, f["nm_id"])
-    b = round(float(f["rating_before"]), 1)        
+    b = round(float(f["rating_before"]), 1)                                                      
     if now is not None and round(now, 1) < b:
         return {"before": b, "after": round(now, 1)}
     return None
 
 
-
+                       
 def _card(c, shop: int, nm) -> str:
     if mp(c, shop) == "ozon":
         o = c.execute("SELECT offer_id, name, raw FROM oz_products WHERE account_id=%s AND sku=%s", (shop, nm)).fetchone()
@@ -164,7 +164,7 @@ def _buyer_name(c, shop: int, fid: str) -> str | None:
         d = (WB(c, acc).call("feedbacks", "/api/v1/feedback", params={"id": fid}) or {}).get("data") or {}
         n = (d.get("userName") or "").strip()
         return n if n and n.lower() not in ("покупатель", "пользователь") else None
-    except Exception:  
+    except Exception:                                                
         c.rollback()
         return None
 
@@ -223,7 +223,7 @@ def draft_async(shop: int, fid: str, uid: int | None) -> bool:
             with db.connect() as c2:
                 try:
                     ai_draft(c2, shop, fid, uid)
-                except Exception as e:  
+                except Exception as e:                
                     c2.rollback()
                     c2.execute("""INSERT INTO review_answers(account_id,feedback_id,text,source,status,created_by,error)
                                   VALUES (%s,%s,'-','ai','error',%s,%s)""", (shop, fid, uid, str(e)[:300]))
@@ -261,7 +261,7 @@ def send(c, shop: int, fid: str, text: str, uid: int | None, answer_id: int | No
     if answer_id:
         a = c.execute("SELECT * FROM review_answers WHERE id=%s AND account_id=%s AND feedback_id=%s", (answer_id, shop, fid)).fetchone()
         if a and a["source"] == "ai" and a["text"].strip() == text:
-            src = "ai"                                  
+            src = "ai"                                                                    
     try:
         tgt = f"отзыв {fid} (арт. {f['nm_id']}, {f['valuation']}★)"
         if oz:
@@ -296,7 +296,7 @@ def comment(c, shop: int, aid: int, text: str, uid: int):
               ((text or "").strip()[:2000] or None, uid, aid, shop))
 
 
-
+                                        
 MAX_PER_RUN = 5
 
 
@@ -325,7 +325,7 @@ def process(c, shop: int) -> dict:
         if mode not in actions.AI_MODES:
             continue
         since = st.get(("neg_mode" if is_neg(f["valuation"]) else "pos_mode") + "_since")
-        auto = mode == "auto" and since and f["created_at"] > datetime.fromisoformat(since) and sent_today < int(st.get("auto_limit") or 0)\
+        auto = mode == "auto" and since and f["created_at"] > datetime.fromisoformat(since) and sent_today < int(st.get("auto_limit") or 0) \
             and not actions.can_write(c, shop, "reviews")
         try:
             d = ai_draft(c, shop, f["id"], None)
@@ -334,7 +334,7 @@ def process(c, shop: int) -> dict:
                 send(c, shop, f["id"], d["text"], None, answer_id=d["id"], auto=True)
                 sent_today += 1
                 out["sent"] += 1
-        except Exception as e:  
+        except Exception as e:                
             c.rollback()
             out["errors"] += 1
             c.execute("""INSERT INTO review_answers(account_id,feedback_id,nm_id,text,source,status,error)
@@ -343,7 +343,7 @@ def process(c, shop: int) -> dict:
     return out
 
 
-
+                          
 def negatives(c, shop: int, d_from, d_to) -> list[dict]:
     rows = c.execute("""SELECT * FROM wb_feedbacks WHERE account_id=%s AND valuation<=4
                         AND (created_at AT TIME ZONE 'Europe/Moscow')::date BETWEEN %s AND %s ORDER BY valuation, created_at DESC""",
@@ -361,7 +361,7 @@ def summary_lines(c, shop: int, day, nms: list[int] | None = None) -> str | None
     if not actions.block(c, shop, "reviews")["settings"].get("notify_neg", True):
         return None
     neg = negatives(c, shop, day, day)
-    if nms is not None:                         
+    if nms is not None:                                                                 
         neg = [r for r in neg if r["nm_id"] in set(nms)]
     if not neg:
         return "⭐ Негативных отзывов (4★ и ниже) за день нет."

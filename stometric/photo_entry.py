@@ -32,8 +32,8 @@ def periods(c, shop, nm, snaps, *, today=None):
     active = [(a, b) for _, a, b, _ in windows if a <= b]
     daily = {}
     if active:
-        
-        
+                                                                                
+                                                                               
         rows = c.execute("""SELECT r.d_from AS day, count(e.nm_id) item_rows,
                     sum(e.views) views, sum(e.clicks) clicks, sum(e.carts) carts, sum(e.orders) orders,
                     bool_and(e.views IS NOT NULL AND e.views >= 0 AND e.clicks IS NOT NULL AND e.clicks >= 0
@@ -52,6 +52,7 @@ def periods(c, shop, nm, snaps, *, today=None):
         missing = [start + timedelta(days=i) for i in range(days) if start + timedelta(days=i) not in covered]
         sums = [sum(float(daily[d][f]) for d in covered) for f in ('views', 'clicks', 'carts', 'orders')]
         values = _m(*sums) if covered else {k: None for k in ('views', 'clicks', 'carts', 'orders', 'ctr', 'conv_cart', 'conv_order')}
+        values['conv_view_order'] = sums[3] / sums[0] if covered and sums[0] > 0 else None
         out[sid] = {**values, 'from': start, 'to': end if days else None,
                     'expected_days': days, 'report_days': len(report_days), 'covered_days': len(covered),
                     'missing_days': missing, 'coverage': len(covered) / days if days else 0,

@@ -25,23 +25,69 @@ def _role(c, u, shop_id: int, need: str) -> dict:
 
 
 @router.get("/api/shops/{shop_id}/manager/board")
-def board(shop_id: int, days: int = 14, date_to: date | None = None, ads: bool = False, u=Depends(current_user), c=Depends(conn)):
+def board(shop_id: int, days: int = 14, date_to: date | None = None, ads: bool = False, prices: bool = False, ad_metrics: bool = False, prepared: bool = False, u=Depends(current_user), c=Depends(conn)):
     _role(c, u, shop_id, "viewer")
-    return jsonable_encoder({**manager.board(c, shop_id, max(3, min(days, 60)), date_to, ads), "me": u["id"],
+    if prepared:
+        from . import action_board_cache
+        data = action_board_cache.get(c, shop_id, max(3, min(days, 60)), date_to, ad_metrics)
+    else:
+        data = manager.board(c, shop_id, max(3, min(days, 60)), date_to, ads, prices, ad_metrics=ad_metrics)
+    return jsonable_encoder({**data, "me": u["id"],
                              "can_edit": auth.can(auth.shop_role(c, u, shop_id), "editor")})
 
 
 @router.get("/api/shops/{shop_id}/manager/charts")
-def board_charts(shop_id: int, date_to: date | None = None, u=Depends(current_user), c=Depends(conn)):
+def board_charts(shop_id: int, date_to: date | None = None, prepared: bool = False, u=Depends(current_user), c=Depends(conn)):
     _role(c, u, shop_id, "viewer")
     from . import action_charts
     from .materialize import NotReady
     import psycopg
     try:
+        if prepared:
+            from . import action_board_cache
+            return jsonable_encoder(action_board_cache.charts(c, shop_id, date_to))
         return jsonable_encoder(action_charts.get(c, shop_id, date_to))
     except (NotReady, psycopg.errors.QueryCanceled) as e:
         c.rollback()
         return {"error": str(e) if isinstance(e, NotReady) else "Графики не успели загрузиться. Повторите позже."}
+
+
+@router.get("/api/shops/{shop_id}/manager/day-cells")
+def day_cells(shop_id: int, nm_id: int, date_from: date, date_to: date, ad_metrics: bool = False,
+              u=Depends(current_user), c=Depends(conn)):
+    _role(c, u, shop_id, "viewer")
+    if nm_id <= 0 or nm_id > 2**53 - 1 or date_from == date.min or not 0 <= (date_to - date_from).days < 60:
+        raise HTTPException(422, "Выберите один артикул и период от 1 до 60 дней")
+    own = c.execute("""SELECT 1 FROM nomenclature n JOIN accounts a ON a.id=n.account_id
+                       WHERE n.account_id=%s AND n.nm_id=%s AND a.marketplace='wb'""", (shop_id, nm_id)).fetchone()
+    if not own:
+        raise HTTPException(404, "Товар WB не найден в этом магазине")
+    from datetime import timedelta
+    from . import wb_demand
+    rows = manager.day_cells(c, shop_id, date_from, date_to, nms=[nm_id], ads=True, prices=True, ad_metrics=ad_metrics)
+    return jsonable_encoder({"days": [(date_to - timedelta(days=i)).isoformat() for i in range((date_to-date_from).days+1)],
+        "kinds": manager.KINDS, "demand_note": wb_demand.NOTE,
+        "rows": [{"nm_id": nm_id, "mp": "wb", "orders_source": "wb_funnel", **rows[nm_id]}]})
+
+
+@router.get('/api/shops/{shop_id}/jam/daily')
+def jam_daily_get(shop_id:int,nm_id:int,query_id:int,date_from:date,date_to:date,u=Depends(current_user),c=Depends(conn)):
+    _role(c,u,shop_id,'viewer')
+    from . import jam_daily
+    own=c.execute("SELECT 1 FROM nomenclature n JOIN accounts a ON a.id=n.account_id WHERE n.account_id=%s AND n.nm_id=%s AND a.marketplace='wb'",(shop_id,nm_id)).fetchone()
+    if not own: raise HTTPException(404,'Товар WB не найден в этом магазине')
+    return jsonable_encoder(jam_daily.query_days(c,shop_id,nm_id,query_id,date_from,date_to))
+
+
+@router.get('/api/shops/{shop_id}/jam/query-days')
+def jam_query_days(shop_id:int,nm_id:int,query:str,date_from:date,date_to:date,u=Depends(current_user),c=Depends(conn)):
+    _role(c,u,shop_id,'viewer')
+    if not query.strip() or len(query.encode('utf-8'))>2000:
+        raise HTTPException(422,'Выберите поисковый запрос из отчёта Джема')
+    own=c.execute("SELECT 1 FROM nomenclature n JOIN accounts a ON a.id=n.account_id WHERE n.account_id=%s AND n.nm_id=%s AND a.marketplace='wb'",(shop_id,nm_id)).fetchone()
+    if not own: raise HTTPException(404,'Товар WB не найден в этом магазине')
+    from . import jam_daily
+    return jsonable_encoder(jam_daily.query_days(c,shop_id,nm_id,None,date_from,date_to,query_text=query.strip()))
 
 
 class ActionItem(BaseModel):
@@ -117,7 +163,7 @@ def set_plan(shop_id: int, body: PlanQty, u=Depends(current_user), c=Depends(con
     return {"ok": True}
 
 
-
+                   
 @router.get("/api/shops/{shop_id}/manager/prices")
 def prices(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     _role(c, u, shop_id, "viewer")
@@ -146,7 +192,7 @@ def set_draft(shop_id: int, nm_id: int, body: DraftIn, u=Depends(current_user), 
 
 class TokenIn(BaseModel):
     token: str
-    provider: str | None = None      
+    provider: str | None = None                                                                              
     model: str | None = None
 
 
@@ -182,7 +228,7 @@ def drafts_csv(shop_id: int, u=Depends(current_user), c=Depends(conn)):
                     headers={"Content-Disposition": f"attachment; filename=new_prices_{shop_id}.csv"})
 
 
-
+                            
 @router.get("/api/shops/{shop_id}/competitors/{nm_id}")
 def comp_compare(shop_id: int, nm_id: int, period: int = 30, u=Depends(current_user), c=Depends(conn)):
     from . import market
@@ -238,25 +284,43 @@ def comp_list(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     return c.execute("SELECT nm_id, count(*) n FROM competitors WHERE account_id=%s GROUP BY 1", (shop_id,)).fetchall()
 
 
-
+                     
 @router.get("/api/shops/{shop_id}/insights")
-def insights_get(shop_id: int, day: date | None = None, rebuild: bool = False, staff: int | None = None, u=Depends(current_user), c=Depends(conn)):
+def insights_get(shop_id: int, day: date | None = None, rebuild: bool = False, staff: str | None = None, u=Depends(current_user), c=Depends(conn)):
     from . import insights, ai_routing
     _role(c, u, shop_id, "editor" if rebuild else "viewer")
     route = ai_routing.shop_route(c, shop_id, u['id'])
     acc = c.execute("SELECT workspace_id FROM accounts WHERE id=%s", (shop_id,)).fetchone()
-    if staff and not c.execute("SELECT 1 FROM staff WHERE id=%s AND workspace_id=%s", (staff, acc["workspace_id"])).fetchone():
-        staff = None
+    from . import staff as staff_filter
+    selected = staff_filter.selected_ids(staff)
+    if selected:
+        allowed = {r['id'] for r in c.execute("SELECT id FROM staff WHERE id=ANY(%s) AND workspace_id=%s",
+                                            (selected, acc['workspace_id']))}
+        if allowed != set(selected):
+            raise HTTPException(400, "Менеджер не из этого кабинета")
+    staff = selected[0] if len(selected) == 1 else None
     from .materialize import NotReady
     try:
-        res = insights.get(c, shop_id, day, rebuild=rebuild, staff_id=staff, actor_id=u['id'])
+        if len(selected) > 1:
+            from .materialize import ensure_cost_ready
+            ensure_cost_ready(c, shop_id)
+            facts = insights.findings(c, shop_id, day, staff_filter.nms(c, shop_id, selected) or [0])
+            res = {'findings': facts, 'ai_text': None, 'ai_model': None,
+                   'text': 'Общие показатели выбранных менеджеров. Выводы по правилам; персональные тексты ИИ не складываются.\n\n' + insights.template_text(facts)}
+        else:
+            res = insights.get(c, shop_id, day, rebuild=rebuild, staff_id=staff, actor_id=u['id'])
     except NotReady as e:
         raise HTTPException(409, str(e)) from None
+    from .ai_readability import display_text
+    res = {**res}
+    for field in ('text', 'ai_text'):
+        if field in res:
+            res[field] = display_text(res[field])
     return jsonable_encoder({**res, **route})
 
 
-
-
+                                                                                                               
+                                                                    
 SECRET_KINDS = ("wildbox", "claude", "openai_images")
 
 
@@ -264,7 +328,7 @@ def _secret_can_edit(c, u, ws_id: int, kind: str) -> bool:
     if not auth.can(auth.workspace_role(c, u, ws_id), "admin"):
         return False
     if kind in ("openai_images", "claude"):
-        
+                                                                                 
         r = c.execute("SELECT role, shop_ids FROM memberships WHERE workspace_id=%s AND user_id=%s", (ws_id, u["id"])).fetchone()
         return bool(r and r["role"] in ("admin", "owner") and r["shop_ids"] is None)
     return True
@@ -289,8 +353,8 @@ def secret_get(ws_id: int, kind: str, u=Depends(current_user), c=Depends(conn)):
            "can_edit": _secret_can_edit(c, u, ws_id, kind)}
     if kind == "claude":
         from . import ai_routing, llm
-        
-        
+                                                                                 
+                                                                                   
         out.update(**ai_routing.workspace_route(c, ws_id, u['id']), can_edit=_secret_can_edit(c, u, ws_id, kind),
                    provider=None, model=None,
                    providers=[{"id": pid, "title": p["title"], "model": p["model"], "keys": p["keys"]} for pid, p in llm.PROVIDERS.items()])
@@ -334,7 +398,7 @@ def secret_del(ws_id: int, kind: str, u=Depends(current_user), c=Depends(conn)):
     return {"ok": True}
 
 
-
+                            
 @router.get("/api/shops/{shop_id}/ai_report")
 def ai_report(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     _role(c, u, shop_id, "viewer")
@@ -347,14 +411,16 @@ def ai_report(shop_id: int, u=Depends(current_user), c=Depends(conn)):
         from .api_compare import for_shop_home
         return jsonable_encoder({"day": None, "sections": [], "has_key": has_key, "can_build": can, "compare": for_shop_home(c, shop_id),
                                  **aireport.build_status(c, shop_id), **route})
-    
+                                                                                                              
     order = ["day", "money", "cabinet", "search", "competitors", "niche"]
     rows = c.execute("""SELECT DISTINCT ON (section) section, title, body, source, model, created_at, day FROM ai_reports WHERE account_id=%s
                         AND day >= %s - 14 ORDER BY section, day DESC""", (shop_id, d)).fetchall()
-    old_cab = [r for r in rows if r["section"] == "cabinet" and r["title"] == "Ключевые ошибки в кабинете"]   
+    old_cab = [r for r in rows if r["section"] == "cabinet" and r["title"] == "Ключевые ошибки в кабинете"]                                    
     rows = [r for r in rows if r["section"] in order and (r["section"] != "cabinet" or not old_cab or not any(x["section"] == "day" for x in rows))]
     rows.sort(key=lambda r: order.index(r["section"]))
     from . import aireport
+    from .ai_readability import display_text
+    rows = [{**r, 'body': display_text(r['body'])} for r in rows]
     for r in rows:
         r["kind"] = "day" if r["section"] in aireport.DAILY else "week"
     from .api_compare import for_shop_home
@@ -387,7 +453,7 @@ def ai_report_build(shop_id: int, u=Depends(current_user), c=Depends(conn)):
             "message": "Собираю сводку. Это может занять 15–20 минут или дольше; готовые разделы появятся автоматически."}
 
 
-
+                    
 @router.get("/api/shops/{shop_id}/plan")
 def plan_get(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     from . import market, planning
@@ -412,8 +478,8 @@ def plan_auto(shop_id: int, u=Depends(current_user), c=Depends(conn)):
 class PlanCellIn(BaseModel):
     nm_id: int
     month: date
-    field: str                       
-    value: float | None              
+    field: str                                           
+    value: float | None                                   
 
 
 @router.put("/api/shops/{shop_id}/plan/cell")
@@ -426,7 +492,7 @@ def plan_cell(shop_id: int, body: PlanCellIn, u=Depends(current_user), c=Depends
         raise HTTPException(400, "Странное значение")
     m = body.month.replace(day=1)
     f = body.field
-    if body.value is None:   
+    if body.value is None:                                                                   
         c.execute(f"UPDATE plan_cells SET {f}_src='auto' WHERE account_id=%s AND nm_id=%s AND month=%s", (shop_id, body.nm_id, m))
         c.commit()
         planning.fill(c, shop_id, u["id"])
@@ -444,7 +510,7 @@ class PlanItemIn(BaseModel):
     main_query: str | None = None
     ads_share: float | None = None
     reset_ads: bool = False
-    method: str | None = None        
+    method: str | None = None                                                           
 
 
 @router.put("/api/shops/{shop_id}/plan/item")
@@ -489,7 +555,7 @@ def plan_settings(shop_id: int, body: PlanSettingsIn, u=Depends(current_user), c
     from . import planning
     acc = _role(c, u, shop_id, "editor")
     new = {k: v for k, v in body.model_dump().items() if v is not None}
-    if ("horizon" in new and new["horizon"] not in (6, 12)) or not 0 <= new.get("fixed_month", 0) <= 1_000_000_000\
+    if ("horizon" in new and new["horizon"] not in (6, 12)) or not 0 <= new.get("fixed_month", 0) <= 1_000_000_000 \
             or not 0 <= new.get("goods_lead", 0) <= 6 or not 0 <= new.get("loan_rate", 0) <= 2:
         raise HTTPException(400, "Горизонт 6/12 мес; постоянные ≥0; оплата товара за 0–6 мес; ставка 0–200 %")
     cur = c.execute("SELECT value FROM shop_settings WHERE account_id=%s AND key='plan'", (shop_id,)).fetchone()
@@ -497,14 +563,14 @@ def plan_settings(shop_id: int, body: PlanSettingsIn, u=Depends(current_user), c
     c.execute("""INSERT INTO shop_settings(account_id,key,value) VALUES (%s,'plan',%s) ON CONFLICT (account_id,key)
                  DO UPDATE SET value=EXCLUDED.value, updated_at=now()""", (shop_id, json.dumps(val)))
     c.commit()
-    planning.fill(c, shop_id, u["id"])      
+    planning.fill(c, shop_id, u["id"])                                                
     _audit(c, u, acc["workspace_id"], "plan/settings", {"shop": shop_id, **body.model_dump()})
     c.commit()
     return {"ok": True}
 
 
 class PlanMethodAllIn(BaseModel):
-    method: str          
+    method: str                                                                           
 
 
 @router.put("/api/shops/{shop_id}/plan/method_all")
@@ -531,7 +597,7 @@ def plan_scenarios(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     return jsonable_encoder(planning.scenarios(c, shop_id))
 
 
-
+                                                                      
 @router.get("/api/shops/{shop_id}/exclusions")
 def excl_get(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     _role(c, u, shop_id, "viewer")
@@ -587,7 +653,7 @@ def _rebuild_bg(c, shop_id: int):
     import os
     import subprocess
     import sys
-    
+                                                                                                                  
     c.execute("""INSERT INTO collector_state(account_id,collector,cursor,last_run_at) VALUES (%s,'_rebuild','{"again": true}',now())
                  ON CONFLICT (account_id,collector) DO UPDATE SET cursor='{"again": true}'""", (shop_id,))
     c.commit()
@@ -663,7 +729,7 @@ def plan_cash_set(shop_id: int, body: CashCellIn, u=Depends(current_user), c=Dep
     return {"ok": True}
 
 
-
+                   
 @router.get("/api/shops/{shop_id}/photo_funnel")
 def pf_list(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     """Артикулы со слепками фото: свои (по заказам) и конкуренты магазина; дата последнего изменения фото."""
@@ -699,7 +765,7 @@ def pf_item(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
     events = []
     from datetime import timedelta
     from .config import today_msk
-    end = today_msk()                       
+    end = today_msk()                                                                                                
     history = c.execute("SELECT * FROM photo_events WHERE nm_id=%s ORDER BY day DESC, id DESC LIMIT 60", (nm,)).fetchall()
     for e in history:
         ev = {"day": e["day"], "summary": e["summary"], "after": sl.get(e["snap_id"]), "before": sl.get(e["prev_id"]), "detail": e["detail"]}
@@ -710,7 +776,7 @@ def pf_item(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
             ev["period"]["entry"] = entry.get(e["snap_id"])
         end = e["day"] - timedelta(days=1)
         events.append(ev)
-    if own:                                 
+    if own:                                                                                                                                  
         first = snaps[-1]["taken_at"].date() if snaps else None
         for i, ev in enumerate(events):
             a = events[i + 1]["day"] if i + 1 < len(events) else first
@@ -718,8 +784,8 @@ def pf_item(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
             ev["period_before"] = (events[i + 1].get("period") if i + 1 < len(events)
                                    else photos.period_stats(c, shop_id, nm, a, b) if a and a <= b else None)
             if ev["period_before"] is None and prices.get(history[i]["prev_id"]) is not None:
-                
-                
+                                                                            
+                                                                              
                 ev["period_before"] = {'from': ev['day'], 'to': ev['day'], 'days': 0,
                                        'ctr': None, 'conv_cart': None, 'conv_order': None, 'orders_day': None}
             if ev["period_before"] is not None and "prices" not in ev["period_before"]:
@@ -727,7 +793,7 @@ def pf_item(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
             if ev["period_before"] is not None:
                 ev["period_before"]["entry"] = entry.get(history[i]["prev_id"])
     cur_period = None
-    if own and snaps:                       
+    if own and snaps:                                                                                                
         since = events[0]["day"] if events else snaps[-1]["taken_at"].date()
         cur_period = photos.period_stats(c, shop_id, nm, since, max(since, today_msk()))
         cur_period["prices"] = prices.get(snaps[0]["id"])
@@ -744,11 +810,16 @@ def pf_snap(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
     own = c.execute("SELECT 1 FROM nomenclature WHERE account_id=%s AND nm_id=%s", (shop_id, nm)).fetchone()
     if not own and not c.execute("SELECT 1 FROM competitors WHERE account_id=%s AND comp_nm_id=%s", (shop_id, nm)).fetchone():
         raise HTTPException(404, "Артикул не из магазина и не из его конкурентов")
-    r = photos.snapshot(c, nm, "own" if own else "competitor")
+    try:
+        r = photos.snapshot(c, nm, "own" if own else "competitor")
+    except Exception:
+        raise HTTPException(502, "Фото WB сейчас недоступны. Прежние слепки сохранены.") from None
+    if r.get("busy"):
+        raise HTTPException(409, "Слепок этого товара уже снимается. Обновите страницу через минуту.")
     return jsonable_encoder({"ok": True, "changed": r["changed"], "summary": (r.get("event") or {}).get("summary")})
 
 
-
+                                              
 @router.post("/api/shops/{shop_id}/entry_points")
 async def entry_upload(shop_id: int, request: Request, name: str = "", u=Depends(current_user), c=Depends(conn)):
     """Тело запроса — сам файл (xlsx или zip с xlsx), как скачан из ЛК WB «Портрет покупателя — Точки входа»."""
@@ -765,21 +836,27 @@ async def entry_upload(shop_id: int, request: Request, name: str = "", u=Depends
 
 
 @router.get("/api/shops/{shop_id}/entry_points")
-def entry_get(shop_id: int, nm_ids: str = "", reports: str = "", mode: str = "reports", u=Depends(current_user), c=Depends(conn)):
+def entry_get(shop_id: int, nm_ids: str = "", reports: str = "", mode: str = "reports", staff: str = "", u=Depends(current_user), c=Depends(conn)):
     from . import entry
     _role(c, u, shop_id, "viewer")
     ids = [int(x) for x in reports.split(",") if x.strip().isdigit()] or None
-    nms = [int(x) for x in nm_ids.split(",") if x.strip().isdigit()] or None    
-    mode = mode if mode in ("reports", "days", "weeks") else "reports"   
+    nms = [int(x) for x in nm_ids.split(",") if x.strip().isdigit()] or None
+    if staff:
+        from .staff import narrow
+        nms = narrow(c, shop_id, staff, nms)                                                 
+    mode = mode if mode in ("reports", "days", "weeks") else "reports"                                               
     return jsonable_encoder({**entry.view(c, shop_id, nms, ids, mode), "can_edit": auth.can(auth.shop_role(c, u, shop_id), "editor")})
 
 
 @router.get("/api/shops/{shop_id}/entry_views")
-def entry_views_get(shop_id: int, days: int = 7, grain: str = "day", nm_ids: str = "", u=Depends(current_user), c=Depends(conn)):
+def entry_views_get(shop_id: int, days: int = 7, grain: str = "day", nm_ids: str = "", staff: str = "", u=Depends(current_user), c=Depends(conn)):
     """Self-hosted application component."""
     from . import entry_views
     _role(c, u, shop_id, "viewer")
     nms = [int(x) for x in nm_ids.split(",") if x.strip().isdigit()] or None
+    if staff:
+        from .staff import narrow
+        nms = narrow(c, shop_id, staff, nms)
     return jsonable_encoder(entry_views.build(c, shop_id, nms, max(1, min(days, 90)), grain if grain in ("day", "week", "month") else "day"))
 
 
@@ -792,7 +869,7 @@ def entry_del(shop_id: int, rid: int, u=Depends(current_user), c=Depends(conn)):
     return {"ok": True}
 
 
-
+                                                                                    
 class MaxIn(BaseModel):
     values: dict[str, float | None]
 
@@ -865,7 +942,7 @@ def ext_del(shop_id: int, eid: int, u=Depends(current_user), c=Depends(conn)):
     return {"ok": True}
 
 
-
+                                       
 @router.get("/api/shops/{shop_id}/promo")
 def promo_get(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     from . import promo
@@ -921,7 +998,7 @@ def promo_clear(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     return {"ok": True}
 
 
-
+                                
 HYP_KINDS = ("Гипотеза", "Подтвердилась", "Не подтвердилась")
 HYP_INDICATORS = ("Цена клика", "CTR", "ДРР", "Цена корзины", "Цена заказа", "Конверсия в корзину", "Конверсия в заказ", "Локализация",
                   "Маржа", "КЭМ", "СПП / цена", "Позиция", "Фото / контент", "Другое")
@@ -1012,7 +1089,7 @@ def unit_extra_set(shop_id: int, body: UnitExtraIn, u=Depends(current_user), c=D
     return {"ok": True}
 
 
-
+                                      
 @router.get("/api/shops/{shop_id}/seo/{nm_id}")
 def seo_get(shop_id: int, nm_id: int, u=Depends(current_user), c=Depends(conn)):
     from . import seo
@@ -1080,7 +1157,7 @@ def cost_import_url(shop_id: int, body: CostUrlIn, u=Depends(current_user), c=De
     return _cost_import(c, u, shop_id, raw, "gsheet.xlsx", body.valid_from, "Google-таблица")
 
 
-
+                                                                                      
 @router.get("/api/shops/{shop_id}/mrc")
 def mrc_get(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     from . import mrc_list
@@ -1115,7 +1192,7 @@ def mrc_put(shop_id: int, body: MrcIn, u=Depends(current_user), c=Depends(conn))
     return {"ok": True, "message": f"МРЦ задана: {put}" + (f", убрана: {gone}" if gone else "")}
 
 
-
+                                                                                           
 @router.get("/api/shops/{shop_id}/shelves")
 def shelves_get(shop_id: int, u=Depends(current_user), c=Depends(conn)):
     from . import shelf_view
@@ -1128,3 +1205,17 @@ def shelves_nm(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
     from . import shelf_view
     _role(c, u, shop_id, "viewer")
     return jsonable_encoder(shelf_view.detail(c, shop_id, nm))
+
+
+@router.get('/api/shops/{shop_id}/query_heatmap/{nm}')
+def heatmap_read(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
+    from . import query_heatmap
+    return jsonable_encoder(query_heatmap.read(c,u,shop_id,nm))
+
+
+@router.post('/api/shops/{shop_id}/query_heatmap/{nm}')
+def heatmap_start(shop_id: int, nm: int, u=Depends(current_user), c=Depends(conn)):
+    from . import query_heatmap
+    _role(c,u,shop_id,'editor')
+    query_heatmap.start(c,u,shop_id,nm)
+    return jsonable_encoder(query_heatmap.read(c,u,shop_id,nm))

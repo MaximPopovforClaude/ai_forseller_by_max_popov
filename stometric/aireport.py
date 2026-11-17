@@ -10,6 +10,7 @@ import subprocess
 from datetime import timedelta
 
 from .config import today_msk
+from .ai_readability import WRITING_RULES
 
 MODEL = "claude-sonnet-5-5"
 
@@ -26,7 +27,7 @@ RULES = """Ты аналитик магазина на Wildberries в серви
   расход деньгами и бонусами отдельно.
 - Цифры Wildbox - оценка по витрине WB, по нашим товарам обычно ниже факта; так и пиши, если сравниваешь.
 - Пиши по-русски, без markdown, без заголовков, без длинного тире (только дефис).
-"""
+""" + WRITING_RULES
 
 SECTIONS = {
     "money": ("Где теряем деньги", "Раздел «Где теряем деньги» за 30 дней: убыточные артикулы, реклама съедает маржу, упущенная выручка без "
@@ -46,7 +47,7 @@ SECTIONS = {
               "цены, отзывы, блогеры. Что это значит для нас."),
 }
 
-
+                                                                                                                        
 RULES_OZ = RULES.replace("магазина на Wildberries", "магазина на Ozon").replace("ДРР от выкупов", "ДРР от продаж").replace(
     "- Цифры Wildbox - оценка по витрине WB, по нашим товарам обычно ниже факта; так и пиши, если сравниваешь.\n",
     "- Артикул продавца - поле offer_id. ДРР считаем от продаж минус возвраты. Остатки и кластеры - по данным Ozon.\n"
@@ -66,9 +67,9 @@ SECTIONS_OZ = {
 }
 
 
-
+                                                                                                                                        
 DAILY = ("day",)
-BUILD_LOCK_NAMESPACE = 1095324240  
+BUILD_LOCK_NAMESPACE = 1095324240                                                               
 DAY_KEYS = ("daily", "rating_changes", "yesterday", "day_before", "same_day_last_week", "note", "low_stock_top", "low_stock_clusters", "paused_ads_on_top",
             "ads_stopped_on_top", "ads_autostop", "ad_keywords")
 WEEK_SKIP = ("daily", "yesterday", "day_before", "same_day_last_week")
@@ -96,7 +97,7 @@ def ws_key(c, ws_id: int) -> str | None:
     return llm.from_secret(vault.decrypt(bytes(r["enc"]))) if r else None
 
 
-SUBSCRIPTION = "subscription"     
+SUBSCRIPTION = "subscription"                                                                                
 
 
 def shop_key(c, shop: int, actor_id: int | None = None):
@@ -162,7 +163,7 @@ def build_ozon(c, shop: int, key: str, weekly: bool) -> dict:
     for sec, pack in packs.items():
         try:
             body = write(key, sec, pack, ozon=True)
-        except Exception as e:  
+        except Exception as e:                
             _raise_uncertain(e)
             done.append(f"{sec}: ошибка {str(e)[:80]}")
             continue
@@ -233,8 +234,8 @@ def build(c, shop: int, weekly: bool | None = None, *, request_key: str | None =
     from psycopg.pq import TransactionStatus
     from . import analytics_requests
     analytics_requests.validate_key(request_key)
-    
-    
+                                                                                
+                                                                           
     if not shop_key(c, shop):
         return {'status': 'blocked', 'error': 'Нет доступа к нейросети магазина', 'sections': []}
     expected = expected_sections(c, shop)
@@ -273,8 +274,8 @@ def build(c, shop: int, weekly: bool | None = None, *, request_key: str | None =
         previous = c.execute('SELECT * FROM ai_report_runs WHERE account_id=%s ORDER BY id DESC LIMIT 1',
                              (shop,)).fetchone()
         if previous and (previous['status'] == 'running' or _needs_review(previous)):
-            
-            
+                                                                             
+                                                                              
             if previous['status'] == 'running':
                 c.execute("UPDATE ai_report_runs SET status='interrupted',finished_at=now(),error='uncertain: execution lost its build lock' WHERE id=%s",
                           (previous['id'],))
@@ -296,7 +297,7 @@ def build(c, shop: int, weekly: bool | None = None, *, request_key: str | None =
              json.dumps({'source_coverage': source_state}, ensure_ascii=False, default=str))).fetchone()
         run_id = row['id']
         analytics_requests.remember(c, request_key, 'reports', shop, actor, run_id)
-        c.commit()  
+        c.commit()                                                      
         result = _build(c, shop, weekly)
         claimed_saved = {s for s in result.get('sections', []) if s in expected}
         stored = c.execute('''SELECT r.section,r.day,r.created_at FROM ai_reports r
@@ -305,8 +306,8 @@ def build(c, shop: int, weekly: bool | None = None, *, request_key: str | None =
             (run_id, sorted(claimed_saved))).fetchall()
         saved = {r['section'] for r in stored}
         status = 'ok' if saved == set(expected) else 'partial' if saved else 'error'
-        
-        
+                                                                                
+                                                                                
         safe_result = {'day': result.get('day'), 'sections': sorted(saved),
                        'missing_sections': [s for s in expected if s not in saved],
                        'saved_sections': [{k: str(r[k]) for k in ('section', 'day', 'created_at')} for r in stored],
@@ -318,8 +319,8 @@ def build(c, shop: int, weekly: bool | None = None, *, request_key: str | None =
     except BaseException as error:
         c.rollback()
         if run_id is not None:
-            
-            
+                                                                          
+                                                                           
             c.execute("UPDATE ai_report_runs SET status='interrupted',finished_at=now(),error=%s WHERE id=%s",
                       (type(error).__name__, run_id))
             c.commit()
@@ -354,7 +355,7 @@ def _build(c, shop: int, weekly: bool | None = None) -> dict:
         try:
             m = aipack.market_pack(c, wb, shop)
             packs["competitors"] = packs["niche"] = m
-        except Exception as e:  
+        except Exception as e:                
             c.rollback()
             packs["competitors_error"] = str(e)[:200]
     day = today_msk() - timedelta(days=1)
@@ -364,7 +365,7 @@ def _build(c, shop: int, weekly: bool | None = None) -> dict:
             continue
         try:
             body = write(key, sec, packs[sec])
-        except Exception as e:  
+        except Exception as e:                
             _raise_uncertain(e)
             done.append(f"{sec}: ошибка {str(e)[:80]}")
             continue

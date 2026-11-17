@@ -2,7 +2,7 @@
 
 import json
 
-VERSION = "2026-10-21.2"    
+VERSION = "2026-10-21.2"                                                        
 from .config import site_url
 SITE = site_url()
 FIELDS = [("org", "Исполнитель (ИП или ООО — полное наименование)", True), ("inn", "ИНН", True), ("ogrn", "ОГРН / ОГРНИП", True),

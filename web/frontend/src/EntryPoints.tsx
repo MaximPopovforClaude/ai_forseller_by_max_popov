@@ -1,17 +1,20 @@
+import { useEntryActions } from "./EntryActions";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { http } from "./api";
 import { EntryViews, type View } from "./EntryViews";
-import { changeCell, declineThreshold, growthThreshold } from "./entryGrowth";
+import { partialValue, PARTIAL_NOTE } from "./entryCompleteness";
+import { changeCell, declineThreshold, growthThreshold, singleToZero } from "./entryGrowth";
 
 /** Точки входа WB (отчёт из ЛК — загружает пользователь): откуда приходят в карточки и как меняется каждая точка входа по периодам. */
-type M = { views: number; clicks: number; carts: number; orders: number; ctr: number | null; conv_cart: number | null; conv_order: number | null; share?: number | null };
+type M = { partial?: string[]; views: number | null; clicks: number | null; carts: number | null; orders: number | null; ctr: number | null; conv_cart: number | null; conv_order: number | null; share?: number | null };
 type Per = { id: string; d_from: string; d_to: string; n_days?: number };
 type Rep = { id: number; d_from: string; d_to: string; file_name: string | null; uploaded_at: string; who: string | null };
 type Mode = "reports" | "days" | "weeks";
 type Pt = { section: string; point: string; cells: Record<string, M> };
+type AdKey = "total" | "search" | "rest" | "organic" | `search_${"cpm" | "cpc" | "unknown"}` | `rest_${"cpm" | "cpc" | "unknown"}`;
 type Data = { reports: Rep[]; periods: Per[]; points: Pt[]; total?: Record<string, M>; articles: { nm_id: number; vendor_code: string | null; title: string | null; clicks: number }[];
-  can_edit: boolean; has_daily?: boolean; ads?: Record<string, Record<"total" | "search" | "rest" | "organic", M>> };
+  can_edit: boolean; has_daily?: boolean; ad_note?: string; ads?: Record<string, Partial<Record<AdKey, M>> & { unknown_payment?: boolean }> };
 
 const METRICS: [keyof M, string, "n" | "p"][] = [
   ["clicks", "Переходы в карточку", "n"], ["views", "Показы", "n"], ["ctr", "CTR", "p"], ["carts", "Добавления в корзину", "n"],
@@ -21,7 +24,7 @@ const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const dd = (s: string) => `${s.slice(8, 10)}.${s.slice(5, 7)}`;
 const days = (p: Per) => p.n_days ?? Math.round((new Date(p.d_to).getTime() - new Date(p.d_from).getTime()) / 86400000) + 1;
 
-export function EntryPoints({ shop, nm, hideChg = false, enablePin = true, enableGrowth = true }: { shop: number; nm: string; hideChg?: boolean; enablePin?: boolean; enableGrowth?: boolean }) {
+export function EntryPoints({ shop, nm, staff = "", hideChg = false, enablePin = true, enableGrowth = true }: { shop: number; nm: string; staff?: string; hideChg?: boolean; enablePin?: boolean; enableGrowth?: boolean }) {
   const [view, setView] = useState<View | "detail">(() => { try { return (localStorage.getItem("entry_view") as View) || "funnel"; } catch { return "funnel"; } });
   const [pinPoints, setPinPoints] = useState(() => { try { return localStorage.getItem("entry_pin_points") === "1"; } catch { return false; } });
   const pin = () => setPinPoints(value => { const next = !value; try { localStorage.setItem("entry_pin_points", next ? "1" : "0"); } catch { /* no storage */ } return next; });
@@ -37,6 +40,8 @@ export function EntryPoints({ shop, nm, hideChg = false, enablePin = true, enabl
   const decline = enableGrowth && declineOn ? dropThreshold : null;
   const setDecline = (on: boolean) => { setDeclineOn(on); try { localStorage.setItem("entry_decline_on", on ? "1" : "0"); } catch { /* no storage */ } };
   const setDropThreshold = (value: string) => { setDeclineText(value); if (declineThreshold(value) != null) { try { localStorage.setItem("entry_decline_threshold", value); } catch { /* no storage */ } } };
+  const [gradient, setGradient] = useState(() => { try { return localStorage.getItem("entry_gradient") === "1"; } catch { return false; } });
+  const setGradientOn = (on: boolean) => { setGradient(on); try { localStorage.setItem("entry_gradient", on ? "1" : "0"); } catch { /* no storage */ } };
   const pickView = (v: View | "detail") => { setView(v); try { localStorage.setItem("entry_view", v); } catch { /* */ } };
   const tabs = <div className="rnp-bar entry-tabs">
     {([["funnel", "Воронка артикулов"], ["sources", "Источники трафика"], ["sources_days", "Источники трафика по дням"], ["detail", "Точки входа подробно"]] as const)
@@ -56,29 +61,39 @@ export function EntryPoints({ shop, nm, hideChg = false, enablePin = true, enabl
     <input type="number" min="0" max="100" step="any" aria-label="Порог падения, %" aria-invalid={dropThreshold == null}
       value={declineText} disabled={!declineOn} onChange={e => setDropThreshold(e.target.value)} /> %
     {declineOn && dropThreshold == null && <span className="entry-growth-error" role="alert">Для падения укажите процент больше 0 и не больше 100.</span>}
-    <span className="hint">К предыдущему периоду. Если прежнее значение равно нулю или данных нет, подсветки нет. Падение до нуля учитывается.</span>
+    <label className="chk" title="Чем сильнее изменение, тем темнее заливка. Заданные пороги сохраняются.">
+      <input type="checkbox" checked={gradient} onChange={e => setGradientOn(e.target.checked)} /> Градиентная заливка
+    </label>
+    <span className="hint">К предыдущему периоду. При нулевом прошлом значении, пропуске или падении 1 → 0 подсветки нет. Другие падения до нуля учитываются.</span>
   </div>;
-  if (view !== "detail") return <div className="entry">{tabs}{growthSettings}<EntryViews shop={shop} nm={nm} view={view} pinPoints={enablePin && pinPoints} growth={growth} decline={decline} /></div>;
-  return <div className="entry">{tabs}{growthSettings}<EntryDetail shop={shop} nm={nm} hideChg={hideChg} pinPoints={enablePin && pinPoints} growth={growth} decline={decline} /></div>;
+  if (view !== "detail") return <div className="entry">{tabs}{growthSettings}<EntryViews shop={shop} nm={nm} staff={staff} view={view} pinPoints={enablePin && pinPoints} growth={growth} decline={decline} gradient={gradient} /></div>;
+  return <div className="entry">{tabs}{growthSettings}<EntryDetail shop={shop} nm={nm} staff={staff} hideChg={hideChg} pinPoints={enablePin && pinPoints} growth={growth} decline={decline} gradient={gradient} /></div>;
 }
 
-function EntryDetail({ shop, nm, hideChg = false, pinPoints = false, growth = null, decline = null }: { shop: number; nm: string; hideChg?: boolean; pinPoints?: boolean; growth?: number | null; decline?: number | null }) {
+function EntryDetail({ shop, nm, staff = "", hideChg = false, pinPoints = false, growth = null, decline = null, gradient = false }: { shop: number; nm: string; staff?: string; hideChg?: boolean; pinPoints?: boolean; growth?: number | null; decline?: number | null; gradient?: boolean }) {
   const [showChart, setShowChart] = useState(() => { try { return localStorage.getItem("entry_chart") !== "0"; } catch { return true; } });
-  const [d, setD] = useState<Data | null>(null);
+  const [loaded, setLoaded] = useState<{ key: string; data: Data } | null>(null);
   const [mode, setMode] = useState<Mode>(() => { try { return (localStorage.getItem("entry_mode") as Mode) || "days"; } catch { return "days"; } });
   const [pick, setPick] = useState<number[]>([]);         // режим «отчёты»: выбранные для сравнения
   const [split, setSplit] = useState<{ ad: boolean; org: boolean }>(() => { try { return JSON.parse(localStorage.getItem("entry_split") || ""); } catch { return { ad: false, org: false }; } });
   const setSp = (x: { ad: boolean; org: boolean }) => { setSplit(x); try { localStorage.setItem("entry_split", JSON.stringify(x)); } catch { /* */ } };
-  const [metrics, setMetrics] = useState<(keyof M)[]>(["clicks"]);     // до 3 показателей рядом
+  const [metrics, setMetrics] = useState<(keyof M)[]>(["clicks"]);     // до 5 показателей рядом
   const [perDay, setPerDay] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const file = useRef<HTMLInputElement>(null);
   const nms = nm.replace(/\s+/g, "");
-  const q = new URLSearchParams({ mode, ...(nms ? { nm_ids: nms } : {}), ...(mode === "reports" && pick.length ? { reports: pick.join(",") } : {}) });
-  const load = () => http.get<Data>(`/api/shops/${shop}/entry_points?${q}`).then(setD).catch((e) => setErr(e.message));
-  useEffect(() => { setD(null); load(); }, [shop, nms, mode, pick.join(",")]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const q = new URLSearchParams({ mode, ...(staff ? { staff } : {}), ...(nms ? { nm_ids: nms } : {}), ...(mode === "reports" && pick.length ? { reports: pick.join(",") } : {}) });
+  const context = JSON.stringify([shop, q.toString()]);
+  const d = loaded?.key === context ? loaded.data : null;
+  const request = useRef(0);
+  const load = () => {
+    const seq = ++request.current;
+    return http.get<Data>(`/api/shops/${shop}/entry_points?${q}`).then(v => { if (seq === request.current) setLoaded({ key: context, data: v }); })
+      .catch(e => { if (seq === request.current) setErr(e.message); });
+  };
+  useEffect(() => { setLoaded(null); setErr(""); load(); return () => { ++request.current; }; }, [shop, nms, staff, mode, pick.join(",")]);   // eslint-disable-line react-hooks/exhaustive-deps
   const setM = (m: Mode) => { setMode(m); try { localStorage.setItem("entry_mode", m); } catch { /* */ } };
   const upload = async (list: File[]) => {
     setErr(""); setMsg("");
@@ -96,9 +111,9 @@ function EntryDetail({ shop, nm, hideChg = false, pinPoints = false, growth = nu
     load();
   };
   const kindOf = (k: keyof M) => METRICS.find((m) => m[0] === k)?.[2] || "n";
-  const titleOf = (k: keyof M) => METRICS.find((m) => m[0] === k)?.[1] || k;
+  const titleOf = (k: keyof M) => k === "clicks" && split.ad ? "Переходы / клики рекламы" : METRICS.find((m) => m[0] === k)?.[1] || k;
   const toggle = (k: keyof M) => setMetrics((xs) => xs.includes(k) ? (xs.length > 1 ? xs.filter((x) => x !== k) : xs)
-    : [...(xs.length >= 3 ? xs.slice(1) : xs), k]);
+    : [...(xs.length >= 5 ? xs.slice(1) : xs), k]);
   const anyN = metrics.some((k) => kindOf(k) === "n");
   const val = (metric: keyof M, m: M | undefined, p: Per): number | null => {
     if (!m) return null;
@@ -117,6 +132,7 @@ function EntryDetail({ shop, nm, hideChg = false, pinPoints = false, growth = nu
     return { t: `${ch >= 0 ? "+" : "−"}${Math.abs(ch * 100).toFixed(0)} %`, good: ch >= 0 };
   };
   const per = d?.periods || [];
+  const actions = useEntryActions(shop, nms, per);
   const chart = useMemo(() => {
     if (!d || mode !== "days" || per.length < 2) return null;
     const k = metrics[0], asc = [...per].reverse();
@@ -132,11 +148,15 @@ function EntryDetail({ shop, nm, hideChg = false, pinPoints = false, growth = nu
         data: asc.map((p) => { const m = r.cells[p.id]; return m ? (m[k] as number | null) : null; }) })),
     };
   }, [d, mode, metrics.join(",")]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const cells = (row: Record<string, M>, bold: boolean) => per.map((p, i) => <Fragment key={p.id}>{metrics.map((k) => {
+  const cells = (row: Record<string, M>, bold: boolean) => per.map((p, i) => <Fragment key={p.id}>{metrics.map((k, mi) => {
     const a = val(k, row[String(p.id)], p), b = i + 1 < per.length ? val(k, row[String(per[i + 1].id)], per[i + 1]) : null;
-    const x = dyn(k, a, b);
-    return <Fragment key={k}><td {...changeCell(a, b, growth, decline)}>{bold ? <b>{fmt(k, a)}</b> : fmt(k, a)}</td>
-      {i + 1 < per.length && !hideChg && <td className={x ? (x.good ? "t-good" : "t-bad") : ""}>{x?.t || ""}</td>}</Fragment>;
+    const partial = partialValue(row[String(p.id)], k), previousPartial = i + 1 < per.length && partialValue(row[String(per[i+1].id)], k);
+    const x = partial || previousPartial ? null : dyn(k, a, b);
+    const scale = kindOf(k) === "p" ? 100 : 1;
+    const color = changeCell(partial ? null : a, previousPartial ? null : b, growth, decline, mi === 0 ? "entry-period-start" : "", gradient, scale);
+    const display = fmt(k, a) + (partial && a != null ? "*" : "");
+    return <Fragment key={k}><td {...color} title={partial && a != null ? PARTIAL_NOTE : color.title}>{bold ? <b>{display}</b> : display}</td>
+      {i + 1 < per.length && !hideChg && <td className={x && !singleToZero(a, b, scale) ? (x.good ? "t-good" : "t-bad") : ""}>{x?.t || ""}</td>}</Fragment>;
   })}</Fragment>);
   return (
     <div className="entry">
@@ -148,8 +168,8 @@ function EntryDetail({ shop, nm, hideChg = false, pinPoints = false, growth = nu
         <span className="hint">Столбцы:</span>
         {([["days", "По дням (30)"], ["weeks", "Неделя к неделе"], ["reports", "Загруженные отчёты"]] as [Mode, string][]).map(([m, t]) =>
           <button key={m} className={mode === m ? "on" : ""} onClick={() => setM(m)}>{t}</button>)}
-        <span className="hint">{nms ? "Выбранные артикулы (вверху страницы)" : "Весь магазин — артикулы выбираются вверху страницы"}</span>
-        <span className="hint">Показатели (до 3):</span>
+        <span className="hint">{nms || staff ? "Выбранные артикулы (вверху страницы)" : "Весь магазин — артикулы выбираются вверху страницы"}</span>
+        <span className="hint">Показатели (до 5):</span>
         {METRICS.map(([k, t]) => <button key={k} className={metrics.includes(k) ? "on" : ""} onClick={() => toggle(k)}>{t}</button>)}
         <label className="chk"><input type="checkbox" checked={split.ad} onChange={(e) => setSp({ ...split, ad: e.target.checked })} /> из них рекламных</label>
         <label className="chk"><input type="checkbox" checked={split.org} onChange={(e) => setSp({ ...split, org: e.target.checked })} /> из них органики</label>
@@ -160,25 +180,36 @@ function EntryDetail({ shop, nm, hideChg = false, pinPoints = false, growth = nu
       {err && <div className="err">{err}</div>}
       <div className="hint">Отчёта нет в API WB. Скачайте в ЛК WB: «Аналитика» → «Портрет покупателя» → «Точки входа» → период → «Скачать», и загрузите сюда
         (xlsx или zip), либо поставьте плагин Chrome — он качает отчёт сам за каждый день. Каждый период — отдельный столбец, повтор того же периода заменяет прошлый. CTR и конверсии считаем из штук (в файле WB они округлены).</div>
+      {d?.ad_note && (split.ad || split.org) && <details className="hint"><summary>* — неполные данные · CPC без показов · подробнее</summary>{d.ad_note}</details>}
       {d && !per.length && <div className="hint">{mode !== "reports" && d.reports.length ? "Дневных отчётов пока нет — их качает плагин Chrome (Аккаунт → «Плагин Chrome») или загрузите отчёт за один день." : "Пока ничего не загружено."}</div>}
       {mode === "weeks" && per.length > 0 && <div className="hint">Окна по 7 дней от последнего загруженного дня; «в день» — среднее по дням, за которые есть отчёт.</div>}
       {chart && <button className="btn" aria-expanded={showChart} onClick={() => { setShowChart(!showChart); try { localStorage.setItem("entry_chart", showChart ? "0" : "1"); } catch { /* no storage */ } }}>
         {showChart ? "Скрыть график" : "Показать график"}</button>}
+      {actions.controls}
+      {actions.dialog}
       {chart && showChart && <div className="acc-box"><ReactECharts option={chart} style={{ height: 300 }} notMerge /></div>}
       {per.length > 0 && <div className="rnp-wrap">
-        <table className={"rnp-t entry-t" + (pinPoints ? " entry-pin" : "")}>
-          <thead><tr><th rowSpan={2}>Раздел</th><th className="entry-point-cell" rowSpan={2}>Точка входа</th>
-            {per.map((p, i) => <th key={p.id} colSpan={metrics.length * (i + 1 < per.length && !hideChg ? 2 : 1)} className="rnp-month">
+        <table className={"rnp-t entry-t entry-detail-table" + (pinPoints ? " entry-pin" : "")}>
+          <thead>{actions.enabled && <tr className="entry-actions-row"><th /><th className="entry-point-cell">Действия по артикулу</th>
+            {per.map((p, i) => <th key={p.id} className="entry-period-start" colSpan={metrics.length * (i + 1 < per.length && !hideChg ? 2 : 1)}>
+              {actions.cell(p.d_from)}</th>)}</tr>}
+            <tr><th rowSpan={2}>Раздел</th><th className="entry-point-cell" rowSpan={2}>Точка входа</th>
+            {per.map((p, i) => <th key={p.id} colSpan={metrics.length * (i + 1 < per.length && !hideChg ? 2 : 1)} className="rnp-month entry-period-start">
               {dd(p.d_from)}–{dd(p.d_to)} <span className="hint">{days(p)} дн.</span></th>)}</tr>
-            <tr>{per.map((p, i) => <Fragment key={p.id}>{metrics.map((k) => <Fragment key={k}><th>{titleOf(k)}</th>
+            <tr>{per.map((p, i) => <Fragment key={p.id}>{metrics.map((k, mi) => <Fragment key={k}><th className={mi === 0 ? "entry-period-start" : ""}>{titleOf(k)}</th>
               {i + 1 < per.length && !hideChg && <th className="hint">изм.</th>}</Fragment>)}</Fragment>)}</tr></thead>
           <tbody>
             {d?.total && <tr className="rnp-first"><td /><td className="entry-point-cell"><b>Итого {nm ? "по артикулу" : "по магазину"}</b></td>
               {cells({ ...Object.fromEntries(per.filter((p) => d.total![p.id]).map((p) => [p.id, { ...d.total![p.id], share: 1 }])) }, true)}</tr>}
-            {d?.ads && ([...(split.ad ? [["total", "↳ из них реклама (вся)"], ["search", "   ↳ реклама в поиске"], ["rest", "   ↳ реклама вне поиска (полки, каталог, главная)"]] : []),
-              ...(split.org ? [["organic", "↳ органика"]] : [])] as ["total" | "search" | "rest" | "organic", string][]).map(([k, t]) =>
-              <tr key={"ads" + k} className="hint"><td /><td className="entry-point-cell">{t}</td>
-                {cells(Object.fromEntries(per.filter((p) => d.ads![p.id]).map((p) => [p.id, { ...d.ads![p.id][k], share: d.total![p.id]?.clicks ? d.ads![p.id][k].clicks / d.total![p.id].clicks : null }])), false)}</tr>)}
+            {d?.ads && ([...(split.ad ? [
+              ["total", "↳ из них реклама (вся)"],
+              ["search", "↳ реклама в поиске"], ["search_cpm", "↳ CPM · поиск"], ["search_cpc", "↳ CPC · поиск"],
+              ...(Object.values(d.ads).some(a => a.unknown_payment) ? [["search_unknown", "↳ Тип не определён · поиск"]] : []),
+              ["rest", "↳ реклама вне поиска (оценка)"], ["rest_cpm", "↳ CPM · вне поиска"], ["rest_cpc", "↳ CPC · вне поиска"],
+              ...(Object.values(d.ads).some(a => a.unknown_payment) ? [["rest_unknown", "↳ Тип не определён · вне поиска"]] : [])
+            ] : []), ...(split.org ? [["organic", "↳ органика (расч.)"]] : [])] as [AdKey, string][]).map(([k, t]) =>
+              <tr key={"ads" + k} className="hint" data-ad-row={k}><td /><td className="entry-point-cell" style={{paddingLeft: k.includes("_") ? 28 : 8}}>{t}</td>
+                {cells(Object.fromEntries(per.map(p => [p.id, { ...d.ads![p.id]?.[k], share: null } as M])), false)}</tr>)}
             {(d?.points || []).map((r) => (
               <tr key={r.section + r.point}>
                 <td className="hint">{r.section}</td><td className="entry-point-cell">{r.point}</td>

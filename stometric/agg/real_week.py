@@ -24,7 +24,7 @@ COLS = [
     ("rebill_log", "Прочие расходы/компенсации логистики", "money"),
     ("vat", "НДС к начислению с продаж", "money"), ("vat_deduct", "НДС к вычету с себестоимости", "money"),
 ]
-OPER_RENAME = {"Штраф": "Штрафы"}   
+OPER_RENAME = {"Штраф": "Штрафы"}                  
 
 
 def _bonus(b: str) -> str:
@@ -33,7 +33,7 @@ def _bonus(b: str) -> str:
     if "«Джем»" in b:
         return "Джем"
     b = re.sub(r", поставка \d+$", "", b)
-    return re.sub(r"\s*за [а-яё]+ \d{4}, документ №\d+$", "", b)   
+    return re.sub(r"\s*за [а-яё]+ \d{4}, документ №\d+$", "", b)                                                 
 SUMS = ["qty", "retail_disc", "retail_amount", "for_pay", "acquiring", "deliveries", "log_sales", "returns", "log_returns",
         "penalty", "additional", "storage", "deduction", "acceptance", "rebill_log"]
 
@@ -66,7 +66,7 @@ def compute(c, shop: int, date_from=None, date_to=None) -> list[dict]:
     tax = c.execute("SELECT * FROM tax_settings WHERE account_id=%(a)s ORDER BY valid_from DESC LIMIT 1", P).fetchone()
     vat_rate = float(tax["vat_rate"]) if tax else 0.0
     groups: dict = {}
-    cur = c.cursor(name=f"real_week_{shop}")       
+    cur = c.cursor(name=f"real_week_{shop}")                                                                                            
     cur.itersize = 20000
     cur.execute("""
         SELECT data FROM raw_rows WHERE account_id=%(a)s AND source='realization'
@@ -74,7 +74,7 @@ def compute(c, shop: int, date_from=None, date_to=None) -> list[dict]:
     for row in cur:
         d = row["data"]
         nm = d.get("nmId") or None
-        
+                                                                                                                  
         wf = _monday(d.get("dateFrom"))
         key = (nm, d.get("sku") or "", d.get("techSize") or "", wf, _sunday(wf), d.get("reportType"),
                d.get("currency"), d.get("docTypeName") or "", OPER_RENAME.get(d.get("sellerOperName") or "", d.get("sellerOperName") or ""),
@@ -87,7 +87,7 @@ def compute(c, shop: int, date_from=None, date_to=None) -> list[dict]:
                                **{s: 0.0 for s in SUMS}}
         q = _n(d.get("quantity"))
         doc = (d.get("docTypeName") or "").lower()
-        if doc in ("продажа", "возврат"):      
+        if doc in ("продажа", "возврат"):                                                                                 
             g["qty"] += q
         g["retail_disc"] += _n(d.get("retailPriceWithDisc")) * q
         g["retail_amount"] += _n(d.get("retailAmount"))
@@ -95,10 +95,10 @@ def compute(c, shop: int, date_from=None, date_to=None) -> list[dict]:
         g["acquiring"] += _n(d.get("acquiringFee"))
         dl, rt, ds = _n(d.get("deliveryAmount")), _n(d.get("returnAmount")), _n(d.get("deliveryService"))
         bt = (d.get("bonusTypeName") or "").lower()
-        
+                                                                                                                                          
         if ("к продавцу" in bt or "неопознанного товара" in bt or "сопровождения экспортных" in bt
                 or (d.get("sellerOperName") or "").lower() in ("коррекция стоимости доставки", "коррекция логистики")):
-            g["rebill_log"] += ds          
+            g["rebill_log"] += ds                                                                                        
         else:
             g["deliveries"] += dl
             g["returns"] += rt
@@ -109,7 +109,7 @@ def compute(c, shop: int, date_from=None, date_to=None) -> list[dict]:
         g["penalty"] += _n(d.get("penalty"))
         g["additional"] += _n(d.get("additionalPayment"))
         g["storage"] += _n(d.get("paidStorage"))
-        
+                                                                                                                    
         g["deduction"] += (_n(d.get("deduction")) + _n(d.get("cashbackAmount")) + _n(d.get("cashbackCommissionChange"))
                            - _n(d.get("cashbackDiscount")))
         g["acceptance"] += _n(d.get("paidAcceptance"))

@@ -17,7 +17,7 @@ def compute(c, shop: int) -> list[dict]:
     tx = rnp._tax(c, shop, today_msk())
     lo = (today_msk() - timedelta(days=28)).isoformat()
     fin: dict = {}
-    for g in real_week.cached(c, shop, lo):      
+    for g in real_week.cached(c, shop, lo):                                                   
         if not g["nm_id"] or not g["date_from"] or g["date_from"] < lo:
             continue
         a = fin.setdefault(g["nm_id"], {"log": 0.0, "stor": 0.0, "acc": 0.0, "acq": 0.0, "sold": 0.0})
@@ -28,8 +28,8 @@ def compute(c, shop: int) -> list[dict]:
             a["sold"] += g["qty"]; a["acq"] += g["acquiring"]
         if doc == "возврат" and op == "возврат":
             a["sold"] -= g["qty"]; a["acq"] -= g["acquiring"]
-    
-    
+                                                                                                                              
+                                                                       
     for r in c.execute("""SELECT nm_id, sum(coalesce((data->>'storage')::numeric, 0)) st, sum(coalesce((data->>'acceptance_sum')::numeric, 0)) ac
                           FROM agg_nm_day WHERE account_id=%s AND day >= %s GROUP BY 1""", (shop, lo)):
         a = fin.get(r["nm_id"])
@@ -57,7 +57,7 @@ def compute(c, shop: int) -> list[dict]:
         comm = (_f(u.get("kgvp")) or 0.0) / 100
         fa = fin.get(nm) or {}
         sold = fa.get("sold") or 0
-        log_u = fa["log"] / sold if sold > 0 else (_f(u.get("logistics")) / b if u.get("logistics") else None)   
+        log_u = fa["log"] / sold if sold > 0 else (_f(u.get("logistics")) / b if u.get("logistics") else None)                                             
         stor_u = fa["stor"] / sold if sold > 0 else None
         acc_u = fa["acc"] / sold if sold > 0 else None
         acq_u = fa["acq"] / sold if sold > 0 else None

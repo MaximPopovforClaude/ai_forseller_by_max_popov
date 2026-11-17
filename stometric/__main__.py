@@ -14,7 +14,7 @@ from . import db
 from .collectors import Ctx, registry, run_one
 from .wb import WB
 
-MAX_PARALLEL = 2   
+MAX_PARALLEL = 2                                                                               
 
 FIRST_LOAD = ["nomenclature", "tariffs", "prices", "stocks_wb", "stocks_seller", "stocks_wh", "stocks_report", "adverts", "orders", "sales",
               "funnel", "realization_daily", "ad_upd", "ad_stats", "realization", "paid_storage", "acceptance", "funnel_days"]
@@ -55,29 +55,29 @@ def main(argv):
                 res.pop("trace", None) if res.get("ok") else None
                 print(json.dumps(res, ensure_ascii=False, default=str))
     elif cmd == "collect-due":
-        
-        
+                                                                                                                                   
+                                                                                  
         import os
         import subprocess
         root = str(Path(__file__).resolve().parents[1])
         env = {**os.environ, "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"}
         with db.connect() as c:
-            
-            
+                                                                                                                           
+                                                                            
             shops = c.execute("""SELECT a.id, a.name FROM accounts a WHERE a.is_active
                                  ORDER BY (SELECT max(last_run_at) FROM collector_state s WHERE s.account_id=a.id AND s.collector NOT LIKE '\\_%%')
                                           NULLS FIRST, a.id""").fetchall()
-        active = lambda u: subprocess.run(["systemctl", "--user", "is-active", "-q", u], env=env).returncode == 0  
+        active = lambda u: subprocess.run(["systemctl", "--user", "is-active", "-q", u], env=env).returncode == 0              
         running = sum(active(f"ai-stometric-collect-{a['id']}") for a in shops)
         for acc in shops:
             unit = f"ai-stometric-collect-{acc['id']}"
             if active(unit):
                 print(acc["name"], "— сбор ещё идёт, пропускаю", flush=True)
                 continue
-            if active(f"ai-stometric-rebuild-{acc['id']}"):     
+            if active(f"ai-stometric-rebuild-{acc['id']}"):                                                              
                 print(acc["name"], "— идёт пересчёт, сбор в следующий круг", flush=True)
                 continue
-            if running >= MAX_PARALLEL:                         
+            if running >= MAX_PARALLEL:                                                                                         
                 print(acc["name"], "— уже идут", running, "сбора, в следующий круг", flush=True)
                 continue
             running += 1
@@ -85,12 +85,12 @@ def main(argv):
                                 "-p", "MemoryMax=1500M", "-p", "RuntimeMaxSec=3h", f"--working-directory={root}",
                                 sys.executable, "-m", "stometric", "collect-shop", acc["name"]], env=env, capture_output=True, text=True)
             print(acc["name"], "→", (r.stdout or r.stderr).strip()[:200], flush=True)
-            if r.returncode != 0:          
+            if r.returncode != 0:                                                     
                 _collect_shop(acc["name"])
     elif cmd == "collect-shop":
         _collect_shop(args[0])
     elif cmd == "first-load":
-        
+                                                                                                     
         with db.connect() as c:
             acc = db.account(c, args[0])
             if acc["marketplace"] == "ym":
@@ -100,7 +100,7 @@ def main(argv):
                 return
             if acc["marketplace"] == "ozon":
                 from . import collectors_ozon as oc
-                names = oc.FIRST_LOAD + (list(oc.AD_COLLECTORS) if oc.has_ad_key(c, acc["id"]) else [])   
+                names = oc.FIRST_LOAD + (list(oc.AD_COLLECTORS) if oc.has_ad_key(c, acc["id"]) else [])                                                        
                 for n in names:
                     print(json.dumps(oc.run_one(c, acc, n), ensure_ascii=False, default=str), flush=True)
                 return
@@ -113,11 +113,11 @@ def main(argv):
             from . import loadplan
             from .config import today_msk
             from .materialize import build_nm_day, build_real_week
-            if loadplan.shallow(c, acc["id"]):     
+            if loadplan.shallow(c, acc["id"]):                                                                     
                 print("nm_day 60д:", build_nm_day(c, acc["id"], today_msk() - timedelta(days=loadplan.SHALLOW_DAYS)), flush=True)
             else:
                 print("nm_day:", build_nm_day(c, acc["id"]), "real_week:", build_real_week(c, acc["id"]), flush=True)
-    elif cmd == "precompute":          
+    elif cmd == "precompute":                                                                                                        
         import time
         from . import tabcache
         with db.connect() as c:
@@ -127,8 +127,8 @@ def main(argv):
                 print(f"{acc['name']} (id {acc['id']}):", flush=True)
                 tabcache.precompute(c, acc["id"], log=lambda s: print(s, flush=True))
                 print(f"  итого {time.time() - t0:.0f} с", flush=True)
-    elif cmd == "offsite-backup":      
-        from . import offsite   
+    elif cmd == "offsite-backup":                                                                         
+        from . import offsite                                                                                                       
         f = args[0] if args else "latest"
         if f == "latest":
             fs = sorted(Path("data/backups").glob("ai_stometric_*.dump"))
@@ -138,8 +138,8 @@ def main(argv):
                 print("offsite: хранилище не настроено — пропуск")
             else:
                 print("offsite:", offsite.run(c, Path(f)), flush=True)
-    elif cmd == "service-news-add":    
-        from . import web  
+    elif cmd == "service-news-add":                                                                                 
+        from . import web                                                         
         from .api_service_news import add
         with db.connect() as c:
             print("новость", add(c, args[0], sys.stdin.read(), [x for x in (args[1] if len(args) > 1 else "").split(",") if x]))
@@ -148,7 +148,7 @@ def main(argv):
         from .materialize import build_nm_day, build_real_week
         with db.connect() as c:
             acc = db.account(c, args[0])
-            while True:            
+            while True:                                                                               
                 c.execute("UPDATE collector_state SET cursor='{}' WHERE account_id=%s AND collector='_rebuild'", (acc["id"],))
                 c.commit()
                 print("nm_day:", build_nm_day(c, acc["id"]), "real_week:", build_real_week(c, acc["id"]), flush=True)
@@ -156,7 +156,7 @@ def main(argv):
                 if not (r and (r["cursor"] or {}).get("again")):
                     break
     elif cmd == "user-add":
-        
+                                                                                                                     
         email, *opts = args
         kv = dict(o.split("=", 1) for o in opts if "=" in o)
         pw = sys.stdin.readline().strip() if not sys.stdin.isatty() else __import__("getpass").getpass("Пароль: ")
@@ -217,7 +217,7 @@ def _collect_shop(name: str) -> None:
         from .materialize import after_collect
         try:
             print(acc["name"], "агрегаты:", after_collect(c, acc["id"], ran), flush=True)
-        except Exception as e:  
+        except Exception as e:                
             c.rollback()
             print(acc["name"], "агрегаты: ошибка", type(e).__name__, str(e)[:300], flush=True)
 

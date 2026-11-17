@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 export type ActionChartData = { days: string[]; rows: Record<string, Record<string, (number | null)[]>>; price_label: string; note: string; error?: string };
 const fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
@@ -6,7 +6,7 @@ const metrics = [["orders", "Заказы, шт.", "#2f3fd8"], ["buyouts", "Вы
   ["price_spp", "Цена с СПП, ₽", "#7c3aed"], ["ads", "Рекламный бюджет, ₽", "#dc2626"], ["profit", "Прибыль расчётная, ₽", "#16a34a"]];
 
 /** SVG charts are mounted only near the viewport, so a large shop stays usable. */
-export function ActionSparks({ data, nm }: { data: ActionChartData | undefined; nm: number }) {
+export const ActionSparks = memo(function ActionSparks({ data, nm }: { data: ActionChartData | undefined; nm: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(typeof IntersectionObserver === "undefined");
   useEffect(() => {
@@ -36,4 +36,4 @@ export function ActionSparks({ data, nm }: { data: ActionChartData | undefined; 
       </div>;
     })}
   </div>;
-}
+});

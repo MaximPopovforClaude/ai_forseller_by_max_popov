@@ -16,8 +16,8 @@ from pathlib import Path
 
 from . import actions, config
 
-AI_PRICE_DROP_MAX = 0.15     
-USER_PRICE_DROP_WARN = 0.20  
+AI_PRICE_DROP_MAX = 0.15                                                                                                       
+USER_PRICE_DROP_WARN = 0.20                                                                     
 TITLE_MAX = 60
 DESC_MAX = 5000
 FIELDS = ("title", "description", "characteristics", "dimensions", "media", "price", "discount")
@@ -26,7 +26,7 @@ from .config import site_url
 SITE = site_url()
 
 
-
+                    
 def _wb(c, shop: int):
     from .wb import WB
     return WB(c, c.execute("SELECT * FROM accounts WHERE id=%s", (shop,)).fetchone())
@@ -78,7 +78,7 @@ def view(card: dict) -> dict:
             "updated_at": card.get("updatedAt")}
 
 
-
+                 
 def draft_get(c, shop: int, nm: int) -> dict | None:
     return c.execute("SELECT * FROM card_drafts WHERE account_id=%s AND nm_id=%s AND status='draft' ORDER BY id DESC LIMIT 1",
                      (shop, nm)).fetchone()
@@ -141,7 +141,7 @@ def draft_set(c, shop: int, nm: int, field: str, value, uid: int, source: str = 
         ch.pop(field, None)
     else:
         v = _norm(field, value)
-        if field == "characteristics":          
+        if field == "characteristics":                                                     
             v = {k: x for k, x in v.items() if x != base["characteristics"].get(k)}
             if not v:
                 ch.pop(field, None)
@@ -158,7 +158,7 @@ def draft_set(c, shop: int, nm: int, field: str, value, uid: int, source: str = 
     else:
         src.pop(field, None)
         notes.pop(field, None)
-    
+                                                                                                                       
     return c.execute("""UPDATE card_drafts SET changes=%s, sources=%s, ai_notes=%s, updated_at=now(),
                           review_state=CASE WHEN review_state='pending' THEN NULL ELSE review_state END WHERE id=%s RETURNING *""",
                      (json.dumps(ch, ensure_ascii=False), json.dumps(src), json.dumps(notes, ensure_ascii=False), d["id"])).fetchone()
@@ -194,7 +194,7 @@ def diff(d: dict) -> list[dict]:
     return out
 
 
-
+                       
 def save_upload(c, shop: int, nm: int, name: str, raw: bytes, uid: int) -> dict:
     ext = Path(name or "").suffix.lower()
     mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}.get(ext)
@@ -204,7 +204,7 @@ def save_upload(c, shop: int, nm: int, name: str, raw: bytes, uid: int) -> dict:
         raise actions.ActionDenied("Фото — до 32 МБ")
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     tok = secrets.token_urlsafe(24)
-    
+                                                                              
     path = MEDIA_DIR.resolve() / f"{tok}{ext}"
     path.write_bytes(raw)
     c.execute("INSERT INTO card_media_uploads(token,account_id,nm_id,path,mime,created_by) VALUES (%s,%s,%s,%s,%s,%s)",
@@ -213,7 +213,7 @@ def save_upload(c, shop: int, nm: int, name: str, raw: bytes, uid: int) -> dict:
     return {"kind": "photo", "url": url, "thumb": f"/api/public/card_media/{tok}{ext}"}
 
 
-
+                       
 def _full_card(live: dict, ch: dict) -> dict:
     """Карточка для /content/v2/cards/update целиком: актуальная из WB + изменения черновика."""
     chars = {str(x["id"]): x.get("value") for x in live.get("characteristics") or []}
@@ -226,7 +226,7 @@ def _full_card(live: dict, ch: dict) -> dict:
     dims.update(ch.get("dimensions") or {})
     return {"nmID": live["nmID"], "vendorCode": live.get("vendorCode"), "brand": live.get("brand") or "",
             "title": ch.get("title", live.get("title") or ""), "description": ch.get("description", live.get("description") or ""),
-            
+                                                                                                                            
             "dimensions": {k: (round(float(v), 3) if k == "weightBrutto" else max(1, int(round(float(v))))) for k, v in dims.items() if v is not None},
             "characteristics": [{"id": int(k), "value": v} for k, v in chars.items()],
             "sizes": [{k: s.get(k) for k in ("chrtID", "techSize", "wbSize", "skus") if k in s} for s in live.get("sizes") or []]}
@@ -243,7 +243,7 @@ def _day_max_final(c, shop: int, nm: int) -> float | None:
                      WHERE account_id=%s AND nm_id=%s AND snap_at > now() - interval '24 hours'""", (shop, nm)).fetchone()
     out = [float(r["f"])] if r and r["f"] is not None else []
     for d in c.execute("""SELECT base FROM card_drafts WHERE account_id=%s AND nm_id=%s AND status IN ('applied','partial')
-                          AND applied_at > now() - interval '24 hours'""", (shop, nm)).fetchall():   
+                          AND applied_at > now() - interval '24 hours'""", (shop, nm)).fetchall():                                        
         p = d["base"].get("_price") or {}
         f = final_price(p.get("price"), p.get("discount"))
         if f:
@@ -266,7 +266,7 @@ def price_check(d: dict, c=None, *, by_ai: bool = False) -> dict | None:
     ai = by_ai or "ai" in (d["sources"].get("price"), d["sources"].get("discount"))
     drop = 1 - f1 / f0
     lim = AI_PRICE_DROP_MAX if ai else USER_PRICE_DROP_WARN
-    
+                                                                                    
     needs_ack = Decimal(str(f1)) < Decimal(str(f0)) * (1 - Decimal(str(lim)))
     return {"before": f0, "after": f1, "drop": round(drop, 4), "ai": ai, "limit": lim, "needs_ack": needs_ack}
 
@@ -281,7 +281,7 @@ def apply(c, shop: int, nm: int, uid: int, force: bool = False, price_ack: float
     if why:
         raise actions.ActionDenied(why)
     pc = price_check(d, c, by_ai=by_ai)
-    if pc and pc["needs_ack"] and (price_ack is None or abs(float(price_ack) - pc["after"]) > 1):   
+    if pc and pc["needs_ack"] and (price_ack is None or abs(float(price_ack) - pc["after"]) > 1):                                                
         raise actions.ActionDenied(f"PRICE_DROP:Итоговая цена снижается на {pc['drop'] * 100:.0f} % за сутки: {pc['before']:.0f} → {pc['after']:.0f} ₽"
                                    + (" (предложение нейросети: без подтверждения нейросеть не может снижать итоговую цену больше чем на 15 % в сутки)" if pc["ai"] else ""))
     live = live_card(c, shop, nm)
@@ -318,7 +318,7 @@ def apply(c, shop: int, nm: int, uid: int, force: bool = False, price_ack: float
     c.execute("""UPDATE card_drafts SET status=%s, result=%s, error=%s, applied_by=%s, applied_at=now(), updated_at=now() WHERE id=%s""",
               (status, json.dumps(res), "\n".join(errs) or None, uid, d["id"]))
     c.commit()
-    if res.get("card"):                       
+    if res.get("card"):                                                                                         
         time.sleep(4)
         e2 = card_errors(c, shop, live.get("vendorCode"), nm)
         if e2:
@@ -332,7 +332,7 @@ def card_errors(c, shop: int, vendor_code: str | None, nm: int) -> list[str]:
     """Ошибки WB по карточке после /cards/update (несозданные/неотредактированные карточки)."""
     try:
         data = _wb(c, shop).call("content", "/content/v2/cards/error/list", "POST", body={"cursor": {"limit": 100}, "order": {"ascending": False}}) or {}
-    except Exception:  
+    except Exception:                                                         
         c.rollback()
         return []
     out = []

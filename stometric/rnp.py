@@ -23,11 +23,11 @@ def _tax(c, shop, d):
 
 def profit(S: dict, bp: float, tx: dict) -> float:
     """Строка 35 «5#Дашборда» (прибыль по заказам с учётом % выкупа за минусом налога) для сумм S и доли выкупа bp."""
-    g = lambda k: float(S.get(k) or 0)  
+    g = lambda k: float(S.get(k) or 0)              
     r15, r17 = g("orders_sum") * bp, g("orders_sum_spp") * bp
     r20, r21, r22 = -g("commission_offer_orders") * bp, -g("logistics_orders"), g("cost_orders") * bp
-    
-    
+                                                                           
+                                                               
     r18 = r15 + r20 + r21 - r22 - g("acquiring_orders") * bp
     r23, r27 = -g("ads_upd"), -(g("storage") + g("acceptance_sum"))
     r33 = -g("vat_orders") * bp
@@ -57,7 +57,7 @@ def _vals(S: dict, bp: float, tx: dict, P: float | None = None) -> dict:
             "buyouts": int(S.get("buyouts") or 0), "ads": round(ads), "drr": ads / os_ if os_ else None, "profit": round(p),
             "margin": p / base if base else None, "margin_pre": (p + ads) / base if base else None,
             "krrr": p / (p + ads) if (p + ads) > 0 else None,
-            
+                                                                                                                    
             "bonus": round(bn := float(S.get("ads_bonus") or 0)), "drr_bonus": bn / os_ if os_ else None,
             "ads_all": round(ads + bn), "drr_all": (ads + bn) / os_ if os_ else None}
 
@@ -76,7 +76,7 @@ def buyout_pct(c, shop) -> tuple[dict, float]:
         return buyout.by_orders(c, shop)
     per = defaultdict(list)
     if c.execute("SELECT 1 FROM agg_state WHERE account_id=%s AND name='real_week'", (shop,)).fetchone():
-        
+                                                                                                                          
         for g in c.execute("""SELECT (data->>'nm_id')::bigint nm_id, data->>'date_from' date_from, data->>'date_to' date_to,
                                      sum(coalesce((data->>'deliveries')::numeric, 0)) deliveries, sum(coalesce((data->>'returns')::numeric, 0)) returns
                               FROM agg_real_week WHERE account_id=%s AND coalesce((data->>'nm_id')::bigint, 0) <> 0
@@ -172,13 +172,13 @@ def compute(c, shop: int, month: date, flt: dict, sort: str = "orders_sum", offs
     cur = m0 <= today <= m1
     if m0 > today:
         return {"error": "Месяц ещё не начался"}
-    end = min(m1, today)                       
-    wend = min(m1, today - timedelta(days=1)) if cur and today.day > 1 else end   
-    lo = min(m0, end - timedelta(days=29), wend - timedelta(days=20))
+    end = min(m1, today)                                                                      
+    wend = min(m1, today - timedelta(days=1)) if cur and today.day > 1 else end                                                                       
+    lo = min(m0, end - timedelta(days=29), calendar_weeks(end)[0][0])
     tx = _tax(c, shop, end)
     mp = c.execute("SELECT marketplace FROM accounts WHERE id=%s", (shop,)).fetchone()["marketplace"]
     src = None
-    if mp != "wb":                             
+    if mp != "wb":                                                                                        
         from . import rnp_mp
         src = rnp_mp.source(c, shop, mp, lo, end)
         nom = src["nom"]
@@ -186,7 +186,7 @@ def compute(c, shop: int, month: date, flt: dict, sort: str = "orders_sum", offs
         nom = {r["nm_id"]: r for r in c.execute(
             """SELECT nm_id, vendor_code, title, brand, subject, imt_id, data->'photos'->0->>'tm' photo FROM nomenclature WHERE account_id=%s""",
             (shop,))}
-    
+             
     allow = None
     if flt.get("group"):
         allow = set(src["groups"](flt["group"]) if src else group_nms(c, shop, flt["group"])) or {-1}
@@ -195,13 +195,13 @@ def compute(c, shop: int, month: date, flt: dict, sort: str = "orders_sum", offs
     brand, subject = flt.get("brand"), flt.get("subject")
 
     from .exclusions import excluded
-    ex = excluded(c, shop)                     
+    ex = excluded(c, shop)                                                                                  
 
     def ok(nm):
         n = nom.get(nm) or {}
         return nm not in ex and (allow is None or nm in allow) and (not brand or n.get("brand") == brand) and (not subject or n.get("subject") == subject)
 
-    day = defaultdict(dict)                    
+    day = defaultdict(dict)                                      
     if src:
         for nm, dd in src["day"].items():
             if ok(nm):
@@ -225,19 +225,19 @@ def _wb_source(c, shop, lo, end, m0, ok, day):
     for r in c.execute(f"SELECT nm_id, day, {sel} FROM agg_nm_day WHERE account_id=%s AND day BETWEEN %s AND %s", (shop, lo, end)):
         if ok(r["nm_id"]):
             day[r["nm_id"]][r["day"]] = r
-    if st and st["covered_to"] and end > st["covered_to"]:     
+    if st and st["covered_to"] and end > st["covered_to"]:                                                                     
         from .agg import nm_day
         for r in nm_day.compute(c, shop, st["covered_to"] + timedelta(days=1), end):
             if ok(r["nm_id"]):
                 day[r["nm_id"]][r["day"]] = {k: r.get(k) for k in F}
     bp, bp0 = buyout_pct(c, shop)
     pl = plan(c, shop, m0, bp, bp0)
-    
+                    
     stock = {r["nm_id"]: r for r in c.execute(
         """WITH last AS (SELECT max(snap_at) t FROM stocks_wb_snap WHERE account_id=%s)
            SELECT nm_id, sum(quantity) q, sum(in_way_to_client) wt, sum(in_way_from_client) wf
            FROM stocks_wb_snap s JOIN last ON s.snap_at=last.t WHERE account_id=%s GROUP BY 1""", (shop, shop))}
-    fbs = {r["nm_id"]: float(r["q"] or 0) for r in c.execute(      
+    fbs = {r["nm_id"]: float(r["q"] or 0) for r in c.execute(                                                                      
         """WITH last AS (SELECT max(snap_at) t FROM stocks_seller_snap WHERE account_id=%s)
            SELECT nm_id, sum(quantity) q FROM stocks_seller_snap s JOIN last ON s.snap_at=last.t WHERE account_id=%s GROUP BY 1""", (shop, shop))}
     price = {r["nm_id"]: r for r in c.execute(
@@ -246,11 +246,16 @@ def _wb_source(c, shop, lo, end, m0, ok, day):
     return stock, fbs, price, bp, bp0, pl
 
 
+def calendar_weeks(end: date):
+    monday = end - timedelta(days=end.weekday())
+    return [(monday - timedelta(days=14), monday - timedelta(days=8)),
+            (monday - timedelta(days=7), monday - timedelta(days=1)), (monday, end)]
+
+
 def _finish(c, shop, mp, m0, m1, cur, end, wend, tx, nom, day, bp, bp0, pl, stock, fbs, price, nms, sort, offset, with_buyout):
     days = [m0 + timedelta(days=i) for i in range((end - m0).days + 1)]
     spark_days = [end - timedelta(days=29 - i) for i in range(30)]
-    weeks = [(wend - timedelta(days=20), wend - timedelta(days=14)), (wend - timedelta(days=13), wend - timedelta(days=7)),
-             (wend - timedelta(days=6), wend)]
+    weeks = calendar_weeks(end)
     dim = (m1 - m0).days + 1
     elapsed = (wend - m0).days + 1 if cur else dim
     blocks, TOT = [], {"S": {}, "P": 0.0, "days": defaultdict(lambda: [{}, 0.0]), "weeks": [[{}, 0.0] for _ in weeks],
@@ -293,7 +298,7 @@ def _finish(c, shop, mp, m0, m1, cur, end, wend, tx, nom, day, bp, bp0, pl, stoc
             wk.append(_vals(S, b, tx, P))
             _add(TOT["weeks"][i][0], S); TOT["weeks"][i][0]["_r15"] = TOT["weeks"][i][0].get("_r15", 0.0) + float(S.get("orders_sum") or 0) * b
             TOT["weeks"][i][1] += P
-        
+                                                                                        
         lw = [(float(r.get("local_share") or 0), float(r.get("orders") or 0)) for d, r in day[nm].items() if d > end - timedelta(days=14)]
         lo_o = sum(o for _, o in lw)
         loc = sum(s * o for s, o in lw) / lo_o if lo_o else None
@@ -324,7 +329,7 @@ def _finish(c, shop, mp, m0, m1, cur, end, wend, tx, nom, day, bp, bp0, pl, stoc
         if pv:
             for kk in ("orders_sum", "orders", "buyouts_sum", "buyouts", "ads", "profit"):
                 TOT["plan"][kk] = TOT["plan"].get(kk, 0.0) + pl[nm][kk]
-    
+          
     tdays = {d: _vals(S, 1.0, tx, P) for d, (S, P) in TOT["days"].items()}
     tp = TOT["plan"]
     tplan = _plan_vals(tp) if tp else None
@@ -333,7 +338,7 @@ def _finish(c, shop, mp, m0, m1, cur, end, wend, tx, nom, day, bp, bp0, pl, stoc
     tsp = {"orders_sum": [], "buyouts_sum": [], "drr": [], "profit": [], "loc": []}
     for d in spark_days:
         S, P = TOT["days"].get(d.isoformat(), ({}, 0.0)) if d >= m0 else ({}, 0.0)
-        if d < m0:          
+        if d < m0:                                                                  
             S, P = {}, 0.0
             for blk_nm in day:
                 r = day[blk_nm].get(d)

@@ -14,9 +14,9 @@ DISCLAIMER = ("С этим ключом сервис сможет вносить
               "обязательно проверяйте и контролируйте их. Все действия сервиса записываются в журнал. Остановить всё можно кнопкой "
               "«Стоп» или удалением ключа; ключ также можно отозвать в личном кабинете маркетплейса.")
 
-MODES = ("off", "manual", "draft", "auto")         
+MODES = ("off", "manual", "draft", "auto")                                                                      
 AI_MODES = ("draft", "auto")
-MODE_KEYS = ("pos_mode", "neg_mode", "mode")       
+MODE_KEYS = ("pos_mode", "neg_mode", "mode")                                                           
 
 BLOCKS = {
     "reviews": {
@@ -49,15 +49,15 @@ BLOCKS = {
         "about": "Управление рекламой WB ради прибыли: утром и днём сервис предлагает действия (пауза, запуск, ставки, артикулы в кампании, "
                  "ставки на ключи, минус-фразы, места размещения, пополнение бюджета, новые кампании) с цифрами и причиной; в WB уходит только "
                  "по кнопке «Применить», деньги и новые кампании — с двойным подтверждением. Раздел «📢 Реклама».",
-        
+                                                                                                                           
         "writes": {("GET", "advert", "/adv/v0/start"), ("GET", "advert", "/adv/v0/pause"), ("PATCH", "advert", "/adv/v0/auction/nms"),
                    ("PATCH", "advert", "/api/advert/v1/bids"), ("PUT", "advert", "/adv/v0/auction/placements"),
                    ("POST", "advert", "/adv/v0/normquery/set-minus"), ("POST", "advert", "/adv/v0/normquery/bids"),
                    ("POST", "advert", "/adv/v2/seacat/save-ad"), ("POST", "advert", "/adv/v1/budget/deposit")},
         "defaults": {"loss_min_spend": 300, "stock_days_min": 3, "kw_min_clicks": 15, "max_step": 30, "deposit_max": 5000, "create": True,
                      "notify": True,
-                     
-                     
+                                                                                                                                        
+                                                                                                                                        
                      "window_days": 7, "loss_weeks": 2, "cooldown_h": 72, "up_stock_days": 21, "season_loss_pct": 20, "season_organic_pct": 20,
                      "managers": "", "seasons": ""},
     },
@@ -69,7 +69,7 @@ class ActionDenied(RuntimeError):
     pass
 
 
-
+                 
 def block(c, shop: int, key: str) -> dict:
     """{enabled, settings} блока; настройки — поверх значений по умолчанию."""
     r = c.execute("SELECT enabled, settings FROM action_blocks WHERE account_id=%s AND block=%s", (shop, key)).fetchone()
@@ -85,9 +85,9 @@ def save_block(c, shop: int, key: str, enabled: bool, settings: dict, uid: int) 
     for k, lo, hi in (("loss_min_spend", 0, 100000), ("stock_days_min", 0, 60), ("kw_min_clicks", 5, 1000), ("max_step", 5, 50),
                       ("deposit_max", 1000, 1000000), ("reco_every", 1, 20), ("window_days", 3, 14), ("loss_weeks", 1, 6),
                       ("cooldown_h", 0, 168), ("up_stock_days", 0, 120), ("season_loss_pct", 0, 100), ("season_organic_pct", 0, 200)):
-        if k in clean:                      
+        if k in clean:                                              
             clean[k] = max(lo, min(hi, float(clean[k] or 0)))
-    for k in ("managers", "seasons"):           
+    for k in ("managers", "seasons"):                                                                              
         if k in clean:
             clean[k] = str(clean[k] or "")[:2000]
     if "reco_reg" in clean and clean["reco_reg"] not in ("", "heat"):
@@ -96,10 +96,10 @@ def save_block(c, shop: int, key: str, enabled: bool, settings: dict, uid: int) 
         clean["auto_limit"] = max(0, min(500, int(clean["auto_limit"] or 0)))
     old = block(c, shop, key)
     if enabled and not old["enabled"]:
-        clean["enabled_at"] = datetime.now(timezone.utc).isoformat()    
+        clean["enabled_at"] = datetime.now(timezone.utc).isoformat()                                                    
     else:
         clean["enabled_at"] = old["settings"].get("enabled_at")
-    for k in MODE_KEYS:                         
+    for k in MODE_KEYS:                                                                                   
         if clean.get(k) == "auto" and old["settings"].get(k) != "auto":
             clean[k + "_since"] = datetime.now(timezone.utc).isoformat()
         elif clean.get(k) == "auto":
@@ -107,7 +107,16 @@ def save_block(c, shop: int, key: str, enabled: bool, settings: dict, uid: int) 
     c.execute("""INSERT INTO action_blocks(account_id,block,enabled,settings,updated_by,updated_at) VALUES (%s,%s,%s,%s,%s,now())
                  ON CONFLICT (account_id,block) DO UPDATE SET enabled=EXCLUDED.enabled, settings=EXCLUDED.settings,
                    updated_by=EXCLUDED.updated_by, updated_at=now()""", (shop, key, enabled, json.dumps(clean), uid))
-    return block(c, shop, key)
+    new = block(c, shop, key)
+    if key == 'ads':
+        from .ad_history import emit, flatten
+        before = flatten({'enabled': old['enabled'], 'settings': old['settings']})
+        after = flatten({'enabled': new['enabled'], 'settings': new['settings']})
+        for field in sorted(before.keys() | after.keys()):
+            if field == 'settings.enabled_at' or before.get(field) == after.get(field): continue
+            emit(c, shop, 0, [], 'ad_config', field, before.get(field), after.get(field), datetime.now(timezone.utc),
+                 evidence='platform_setting', actor_id=uid)
+    return new
 
 
 def paused(c, shop: int) -> bool:
@@ -115,7 +124,7 @@ def paused(c, shop: int) -> bool:
     return bool(r and r["actions_paused"])
 
 
-
+                      
 def _read_oid(c, shop: int):
     acc = c.execute("SELECT * FROM accounts WHERE id=%s", (shop,)).fetchone()
     if acc.get("seller_oid"):
@@ -205,7 +214,7 @@ def set_write_token(c, shop: int, token: str, uid: int, client_id: str | None = 
     if purpose == "main" and split(c, shop) and PRICE_SCOPE in scopes:
         raise ActionDenied(f"Включены раздельные ключи: в основном ключе не должно быть раздела «{PRICE_SCOPE}» — цены меняются только отдельным ключом")
     try:
-        r = httpx.get("https://feedbacks-api.wildberries.ru/api/v1/feedbacks/count-unanswered", headers={"Authorization": token}, timeout=20)\
+        r = httpx.get("https://feedbacks-api.wildberries.ru/api/v1/feedbacks/count-unanswered", headers={"Authorization": token}, timeout=20) \
             if "Вопросы и отзывы" in inf.get("scopes", []) else httpx.get("https://common-api.wildberries.ru/ping", headers={"Authorization": token}, timeout=20)
     except httpx.HTTPError as e:
         raise ActionDenied(f"WB не ответил: {type(e).__name__}") from None
@@ -233,20 +242,21 @@ def _write_token(c, shop: int, purpose: str = "main") -> str | None:
 
 def scopes_ok(c, shop: int, key: str) -> bool:
     inf = write_info(c, shop)
-    if inf and inf.get("kind") == "Ozon":       
+    if inf and inf.get("kind") == "Ozon":                                                                          
         return True
     return bool(inf) and BLOCKS[key].get("scope", "") in (inf.get("scopes") or [])
 
 
-
-def log(c, shop: int, blk: str, action: str, target, before, after, uid, by_ai=False, ok=True, error=None):
-    c.execute("""INSERT INTO action_log(account_id,block,action,target,before,after,user_id,by_ai,ok,error)
-                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+              
+def log(c, shop: int, blk: str, action: str, target, before, after, uid, by_ai=False, ok=True, error=None, *, return_id=False):
+    cur = c.execute("""INSERT INTO action_log(account_id,block,action,target,before,after,user_id,by_ai,ok,error)
+                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""" + (' RETURNING id' if return_id else ''),
               (shop, blk, action, target, json.dumps(before, ensure_ascii=False, default=str) if before is not None else None,
                json.dumps(after, ensure_ascii=False, default=str) if after is not None else None, uid, by_ai, ok, error))
+    return cur.fetchone()['id'] if return_id else None
 
 
-
+                   
 def can_write(c, shop: int, key: str) -> str | None:
     """None — можно; иначе причина по-русски."""
     if paused(c, shop):
@@ -272,17 +282,18 @@ def wb_write(c, shop: int, key: str, method: str, host: str, path: str, body, *,
     why = can_write(c, shop, key)
     if why:
         raise ActionDenied(why)
-    purpose = "prices" if host == "prices" and split(c, shop) else "main"     
+    purpose = "prices" if host == "prices" and split(c, shop) else "main"                                                     
     if not _write_token(c, shop, purpose):
         raise ActionDenied("Не добавлен отдельный ключ для цен (Взаимодействия → Ключи на запись)")
     need = HOST_SCOPE.get(host)
     if need and need not in ((write_info(c, shop, purpose) or {}).get("scopes") or []):
         raise ActionDenied(f"В ключе {'для цен' if purpose == 'prices' else 'на запись'} нет раздела «{need}»")
     acc = c.execute("SELECT * FROM accounts WHERE id=%s", (shop,)).fetchone()
-    w = WB.__new__(WB)           
+    w = WB.__new__(WB)                                                                            
     w.c, w.acc = c, acc
     bucket = f"{host}:{path}"
     status, err = None, None
+    accepted, data, response_valid = False, None, True
     t0 = time.monotonic()
     try:
         w._wait_slot(bucket, 30)
@@ -297,9 +308,15 @@ def wb_write(c, shop: int, key: str, method: str, host: str, path: str, body, *,
             data = r.json() if r.content.strip() else None
         except ValueError:
             data = None
-        if isinstance(data, dict) and data.get("error") is True:      
+            response_valid = False
+        if isinstance(data, dict) and data.get("error") is True:                                                            
             err = str(data.get("errorText") or data.get("additionalErrors") or "ошибка")[:300]
             raise ActionDenied(f"WB не принял: {err}")
+        accepted = response_valid and 200 <= status < 300 and not (isinstance(data, dict) and (data.get('errors') or data.get('error')))
+        if key == 'ads' and path == '/adv/v2/seacat/save-ad':
+            accepted = accepted and type(data) is int and data > 0
+        if key == 'ads' and not accepted:
+            raise ActionDenied('WB: ответ не подтвердил результат команды. Проверьте состояние кампании перед новой попыткой')
     except (RateLimited, WBError, httpx.HTTPError) as e:
         err = str(e)
         raise ActionDenied(f"WB: {e}") from None
@@ -310,7 +327,11 @@ def wb_write(c, shop: int, key: str, method: str, host: str, path: str, body, *,
         c.execute("INSERT INTO api_log(account_id,method,params,status,rows,archive,error,duration_ms) VALUES (%s,%s,%s,%s,NULL,NULL,%s,%s)",
                   (shop, f"{method} {host}{path} [write]", json.dumps({"target": target}, ensure_ascii=False), status, err,
                    int((time.monotonic() - t0) * 1000)))
-        log(c, shop, key, f"{method} {path}", target, before, body if body is not None else params, uid, by_ai=by_ai, ok=err is None, error=err)
+        action_id = log(c, shop, key, f"{method} {path}", target, before, body if body is not None else params, uid,
+                        by_ai=by_ai, ok=err is None, error=err, return_id=key == 'ads' and accepted)
+        if key == 'ads' and accepted:
+            from .ad_history import command
+            command(c, shop, path, body, params, before, data, uid, datetime.now(timezone.utc), action_id)
         c.commit()
     return data
 

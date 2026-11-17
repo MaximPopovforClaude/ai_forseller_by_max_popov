@@ -59,14 +59,14 @@ def auto_status(c, shop, t):
     check, skus = _spec(t)
     kind, direction = check['kind'], check.get('direction') or 'any'
     now = datetime.now(timezone.utc)
-    
+                                                                   
     since = t['created_at']
     if kind == 'stock':
         before, after = _stock(c, shop, skus, since), _stock(c, shop, skus, now)
         if before is None or after is None or after[1] <= since or after[0] <= before[0]:
             return NONE
         need = _number(check.get('target')) or 0
-        full = need <= 0 or after[0] - before[0] >= need * .8  
+        full = need <= 0 or after[0] - before[0] >= need * .8                                  
         return ('done' if full else 'partial'), f'остаток FBO {before[0]:g} → {after[0]:g} шт', after[1]
     advert = check.get('advert_id') if kind == 'ad_status' else None
     changes = _changes(c, shop, since, kind, skus, advert)
@@ -114,8 +114,8 @@ def auto_status(c, shop, t):
 
 
 def _covered(c, shop, skus, days):
-    
-    
+                                                                           
+                                                                       
     analytics = c.execute("""SELECT DISTINCT day,sku FROM oz_analytics WHERE account_id=%s
         AND day=ANY(%s) AND sku=ANY(%s) AND m ? 'ordered_units' AND m ? 'revenue'
         AND m->>'ordered_units' IS NOT NULL AND m->>'revenue' IS NOT NULL""", (shop, days, skus)).fetchall()
@@ -132,7 +132,7 @@ def _ads_covered(c, shop, skus, days):
     if not state or state['last_error'] or not state['last_ok_at'] or now - state['last_ok_at'] > CAMPAIGN_FRESH:
         return False
     campaigns = c.execute("SELECT campaign_id,skus FROM oz_ad_campaigns WHERE account_id=%s", (shop,)).fetchall()
-    
+                                                                                
     relevant = [r for r in campaigns if not r['skus'] or set(r['skus']) & set(skus)]
     if not relevant:
         return True

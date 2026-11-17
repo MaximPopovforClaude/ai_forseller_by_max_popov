@@ -13,7 +13,7 @@ router = APIRouter()
 
 @router.get("/api/shops/{shop_id}/rnp")
 def rnp_get(shop_id: int, month: str = "", sort: str = "orders_sum", offset: int = 0, group: str = "", brand: str = "", subject: str = "",
-            nm_ids: str = "", staff: int | None = None, u=Depends(current_user), c=Depends(conn)):
+            nm_ids: str = "", staff: str | None = None, u=Depends(current_user), c=Depends(conn)):
     if not auth.can(auth.shop_role(c, u, shop_id), "viewer"):
         raise HTTPException(403, "Нет доступа к магазину")
     if c.execute("SELECT marketplace FROM accounts WHERE id=%s", (shop_id,)).fetchone()["marketplace"] not in ("wb", "ym", "ozon"):
@@ -24,7 +24,7 @@ def rnp_get(shop_id: int, month: str = "", sort: str = "orders_sum", offset: int
         raise HTTPException(400, "Месяц в формате ГГГГ-ММ") from None
     flt = {"group": group or None, "brand": brand or None, "subject": subject or None,
            "nm_ids": [int(x) for x in nm_ids.split(",") if x.strip().isdigit()] or None}
-    if staff:                                   
+    if staff:                                                                                                          
         from . import staff as _staff
         flt["nm_ids"] = _staff.narrow(c, shop_id, staff, flt["nm_ids"])
     import psycopg

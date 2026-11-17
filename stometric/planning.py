@@ -123,7 +123,7 @@ def table(c, shop: int) -> dict:
             "total": {m.isoformat(): v for m, v in total.items()}, "settings": st, "tax": {"regime": regime, "rate": rate}, "run": run}
 
 
-
+                       
 def _season(c, query: str) -> dict[date, dict]:
     return {r["month"]: r for r in c.execute("SELECT month, frequency, price, wprice FROM plan_season WHERE query=%s", (query,))}
 
@@ -179,7 +179,7 @@ def _own_monthly(c, shop: int, frm: date, to: date) -> dict[int, dict[date, floa
 
 def _own_coef(own: dict[date, float], m: date, base: date) -> float | None:
     a, b = own.get(add_months(m, -12)), own.get(add_months(base, -12))
-    return a / b if a and b and b >= 10 else None      
+    return a / b if a and b and b >= 10 else None                                                         
 
 
 METHODS = ("sales", "query", "manual", "flat")
@@ -209,7 +209,7 @@ def _project(method: str, f: dict, own: dict, season: dict, ref: dict, months: l
             k = _coef(season, m, base, "frequency")
             if k is not None:
                 qty, ok = f["qty"] * k, True
-        elif method == "manual":     
+        elif method == "manual":                                                                                                            
             cur = ref.get(m) or {}
             if cur.get("qty_coef") is not None:
                 qty, ok = q_prev * float(cur["qty_coef"]), True
@@ -232,7 +232,7 @@ def _project(method: str, f: dict, own: dict, season: dict, ref: dict, months: l
 
 
 def _auto_method(it: dict, own: dict, ref: dict, months: list[date], base: date) -> str:
-    if it.get("method") and not (it["method"] == "manual" and not ref):   
+    if it.get("method") and not (it["method"] == "manual" and not ref):                                                   
         return it["method"]
     if all(_own_coef(own, m, base) is not None for m in months):
         return "sales"
@@ -331,7 +331,7 @@ def auto_build(shop: int, user_id: int | None = None, call=None) -> dict:
         try:
             tok = market.shop_token(c, shop)
             if call is None and tok:
-                call = lambda tool, **a: market._call(tok, tool, **a)  
+                call = lambda tool, **a: market._call(tok, tool, **a)              
             facts = _facts(c, shop, base_month())
             nms = [nm for nm, f in sorted(facts.items(), key=lambda x: -x[1]["qty"]) if f["qty"] > 0]
             if call:
@@ -342,18 +342,18 @@ def auto_build(shop: int, user_id: int | None = None, call=None) -> dict:
                 fails = 0
                 for nm in todo:
                     q, src = None, "auto"
-                    for attempt in range(2 if fails < 3 else 0):   
+                    for attempt in range(2 if fails < 3 else 0):                                                                        
                         try:
                             q = detect_query(c, call, shop, nm)
                             fails = 0
                             break
-                        except Exception as e:  
+                        except Exception as e:                
                             prog["last_error"] = str(e)[:160]
                             if attempt == 0:
-                                time.sleep(15)       
+                                time.sleep(15)                                                  
                             else:
                                 fails += 1
-                    if not q:            
+                    if not q:                                                                                            
                         subj = (c.execute("SELECT subject FROM nomenclature WHERE account_id=%s AND nm_id=%s", (shop, nm)).fetchone() or {}).get("subject")
                         q, src = (subj.lower(), "subject") if subj else (None, "auto")
                     if q:
@@ -370,7 +370,7 @@ def auto_build(shop: int, user_id: int | None = None, call=None) -> dict:
                 for q in need:
                     try:
                         fetch_season(c, call, q)
-                    except Exception as e:  
+                    except Exception as e:                
                         c.rollback()
                         prog["last_error"] = str(e)[:160]
                     prog["done"] += 1
@@ -379,7 +379,7 @@ def auto_build(shop: int, user_id: int | None = None, call=None) -> dict:
                 prog["note"] = "Wildbox не подключён — план плоский по базовому месяцу"
             prog.update(step="готово", **fill(c, shop, user_id))
             save("done")
-        except Exception as e:  
+        except Exception as e:                
             c.rollback()
             prog.update(step="ошибка", error=str(e)[:300])
             save("error")
@@ -390,7 +390,7 @@ def start(shop: int, user_id: int | None) -> None:
     threading.Thread(target=auto_build, args=(shop, user_id), daemon=True).start()
 
 
-
+                                          
 CASH_MANUAL = [("loan_in", "Получение кредитов и займов"), ("loan_out", "Возврат кредитов и займов"), ("invest_in", "Привлечение инвестиций"),
                ("invest_out", "Возврат инвестиций"), ("dividends", "Дивиденды"), ("capex", "Покупка ОС"),
                ("other_in", "Прочие поступления"), ("other_out", "Прочие выплаты")]
@@ -408,7 +408,7 @@ def cashflow(c, shop: int) -> dict:
     tot = {date.fromisoformat(m): v for m, v in t["total"].items()}
     lead = int(st["goods_lead"])
     last = tot[months[-1]] if months else {}
-    cogs_f = lambda m: (tot.get(m) or last).get("cogs", 0.0) if m <= months[-1] + timedelta(days=400) else 0.0  
+    cogs_f = lambda m: (tot.get(m) or last).get("cogs", 0.0) if m <= months[-1] + timedelta(days=400) else 0.0              
     vat = c.execute("SELECT vat_rate FROM tax_settings WHERE account_id=%s ORDER BY valid_from DESC LIMIT 1", (shop,)).fetchone()
     vat_rate = float((vat or {}).get("vat_rate") or 0)
     manual = {(r["month"], r["field"]): float(r["value"]) for r in c.execute(
@@ -423,7 +423,7 @@ def cashflow(c, shop: int) -> dict:
     q_tax = 0.0
     for m in months:
         v = tot[m]
-        g = lambda f: manual.get((m, f), 0.0)  
+        g = lambda f: manual.get((m, f), 0.0)              
         goods = sum(cogs_f(add_months(m, k)) for k in (lead,)) if lead else v["cogs"]
         interest = loans * float(st["loan_rate"]) / 12
         q_tax += v["tax"]

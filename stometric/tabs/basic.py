@@ -122,7 +122,7 @@ def dash5(c, shop, f):
     from datetime import date, timedelta
     from ..sheets import dash5 as d5
     y = min(f["date_to"], today_msk() - timedelta(days=1))
-    res = d5.compute(c, shop, y, f.get("nm_ids"), funnel_first=True)
+    res = d5.compute(c, shop, y, f.get("nm_ids"), funnel_first=True, order_source=f.get("order_source", "funnel"))
     P = res["periods"]
     fmt = lambda a, b: a[8:10] + "." + a[5:7] + ("" if a == b else " – " + b[8:10] + "." + b[5:7])
     months = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
@@ -139,7 +139,7 @@ def dash5(c, shop, f):
     from ..agg import buyout
     note = ("% выкупа — по заказам (выкуплено из заказов 14–42 дня назад): в отчёте реализации WB у магазина нет доставок к покупателю, "
             "эталонная формула по доставкам здесь не работает." if buyout.needed(c, shop) else None)
-    return {"columns": cols, "rows": res["rows"], "layout": "sheet", "note": d5.ORDER_NOTE + (" " + note if note else "")}
+    return {"columns": cols, "rows": res["rows"], "layout": "sheet", "note": d5.order_note(f.get("order_source", "funnel")) + (" " + note if note else "")}
 
 
 def svod(c, shop, f):
@@ -151,7 +151,7 @@ def svod(c, shop, f):
     cols = [{"field": "supplier_article", "title": "Артикул продавца", "type": "text"}, {"field": "barcode", "title": "Баркод", "type": "text"},
             {"field": "nm_id", "title": "Артикул WB", "type": "int"}, {"field": "tech_size", "title": "Размер", "type": "text"}]
     cols += [{"field": k, "title": t, "type": ty} for k, t, ty in sv.PARAMS]
-    for col in cols:   
+    for col in cols:                                                                
         per = {"orders_y": "вчера", "orders_y1": "позавчера", "orders_diff": None}.get(col["field"], "-")
         if per != "-":
             col.update(metric="Кол-во заказов" if per else "разница", period=per)
@@ -199,7 +199,7 @@ def ads_summary(c, shop, f):
     """1#СводнаяПоРекламе — артикул × реклама за выбранный период."""
     from ..sheets import ads
     rows = ads.compute(c, shop, f["date_from"], f["date_to"], f.get("nm_ids"))
-    no_bonus = not any(r.get("bonus") for r in rows)          
+    no_bonus = not any(r.get("bonus") for r in rows)                                                           
     return {"columns": [{"field": k, "title": t, "type": ty} for k, t, ty in ads.COLS
                         if not (no_bonus and k in ("bonus", "upd_all", "drr_bonus", "drr_all"))], "rows": rows}
 
@@ -268,28 +268,50 @@ def cost_tab(c, shop, f):
     return {"columns": cols, "rows": rows, "editable": "cost"}
 
 
-def svodwb(c, shop, f):
+def svodwb(c, shop, f, *, frozen_day: date | None = None):
     """Self-hosted application component."""
     from ..sheets import svodwb as sw
-    y = min(f["date_to"], today_msk() - timedelta(days=1))
+    calendar_day = frozen_day or today_msk()
+    y = frozen_day or calendar_day - timedelta(days=1)
     layout, hidden = None, []
     if f.get("user_id"):
         r = c.execute("SELECT value FROM user_prefs WHERE user_id=%s AND shop_id=%s AND key='svodwb_layout'", (f["user_id"], shop)).fetchone()
-        if r:   
+        if r:                                                                                                      
             v = r["value"]
             cols_v, hidden = (v, []) if isinstance(v, list) else (v.get("cols") or [], v.get("hidden") or [])
             layout = [tuple(x[:3]) for x in cols_v]
-    res = sw.compute(c, shop, y, layout, f.get("nm_ids"))
+    res = sw.compute(c, shop, y, layout, f.get("nm_ids"), as_of=None if frozen_day else calendar_day)
     res["layout_editor"] = "svodwb_layout"
     res["col_hidden"] = hidden
+    res["calendar_day"] = calendar_day.isoformat()
+    res["note"] = (f"Периоды колонок считаются на {calendar_day:%d.%m.%Y} по Москве и не зависят от дат верхнего фильтра. "
+                   "Текущая неделя — с понедельника по сегодня; сегодняшний день неполный. "
+                   "Вчера и последние N дней — только завершённые дни. Excel и Google Таблица используют те же периоды.")
+    if res['tax'] in ('ОСНО', 'ОСНО ИП (НДФЛ)'):
+        res['note'] += (' Налог — оперативная оценка по прибыли выбранного периода. Для ИП шкала применяется к сумме '
+                        'по магазину, затем налог распределяется по товарам; годовой расчёт НДФЛ — в PnL.')
+    elif res['tax'] not in ('УСН доход', 'УСН доходы-расходы', 'Другая СНО'):
+        res['note'] += ' Для выбранной СНО формула этой сводной пока не поддерживается; неизвестный налог не считается нулём.'
+        dependent = {'Сумма налога', 'Прибыль за минусом налога, руб', 'Прибыль от суммы выкупов до скидки ВБ (СПП), %'}
+        metric_columns = [col for col in res['columns'] if col.get('metric')]
+        missing = set()
+        for i, col in enumerate(metric_columns):
+            if col['metric'] in dependent or (col['metric'] == 'разница' and any(x['field'] in missing for x in metric_columns[max(0,i-2):i])):
+                missing.add(col['field'])
+        for row in res['rows']:
+            for field in missing:row[field] = None
+                                                                                 
+        res['total_row'] = {'vendor_code':'ИТОГО', **{
+            col['field']: None if col['field'] in missing else sum(float(row.get(col['field']) or 0) for row in res['rows'])
+            for col in res['columns'] if col['type'] in ('int','money') and not col['field'].endswith('_id')}}
     return res
 
 
-HOME_ROWS = [  
+HOME_ROWS = [                                       
     ("Заказы, ₽", 7, "money"), ("Заказы, шт", 8, "int"), ("Расход на рекламу, ₽", 23, "money"),
     ("ДРР от заказов, %", 24, "pct"), ("Оперативная прибыль по заказам (с % выкупа, за минусом налога), ₽", 35, "money"),
     ("Выкупы, шт", 39, "int"), ("Выкупы, ₽ (до СПП)", 38, "money"),
-    ("Себестоимость продаж, ₽", 50, "money"),          
+    ("Себестоимость продаж, ₽", 50, "money"),                                                           
     ("Прибыль по выкупам (оперативная, за минусом налога), ₽", 63, "money"),
 ]
 
@@ -313,25 +335,25 @@ def home(c, shop, f):
     bonus = c.execute("""SELECT 1 FROM raw_rows WHERE account_id=%s AND source='ad_upd' AND data->>'paymentType'='Кэшбэк'
                          AND row_date > current_date - 30 LIMIT 1""", (shop,)).fetchone()
     home_rows = list(HOME_ROWS)
-    if bonus:     
+    if bonus:                                                                                                                 
         i = next(k for k, x in enumerate(home_rows) if x[1] == 24) + 1
         home_rows[i:i] = [("Из рекламы списано бонусами (Кэшбэк, по УПД — с задержкой WB), ₽", 231, "money")]
     for lab, n, fmt in home_rows:
         val = {k: V[k][n] for k in P}
-        if n == 23:   
+        if n == 23:                                                                                                         
             for k, (a, b) in P.items():
                 r = c.execute("""SELECT sum((nm->>'sum')::numeric) s FROM raw_rows, jsonb_array_elements(CASE WHEN jsonb_typeof(data->'apps')='array' THEN data->'apps' ELSE '[]'::jsonb END) app,
                                  jsonb_array_elements(CASE WHEN jsonb_typeof(app->'nms')='array' THEN app->'nms' ELSE '[]'::jsonb END) nm WHERE account_id=%s AND source='ad_stats' AND row_date=%s""",
                               (shop, a)).fetchone()
                 val[k] = float(r["s"] or 0)
         if n == 231:
-            val = {k: -v for k, v in val.items()}      
+            val = {k: -v for k, v in val.items()}                                                     
         if n == 24:
             for k, colname in (("today", "C"), ("y", "D"), ("y2", "F")):
                 o = V[k][7]
                 val[k] = rows[2][colname] / o if o else 0
         rows.append({"label": lab, "fmt": fmt, "C": val["today"], "D": val["y"], "F": val["y2"]})
-    fmtd = lambda d: d.strftime("%d.%m")  
+    fmtd = lambda d: d.strftime("%d.%m")              
     cols = [{"field": "label", "title": f"Ключевые показатели (СНО: {res['tax']})", "type": "label"},
             {"field": "C", "title": f"Сегодня {fmtd(t)} (неполный)", "type": "rowfmt"},
             {"field": "D", "title": f"Вчера {fmtd(t - timedelta(days=1))}", "type": "rowfmt"},
@@ -366,7 +388,7 @@ def _pnl_real(c, shop, monthly, f=None):
     if f and f.get("user_id"):
         r = c.execute("SELECT value FROM user_prefs WHERE user_id=%s AND shop_id=%s AND key='pnl_ads'", (f["user_id"], shop)).fetchone()
         mode = ((r and r["value"]) or {}).get("mode") or "deduct"
-    res = pnl_real.compute(c, shop, weeks=14 if monthly else 60, monthly=monthly, ads_mode=mode)   
+    res = pnl_real.compute(c, shop, weeks=14 if monthly else 60, monthly=monthly, ads_mode=mode)                                          
     cols = [{"field": "label", "title": f"P&L по отчёту реализации (СНО: {res['tax']})", "type": "label"}]
     cols += [{"field": y, "title": t, "type": "rowfmt"} for y, t in res.get("years", [])]
     for p in res["periods"]:
@@ -478,19 +500,19 @@ def dash_nm_days(c, shop, f):
     y = min(f["date_to"], today_msk() - timedelta(days=1))
     days = [y - timedelta(days=i) for i in range(30)]
     P = {f"d{i}": (d, d) for i, d in enumerate(days)}
-    res = d5.compute(c, shop, y, f.get("nm_ids"), custom=P, funnel_first=True)
+    res = d5.compute(c, shop, y, f.get("nm_ids"), custom=P, funnel_first=True, order_source=f.get("order_source", "funnel"))
     V = res["values"]
     wd = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
     cols = [{"field": "label", "title": f"ПОКАЗАТЕЛИ (СНО: {res['tax']})", "type": "label"}]
     cols += [{"field": k, "title": f"{d:%d.%m} {wd[d.weekday()]}", "type": "rowfmt"} for k, (d, _) in P.items()]
     rows = []
-    for n, lab, fmt, fn in d5.DASHBOARD_ROWS:
+    for n, lab, fmt, fn in d5.dashboard_rows(f.get("order_source", "funnel")):
         row = {"row": n, "label": lab, "fmt": fmt}
         if fn is not None:
             for k in P:
                 row[k] = d5.rounded(V[k][n], 4 if fmt == "pct" else 2)
         rows.append(row)
-    return {"columns": cols, "rows": rows, "layout": "sheet", "note": d5.ORDER_NOTE}
+    return {"columns": cols, "rows": rows, "layout": "sheet", "note": d5.order_note(f.get("order_source", "funnel"))}
 
 
 def no_cost(c, shop, f):
@@ -541,21 +563,18 @@ def orders_hours(c, shop, f):
         {"field": "total", "title": "Всего заказов", "type": "int"}]
     return {"columns": cols, "rows": [{**r, "h": f"{r['h']:02d}:00"} for r in rows],
             "chart": {"x": "h", "series": [{"field": "total", "title": "Заказы", "type": "bar"}]},
-            
+                                                                                                                                    
             "heat": [[f"d{i}" for i in range(1, 8)], ["total"]]}
 
 
 def spp_subject(c, shop, f):
-    """Дашборд#СППпоПредмету — средняя СПП (скидка WB) по предметам и дням из заказов: 1 − Σ цена покупателя / Σ цена продавца."""
-    rows = c.execute(
-        """SELECT o.order_dt::date AS day, coalesce(n.subject, o.data->>'subject') subject, count(*) orders,
-                  round(1 - sum(o.finished_price) / NULLIF(sum(o.price_with_disc), 0), 4) spp
-           FROM orders o LEFT JOIN nomenclature n ON n.account_id=o.account_id AND n.nm_id=o.nm_id
-           WHERE o.account_id=%s AND o.order_dt::date BETWEEN %s AND %s GROUP BY 1,2 ORDER BY 1 DESC, 3 DESC""",
-        (shop, f["date_from"], f["date_to"])).fetchall()
-    cols = [{"field": "day", "title": "Дата", "type": "date"}, {"field": "subject", "title": "Предмет", "type": "text"},
-            {"field": "orders", "title": "Заказов", "type": "int"}, {"field": "spp", "title": "СПП, %", "type": "share"}]
-    return {"columns": cols, "rows": rows}
+    from ..spp_table import table
+    return table(c, shop, f)
+
+
+def spp_hours(c, shop, f):
+    from ..spp_table import table
+    return table(c, shop, f, hourly=True)
 
 
 def stock_plan(c, shop, f):
@@ -597,7 +616,7 @@ def stock_plan(c, shop, f):
 def by_days(c, shop, f):
     """4#ДашбордПоДням — показатели по дням за выбранный период (итог месяца — отдельной колонкой)."""
     from ..sheets import by_days as bd
-    return bd.compute(c, shop, f["date_from"], f["date_to"], f.get("nm_ids"))
+    return bd.compute(c, shop, f["date_from"], f["date_to"], f.get("nm_ids"), order_source=f.get("order_source", "funnel"))
 
 
 def ads_conv_week(c, shop, f):
@@ -744,7 +763,7 @@ def pnl_nm(c, shop, f):
     from ..sheets import pnl_nm as pn
     res = pn.compute(c, shop, f["date_from"], f["date_to"], f.get("nm_ids"))
     for r in res["rows"] + ([res["total"]] if res["total"] else []):
-        r["r37"] = -(r.get("r37") or 0)          
+        r["r37"] = -(r.get("r37") or 0)                                                                          
     cols = [{"field": "vendor_code", "title": "Артикул продавца", "type": "text"}, {"field": "nm_id", "title": "Артикул WB", "type": "int"},
             {"field": "subject", "title": "Предмет", "type": "text"}] + [{"field": f"r{n}", "title": t, "type": ty} for n, t, ty in pn.COLS]
     w = res["weeks"]
@@ -806,7 +825,7 @@ def pnl_alt_month(c, shop, f):
         res = pnl_alt.cached(c, shop, *_alt_range())
     except pnl_alt.Pending:
         return ALT_PENDING
-    months = sorted((m for m in res["month"] if any(abs(v) > 0.5 for v in res["month"][m].values())), reverse=True)   
+    months = sorted((m for m in res["month"] if any(abs(v) > 0.5 for v in res["month"][m].values())), reverse=True)                   
     cols = [{"field": "label", "title": f"Альтернативный PnL (СНО: {res['tax'].get('regime', '—')})", "type": "label"},
             {"field": "total", "title": "Итого", "type": "rowfmt"}]
     cols += [{"field": m, "title": f"{m[5:7]}.{m[:4]}", "type": "rowfmt"} for m in months]
@@ -838,7 +857,7 @@ def pnl_alt_nm(c, shop, f):
             continue
         n = nom.get(nm) or {}
         rows.append({"vendor_code": n.get("vendor_code"), "nm_id": nm, "subject": n.get("subject"), **{k: a.get(k, 0) for k in keys}})
-    rows.sort(key=lambda r: -(r["profit"] or 0))     
+    rows.sort(key=lambda r: -(r["profit"] or 0))                                                                                            
     cols = [{"field": "vendor_code", "title": "Артикул продавца", "type": "text"}, {"field": "nm_id", "title": "Артикул WB", "type": "int"},
             {"field": "subject", "title": "Предмет", "type": "text"}] + [{"field": k, "title": t, "type": ty} for k, t, ty in pnl_alt.COLS]
     total = {"vendor_code": "ИТОГО", **{k: res["total"].get(k, 0) for k in keys}} if rows and not f.get("nm_ids") else None
@@ -854,7 +873,7 @@ def pnl_alt_nm_month(c, shop, f):
     """Альтернативный PnL по артикулам по месяцам: строка — артикул × месяц заказа, с прибылью и ROI."""
     from ..sheets import pnl_alt
     try:
-        res = pnl_alt.cached(c, shop, f["date_from"], f["date_to"])   
+        res = pnl_alt.cached(c, shop, f["date_from"], f["date_to"])                                  
     except pnl_alt.Pending:
         return ALT_PENDING
     nom = {r["nm_id"]: r for r in c.execute("SELECT nm_id, vendor_code, subject FROM nomenclature WHERE account_id=%s", (shop,))}
@@ -868,14 +887,14 @@ def pnl_alt_nm_month(c, shop, f):
         n = nom.get(nm) or {}
         rows.append({"vendor_code": n.get("vendor_code"), "nm_id": nm, "subject": n.get("subject"), "month": f"{m[5:7]}.{m[:4]}", "_m": m,
                      **{k: a.get(k, 0) for k in keys}})
-    tot_p = defaultdict(float)        
+    tot_p = defaultdict(float)                                                                                       
     for r in rows:
         tot_p[r["nm_id"]] += r["profit"] or 0
     rows.sort(key=lambda r: (-tot_p[r["nm_id"]], r["nm_id"], -int(r["_m"].replace("-", "")[:6])))
     for r in rows:
         del r["_m"]
     cols = [{"field": "vendor_code", "title": "Артикул продавца", "type": "text"}, {"field": "nm_id", "title": "Артикул WB", "type": "int"},
-            {"field": "subject", "title": "Предмет", "type": "text"}, {"field": "month", "title": "Месяц", "type": "text"}] +\
+            {"field": "subject", "title": "Предмет", "type": "text"}, {"field": "month", "title": "Месяц", "type": "text"}] + \
            [{"field": k, "title": t, "type": ty} for k, t, ty in pnl_alt.COLS]
     total = {"vendor_code": "ИТОГО", **{k: res["total"].get(k, 0) for k in keys}} if rows and not f.get("nm_ids") else None
     return {"columns": cols, "rows": rows, "total_row": total, "rules": ALT_RULES,

@@ -8,7 +8,7 @@ from datetime import date
 import openpyxl
 
 
-FIRST = date(2000, 1, 1)      
+FIRST = date(2000, 1, 1)                                                                          
 
 
 def open_xlsx(src):
@@ -38,7 +38,7 @@ def _num(v):
 
 
 def _find(cells: list[str], names) -> int | None:
-    for n in names:                                   
+    for n in names:                                                                        
         for i, x in enumerate(cells):
             if x == n:
                 return i
@@ -54,9 +54,9 @@ def _rows_of(raw: bytes, name: str) -> list[list[list]]:
     if raw[:2] == b"PK":
         try:
             wb = open_xlsx(io.BytesIO(raw))
-        except Exception as e:  
+        except Exception as e:                
             raise CostImportError("Не открывается как xlsx") from e
-        sheets = sorted(wb.worksheets, key=lambda ws: "себест" not in ws.title.lower())   
+        sheets = sorted(wb.worksheets, key=lambda ws: "себест" not in ws.title.lower())                                  
         return [[list(r) for r in ws.iter_rows(values_only=True)] for ws in sheets]
     text = raw.decode("utf-8-sig", errors="replace")
     dialect = csv.Sniffer().sniff(text[:4000], delimiters=";,\t") if text.strip() else csv.excel
@@ -105,7 +105,7 @@ def fetch_url(url: str) -> bytes:
 def match(c, shop: int, kind: str, items: list[tuple[str, float]], valid_from: date) -> dict:
     """Только чтение: что запишется. → {"write": [(nm, себестоимость, с какой даты)], "same", "unknown", "unknown_list", "bad", "total"}."""
     mp = c.execute("SELECT marketplace FROM accounts WHERE id=%s", (shop,)).fetchone()["marketplace"]
-    if mp == "ym":      
+    if mp == "ym":                                                                    
         known = {str(r["market_sku"]): r["market_sku"] for r in c.execute(
             "SELECT market_sku FROM ym_offers WHERE account_id=%s AND market_sku IS NOT NULL", (shop,))}
         by_vc = {r["offer_id"].lower(): r["market_sku"] for r in c.execute(
@@ -138,7 +138,7 @@ def match(c, shop: int, kind: str, items: list[tuple[str, float]], valid_from: d
         if nm in cur and abs(cur[nm] - cost) < 0.005:
             same += 1
             continue
-        
+                                                                                                                               
         write.append((nm, round(cost, 2), valid_from if nm in has_any else FIRST))
     return {"write": write, "same": same, "unknown": len(unknown), "unknown_list": unknown[:20], "bad": bad, "total": len(items)}
 

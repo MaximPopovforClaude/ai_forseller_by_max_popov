@@ -119,20 +119,20 @@ def _drops(nm, names, top, a, b, min_base):
 
 def _shop_line(t, a, b):
     return {k: {"now": _r(t[a][k]), "before": _r(t[b][k]), "change_pct": _pct(t[a][k], t[b][k])}
-            for k in ("ordered", "ordered_sum", "views", "sold_amt", "profit") if t[b][k] or t[a][k]} |\
+            for k in ("ordered", "ordered_sum", "views", "sold_amt", "profit") if t[b][k] or t[a][k]} | \
         {"ads": {"now": _r(_ads(t[a])), "before": _r(_ads(t[b])), "change_pct": _pct(_ads(t[a]), _ads(t[b]))}}
 
 
 def cabinet_issues(c, shop: int, data=None) -> dict:
     nm, tot, names = data or per_sku(c, shop)
     y = today_msk() - timedelta(days=1)
-    top_w = sorted(nm, key=lambda s: -nm[s]["w1"]["ordered_sum"])[:20]          
+    top_w = sorted(nm, key=lambda s: -nm[s]["w1"]["ordered_sum"])[:20]                                                     
     top_d = sorted(nm, key=lambda s: -(nm[s]["d0"]["ordered_sum"] + nm[s]["d7"]["ordered_sum"]))[:20]
     w_orders, w_conv = _drops(nm, names, top_w, "w1", "w0", 20)
     d_orders, d_conv = _drops(nm, names, top_d, "d1", "d0", 5)
     d7_orders, _ = _drops(nm, names, top_d, "d1", "d7", 5)
 
-    
+                                                                                                     
     low = []
     for r in c.execute("""SELECT sku, cluster, sum(coalesce(available,0)) a, sum(coalesce((raw->>'transit_stock_count')::numeric,0)) o,
                                  avg((raw->>'ads_cluster')::numeric) ads FROM oz_stocks
@@ -145,7 +145,7 @@ def cabinet_issues(c, shop: int, data=None) -> dict:
                             "sales_per_day": _r(ads, 1), "days_left": _r(days, 1)})
     low.sort(key=lambda x: x["days_left"])
 
-    
+                                                                                                    
     spend = defaultdict(lambda: defaultdict(float))
     for r in c.execute("""SELECT campaign_id, day, spent, orders FROM oz_ad_daily WHERE account_id=%s AND day BETWEEN %s AND %s""",
                        (shop, y - timedelta(days=13), y)):
@@ -183,7 +183,7 @@ def _ad_items(c, shop, y):
     from .tabs.ozads import ad_problems
     try:
         return ad_problems(c, shop, y - timedelta(days=6), y)
-    except Exception as e:  
+    except Exception as e:                
         c.rollback()
         return {"error": str(e)[:100]}
 
@@ -224,7 +224,7 @@ def search_pack(c, shop: int, data=None) -> dict:
                     "avg_position": _r(d["w1_pos"] / d["w1_n"]) if d["w1_n"] else None} for (s, qq), d in q.items() if d["w1_orders"]),
                   key=lambda x: -x["gmv_week"])[:8]
 
-    
+                                                                                                                   
     ph = c.execute("""SELECT sku, lower(phrase) phrase, sum(clicks) clicks, sum(views) views FROM oz_ad_phrases
                       WHERE account_id=%s AND day > %s GROUP BY 1,2 HAVING sum(clicks) >= 30 ORDER BY 3 DESC""",
                    (shop, mx - timedelta(days=7))).fetchall()

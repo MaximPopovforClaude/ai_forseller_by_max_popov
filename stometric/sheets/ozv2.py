@@ -11,7 +11,7 @@ AD_KINDS = ["Вывод в топ", "Поиск", "Поиск и рекомен�
 AD_RX = re.compile(r"продвиж|оплата за клик|оплата за заказ|реклам|трафарет|promotion|costperclick|cpc", re.I)
 OZZ_RX = re.compile(r"продвижение товара|оплата за заказ|searchpromo|search_promo", re.I)
 
-
+                                                                                                                            
 SERVICE_RU = {
     "MarketplaceServiceItemDirectFlowLogistic": "Логистика",
     "MarketplaceServiceItemDirectFlowLogisticVDC": "Логистика",
@@ -89,11 +89,11 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
     lo, hi = min(p[1] for p in per), max(p[2] for p in per)
     flt = (lambda s: skus is None or s in skus)
     cost = _costs(c, shop, hi)
-    D = defaultdict(lambda: defaultdict(float))          
+    D = defaultdict(lambda: defaultdict(float))                                     
     names = {"svc": set(), "item": set(), "non": set()}
     order_days = order_prices.load_daily(c, shop, lo, hi, skus)
 
-    
+             
     for r in c.execute("SELECT day, sku, m FROM oz_analytics WHERE account_id=%s AND day BETWEEN %s AND %s", (shop, lo, hi)):
         if not flt(r["sku"]):
             continue
@@ -108,9 +108,9 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
             v["_pos_sum"] += pos
             v["_pos_n"] += 1
 
-    
+                                                           
     real = c.execute("SELECT 1 FROM oz_realization_day WHERE account_id=%s LIMIT 1", (shop,)).fetchone() is not None
-    tot_sold = defaultdict(float)                        
+    tot_sold = defaultdict(float)                                                                                     
     if real:
         for r in c.execute("SELECT * FROM oz_realization_day WHERE account_id=%s AND day BETWEEN %s AND %s", (shop, lo, hi)):
             net = float(r["sale_amount"] or 0) - float(r["ret_amount"] or 0)
@@ -127,8 +127,8 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
             v["commission"] += float(r["commission"] or 0)
             v["cost"] -= (float(r["sale_qty"] or 0) - float(r["ret_qty"] or 0)) * cost.at(r["sku"], r["day"])
 
-    
-    
+                                                                                
+                                                                                
     raw_column = "NULL::jsonb AS raw" if real and skus is None else "raw"
     for t in c.execute(f"""SELECT op_day, operation_type, type_name, tx_type, amount, accruals_for_sale, sale_commission, delivery_charge,
                                  return_delivery_charge, skus, qty, {raw_column}, raw->'services' services
@@ -142,18 +142,18 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
         if trade:
             acc = float(t["accruals_for_sale"] or 0)
             if not real:
-                tot_sold[day] += acc    
+                tot_sold[day] += acc                                               
             if not mine:
                 continue
         elif sk and not mine:
             continue
-        
-        
+                                                                             
+                                                                                
         needs_parts = mine and (skus is not None or (not real and trade and typ != "delivery"))
         parts = transaction_parts(t) if needs_parts else {}
         chosen = {s: p for s, p in parts.items() if flt(s)}
         share = sum(p[1] for p in chosen.values()) if skus is not None else 1.0
-        if trade:         
+        if trade:                                                                           
             v = D[day]
             v["payout"] += amt * share
             if not real and typ != "delivery":
@@ -179,12 +179,12 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
                 names[key].add(nm)
             continue
         label = t["type_name"] or t["operation_type"] or "Прочее"
-        if sk:                                            
+        if sk:                                                                           
             if mine:
                 D[day][f"item:{label}"] += amt * share
                 D[day]["payout"] += amt * share
                 names["item"].add(label)
-        else:                                             
+        else:                                                                                                                  
             if skus is not None and AD_RX.search(f"{label} {t['operation_type']}"):
                 continue
             D[day][f"non:{label}" if skus is None else f"_non_all:{label}"] += amt
@@ -192,7 +192,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
         if OZZ_RX.search(f"{label} {t['operation_type']}") and skus is None:
             D[day]["ozz_spent"] += -amt
 
-    
+                 
     for r in c.execute("SELECT day, sku, qty, amount FROM oz_buyouts WHERE account_id=%s AND day BETWEEN %s AND %s", (shop, lo, hi)):
         if flt(r["sku"]):
             v = D[r["day"]]
@@ -200,10 +200,10 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
             v["bo_qty"] += float(r["qty"] or 0)
             v["cost"] -= float(r["qty"] or 0) * cost.at(r["sku"], r["day"])
 
-    
+                                                           
     kinds = {r["campaign_id"]: (r["kind"] or "Поиск и рекомендации", r["skus"] or [])
              for r in c.execute("SELECT campaign_id, kind, skus FROM oz_ad_campaigns WHERE account_id=%s", (shop,))}
-    
+                                                                                                                
     q_sku = ("SELECT day, campaign_id, sku, views, clicks, to_cart, spent, orders, orders_money, models, models_money FROM oz_ad_sku "
              "WHERE account_id=%s AND day BETWEEN %s AND %s")
     q_day = ("SELECT day, campaign_id, NULL::bigint sku, views, clicks, NULL::numeric to_cart, spent, orders, orders_money, "
@@ -222,7 +222,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
             share = 1.0 if skus is None else (sum(1 for x in csk if x in skus) / len(csk) if csk else 0.0)
         if not share:
             continue
-        if kd == "ОЗЗ":                            
+        if kd == "ОЗЗ":                                                                                     
             D[r["day"]]["ozz.orders"] += float(r["orders"] or 0) * share
             D[r["day"]]["ozz.spent"] += float(r["spent"] or 0) * share
             continue
@@ -230,10 +230,10 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
             v = D[r["day"]]
             for k in ("views", "clicks", "to_cart", "spent", "orders", "orders_money", "models", "models_money"):
                 v[f"{pref}.{k}"] += float(r[k] or 0) * share
-    if skus is not None and by_sku:               
+    if skus is not None and by_sku:                                                                              
         pass
 
-    
+                                                 
     snaps = [r["snap_at"] for r in c.execute("SELECT DISTINCT snap_at FROM oz_stocks WHERE account_id=%s AND snap_at::date <= %s ORDER BY 1",
                                              (shop, hi))]
 
@@ -263,7 +263,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
         while d <= b:
             for k, x in D[d].items():
                 v[k] += x
-            if skus is not None:                          
+            if skus is not None:                                                                               
                 mine_s = D[d]["sale_amt"] - D[d]["ret_amt"]
                 share = mine_s / tot_sold[d] if tot_sold[d] else 0
                 for k, x in D[d].items():
@@ -293,7 +293,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
             v["st_turn"] = (st[0] + st[1]) / (v["ordered"] / n) if v["ordered"] else 0
         v["ad.spent_ozz"] = v["ad.spent"] + v["ozz_spent"]
         for pref in ["ad"] + [f"ad[{k}]" for k in AD_KINDS]:
-            g = lambda k: v[f"{pref}.{k}"]  
+            g = lambda k: v[f"{pref}.{k}"]              
             om = g("orders_money") + g("models_money")
             v[f"{pref}.ctr"] = g("clicks") / g("views") if g("views") else 0
             v[f"{pref}.cr_cart"] = g("to_cart") / g("clicks") if g("clicks") else 0
@@ -303,7 +303,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
             v[f"{pref}.cpm"] = g("spent") / g("views") * 1000 if g("views") else 0
             v[f"{pref}.cpcart"] = g("spent") / g("to_cart") if g("to_cart") else 0
             v[f"{pref}.cpo"] = g("spent") / g("orders") if g("orders") else 0
-        v["ad.cpcart"] = v["ad.spent_ozz"] / v["ad.to_cart"] if v["ad.to_cart"] else 0   
+        v["ad.cpcart"] = v["ad.spent_ozz"] / v["ad.to_cart"] if v["ad.to_cart"] else 0                      
         v["ozz.cpo"] = v["ozz.spent"] / v["ozz.orders"] if v["ozz.orders"] else 0
         om = v["ad.orders_money"] + v["ad.models_money"]
         v["ad.drr_ozz"] = v["ad.spent_ozz"] / om if om else 0
@@ -313,7 +313,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
         v["svc_total"] = sum(x for k, x in v.items() if k.startswith("svc:"))
         v["item_total"] = sum(x for k, x in v.items() if k.startswith("item:"))
         v["non_total"] = sum(x for k, x in v.items() if k.startswith("non:"))
-        v["ads_filter"] = -(v["ad.spent"] + v["ozz.spent"]) if skus is not None else 0   
+        v["ads_filter"] = -(v["ad.spent"] + v["ozz.spent"]) if skus is not None else 0                                     
         v["vat"] = -(v["sales_total"] - v["bonus"]) * vat / (1 + vat) if vat else 0
         if tax["regime"] == "УСН доходы-расходы":
             base = v["sales_total"] + v["commission"] + v["svc_total"] + v["item_total"] + v["non_total"] + v["cost"] + v["ads_filter"]
@@ -377,7 +377,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
              ("bo_amt", "- Выкупы Ozon", "money"), ("bo_qty", "- Выкупы Ozon шт", "int"), ("commission", "- Комиссия", "money"),
              ("commission_pct", "- Комиссия %", "pct"), ("bonus", "- Баллы озон", "money"), ("coinvest", "- Программы партнеров", "money"),
              ("svc_total", "Доставка покупателю", "money")]
-    order = lambda pref: sorted(names[pref], key=lambda n: tot[f"{pref}:{n}"])  
+    order = lambda pref: sorted(names[pref], key=lambda n: tot[f"{pref}:{n}"])                                               
     ROWS += [(f"svc:{n}", f"- {n}", "money") for n in order("svc")]
     ROWS += [("item_total", "Расходы с привязкой к артикулу", "money")] + [(f"item:{n}", f"- {n}", "money") for n in order("item")]
     ROWS += [("non_total", "Расходы без привязки к артикулу" + (" (доля по продажам)" if skus is not None else ""), "money")]
@@ -414,7 +414,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
             if not any(row.get(f"p{i}") for i in range(len(vals))) and not row["total"] and not lab.startswith(("Продажи", "Прибыль")):
                 row["empty"] = True
         out.append(row)
-    
+                                                 
     res, i = [], 0
     while i < len(out):
         r = out[i]
@@ -431,7 +431,7 @@ def compute(c, shop: int, kind: str, d_from: date, d_to: date, skus: list[int] |
             "row_defs": ROWS, "order_prices_note": order_prices.NOTE}
 
 
-
+                                 
 UNIT = [("sold_amt", "Продажи - Возвраты ₽", "money", False), ("commission", "Комиссия", "money", True), ("bonus", "Баллы Ozon", "money", True),
         ("cost", "Себестоимость", "money", True), ("paid", "Цена продажи (оплачено покупателем)", "money", False),
         ("svc_total", "Расходы на доставку итого", "money", True), ("item_total", "Расходы с привязкой к артикулу", "money", True),
@@ -442,7 +442,7 @@ UNIT = [("sold_amt", "Продажи - Возвраты ₽", "money", False), (
         ("cr_cart", "CR корзины/клики", "share", False), ("ordered", "Заказы", "int", False), ("cr_order", "CR заказы/корзины", "share", False),
         ("buyout_pct", "% выкупа", "share", False), ("tax", "Налог", "money", True), ("vat", "НДС", "money", True), ("profit", "Прибыль", "money", True),
         ("roi", "ROI", "share", False)]
-NEG = ("ad[Поиск].spent", "ad[Поиск и рекомендации].spent", "ad[Вывод в топ].spent", "ozz.spent")     
+NEG = ("ad[Поиск].spent", "ad[Поиск и рекомендации].spent", "ad[Вывод в топ].spent", "ozz.spent")                                        
 
 
 def unit(c, shop: int, p1: tuple[date, date], p2: tuple[date, date], skus: list[int] | None = None, per_unit: bool = False) -> dict:
@@ -479,7 +479,7 @@ def unit(c, shop: int, p1: tuple[date, date], p2: tuple[date, date], skus: list[
                     x = -x
                 if k == "roi":
                     x = v["profit"] / -v["cost"] if v["cost"] else 0
-                if per_unit and f == "money":                   
+                if per_unit and f == "money":                                                                  
                     x = x / qty if qty > 0 else None
                 row[k] = None if x is None else round(x, 4 if f == "share" else 2)
                 if pct:
@@ -495,7 +495,7 @@ def unit(c, shop: int, p1: tuple[date, date], p2: tuple[date, date], skus: list[
     return {"columns": cols, "rows": rows}
 
 
-
+                               
 OPIU_SKIP = ("h",)
 
 
@@ -524,7 +524,7 @@ def opiu(c, shop: int, year: int, d_to: date) -> dict:
             continue
         rows.append((key, lab, fmt))
     rows += [("roi", "ROI", "pct")]
-    has = [bool(v["sales_total"] or v["non_total"]) for v in r["cols"]]          
+    has = [bool(v["sales_total"] or v["non_total"]) for v in r["cols"]]                                                 
     first = next((i for i, (lab, _, _) in enumerate(per) if has[i] and "квартал" not in lab), len(per))
     idx = [i for i in range(len(per)) if i >= first or ("квартал" in per[i][0] and per[i][2] >= per[first][1] if first < len(per) else False)]
     out = []

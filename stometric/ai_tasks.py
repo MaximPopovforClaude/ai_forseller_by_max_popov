@@ -34,7 +34,7 @@ def marketplace(c, shop):
     return row.get("marketplace", "wb") if isinstance(row, dict) else "wb"
 
 
-
+                      
 _NUM = re.compile(r"(?<![\d.,])\d{1,3}(?:[   ]\d{3})+(?![\d])|\d+(?:[.,]\d+)?")
 
 
@@ -81,7 +81,7 @@ def latest_attempt(c, shop: int):
         WHERE account_id=%s AND status <> 'requested' ORDER BY id DESC LIMIT 1""", (shop,)).fetchone()
 
 
-
+                          
 def load(c, shop: int, day: date, run_id: int, data: dict, brief: str, *, platform="wb") -> dict:
     """Задачи от нейросети → ai_tasks (прежние задачи этого дня — неактивны). → {saved, dropped: [...]}."""
     if not isinstance(data, dict) or not isinstance(data.get("tasks"), list):
@@ -129,7 +129,7 @@ def load(c, shop: int, day: date, run_id: int, data: dict, brief: str, *, platfo
     return {"saved": saved, "dropped": dropped}
 
 
-
+                          
 def _changes(c, shop: int, since, kinds: tuple, nms: list[int], advert: int | None) -> list[dict]:
     q = """SELECT kind, field, nm_id, old_value, new_value, detected_at FROM card_changes WHERE account_id=%s AND kind = ANY(%s)
            AND detected_at > %s AND (nm_id = ANY(%s) OR (%s::bigint IS NOT NULL AND field = 'ad:' || %s::text)) ORDER BY detected_at"""
@@ -156,7 +156,7 @@ def auto_status(c, shop: int, t: dict) -> tuple[str | None, str | None, datetime
     chk = t["check_spec"] or {}
     kind, nms, adv = chk.get("kind") or "none", chk.get("nm_ids") or t["nm_ids"] or [], chk.get("advert_id")
     direction, target = chk.get("direction") or "any", chk.get("target")
-    since = datetime.combine(t["day"] - timedelta(days=1), datetime.min.time(), MSK)    
+    since = datetime.combine(t["day"] - timedelta(days=1), datetime.min.time(), MSK)                                                            
     since = max(since, t["created_at"] - timedelta(hours=12))
     if kind == "price":
         ch = _changes(c, shop, since, ("price",), nms, None)
@@ -186,7 +186,7 @@ def auto_status(c, shop: int, t: dict) -> tuple[str | None, str | None, datetime
                 if (direction in ("pause", "down") and st == "на паузе") or (direction in ("start", "up") and st == "идёт") or direction == "any":
                     good.append(r)
         if kind == "ad_status" and direction in ("pause", "down"):
-            
+                                                                                                                           
             good = [r for r in good if r["detected_at"] <= datetime.now(timezone.utc) - timedelta(days=1) and not c.execute("""SELECT 1 FROM card_changes WHERE account_id=%s AND kind='ad_status' AND field=%s
                                                         AND detected_at > %s AND detected_at < %s + interval '1 day' AND new_value->>'status'='идёт'""",
                                                      (shop, r["field"], r["detected_at"], r["detected_at"])).fetchone()]
@@ -255,8 +255,8 @@ def outcome(c, shop: int, nms: list[int], d0: date) -> dict | None:
 def check(c, shop: int) -> int:
     """Recent auto marks plus bounded recomputation of invalidated historical outcomes."""
     from .materialize import cost_dirty, NotReady
-    
-    
+                                                                            
+                                                                              
     _outcomes_lock(c, shop)
     n = 0
     y = today_msk() - timedelta(days=1)
@@ -265,11 +265,11 @@ def check(c, shop: int) -> int:
     dirty = not is_ozon and bool(cost_dirty(c, shop))
     rows = c.execute("""SELECT * FROM ai_tasks WHERE account_id=%s AND active AND day >= %s ORDER BY id""", (shop, since)).fetchall()
     if not dirty:
-        
-        
+                                                                           
+                                                                                
         if is_ozon:
-            
-            
+                                                                              
+                                                                          
             old = c.execute("""SELECT * FROM ai_tasks WHERE account_id=%s
                                AND status IN ('done','partial') AND (NOT active OR day < %s)
                                AND (outcome IS NULL OR outcome->>'pending'='true' OR coalesce(outcome->>'final','false')<>'true')
@@ -297,7 +297,7 @@ def check(c, shop: int) -> int:
             d0 = (done_at or t["status_at"] or datetime.now(timezone.utc)).astimezone(MSK).date()
             try:
                 o = outcome(c, shop, t["nm_ids"] or (t["check_spec"] or {}).get("nm_ids") or [], d0)
-            except NotReady:  
+            except NotReady:                                                      
                 o = None
             if not o and is_ozon:
                 upd["outcome"] = json.dumps({**(t["outcome"] or {}), "pending": True,
@@ -318,7 +318,7 @@ def check(c, shop: int) -> int:
     return n
 
 
-
+                                                                              
 def feedback_digest(c, shop: int, days: int = 30) -> str:
     out = []
     for r in c.execute("""SELECT t.day, t.tag, t.title, f.rating, f.comment FROM ai_task_feedback f JOIN ai_tasks t ON t.id=f.task_id

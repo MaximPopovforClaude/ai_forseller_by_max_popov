@@ -9,9 +9,9 @@ from . import db
 from .egress import EgressError
 from .config import today_msk
 
-CHUNK = 300          
-NEIGH = 20           
-MAX_TOTAL = 12000    
+CHUNK = 300                                                                                            
+NEIGH = 20                                                                        
+MAX_TOTAL = 12000                                                
 
 
 def fetch(nms):
@@ -53,7 +53,7 @@ def crawl(c, day, nms: list[int], log) -> dict:
             j = fetch(part)
         except EgressError:
             raise
-        except Exception as e:                       
+        except Exception as e:                                                                             
             log(f"заход {i // CHUNK + 1}: {e}")
             n["errors"] += 1
             continue

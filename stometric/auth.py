@@ -17,7 +17,7 @@ def hash_password(pw: str) -> str:
 
 def check_password(pw: str, stored: str | None) -> bool:
     if not stored or not stored.startswith("scrypt$"):
-        hashlib.scrypt(pw.encode(), salt=b"0" * 16, n=2 ** 14, r=8, p=1, dklen=32)    
+        hashlib.scrypt(pw.encode(), salt=b"0" * 16, n=2 ** 14, r=8, p=1, dklen=32)                                                            
         return False
     _, salt, h = stored.split("$")
     got = hashlib.scrypt(pw.encode(), salt=bytes.fromhex(salt), n=2 ** 14, r=8, p=1, dklen=32)
@@ -73,7 +73,7 @@ def shops_for(c, user: dict) -> list[dict]:
            WHERE m.user_id=%s AND a.is_active AND (m.shop_ids IS NULL OR a.id = ANY(m.shop_ids))
            ORDER BY w.name,a.title""", (user["id"],)).fetchall()
     g = user.get("_mcp")
-    if g:                                  
+    if g:                                                                                                                  
         return [o for o in own if o["workspace_id"] == g["workspace_id"] and (g.get("shops") is None or o["id"] in g["shops"])]
     sup = [x for x in _support(c, user) if x["workspace_id"] not in {o["workspace_id"] for o in own}]
     if sup:

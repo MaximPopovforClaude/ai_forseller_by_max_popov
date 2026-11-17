@@ -17,7 +17,11 @@ def _sizes(card):
     return sorted([[s.get("techSize"), s.get("wbSize"), sorted(s.get("skus") or [])] for s in card.get("sizes") or []])
 
 
-def _add(c, acc_id, nm, kind, field, old, new, wb_upd=None):
+def _add(c, acc_id, nm, kind, field, old, new, wb_upd=None, *, detected_at=None):
+    if detected_at is not None:
+        c.execute("INSERT INTO card_changes(account_id,nm_id,kind,field,old_value,new_value,wb_updated_at,detected_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                  (acc_id, nm, kind, field, json.dumps(old, ensure_ascii=False), json.dumps(new, ensure_ascii=False), wb_upd, detected_at))
+        return
     c.execute("INSERT INTO card_changes(account_id,nm_id,kind,field,old_value,new_value,wb_updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s)",
               (acc_id, nm, kind, field, json.dumps(old, ensure_ascii=False), json.dumps(new, ensure_ascii=False), wb_upd))
 
@@ -90,13 +94,13 @@ def ad_diff(c, acc_id: int, old: dict | None, new: dict) -> int:
     for nm, bids in nms_new.items():
         ob = nms_old.get(nm)
         if ob is not None and ob != bids:
-            rub = lambda b: {k: round((v or 0) / 100, 2) for k, v in b.items()}  
+            rub = lambda b: {k: round((v or 0) / 100, 2) for k, v in b.items()}              
             _add(c, acc_id, nm, "ad_bid", f"ad:{new['advertId']}", {"campaign": name, **rub(ob)}, {"campaign": name, **rub(bids)})
             n += 1
     return n
 
 
-
+                                                                                         
 OZ_AD_STATE = {"CAMPAIGN_STATE_RUNNING": "активна", "CAMPAIGN_STATE_STOPPED": "остановлена", "CAMPAIGN_STATE_INACTIVE": "неактивна",
                "CAMPAIGN_STATE_ARCHIVED": "в архиве", "CAMPAIGN_STATE_PLANNED": "запланирована", "CAMPAIGN_STATE_FINISHED": "завершена",
                "CAMPAIGN_STATE_MODERATION_DRAFT": "черновик", "CAMPAIGN_STATE_MODERATION_IN_PROGRESS": "на модерации",
@@ -157,7 +161,7 @@ def oz_price_diff(c, acc_id: int, sku: int | None, old: dict | None, new: dict) 
 def oz_ad_diff(c, acc_id: int, old: dict | None, new: dict, skus: list[int] | None) -> int:
     """Кампания Performance: запуск/остановка/архив — в журнал по каждому SKU кампании (old=None — новая)."""
     name = new.get("title") or str(new.get("id"))
-    st = lambda x: OZ_AD_STATE.get(x.get("state"), x.get("state"))  
+    st = lambda x: OZ_AD_STATE.get(x.get("state"), x.get("state"))              
     if old is not None and old.get("state") == new.get("state"):
         return 0
     for sku in skus or []:

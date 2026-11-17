@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from . import ai_tasks, auth
 from .config import today_msk
+from .ai_readability import display_text
 from .web import conn, current_user
 
 router = APIRouter()
@@ -61,6 +62,9 @@ def tasks_get(shop_id: int, u=Depends(current_user), c=Depends(conn)):
                                                           WHERE account_id=%s AND nm_id = ANY(%s)""", (shop_id, ids))}
     for t in tasks:
         t["photo"] = photo.get((t["nm_ids"] or [None])[0])
+        for field in ('title', 'why', 'steps'):
+            t[field] = display_text(t[field], protected=(t.get('vc'),), round_values=field == 'why')
+    runs = {day: {**run, 'summary': display_text(run.get('summary'))} for day, run in runs.items()}
     return jsonable_encoder({"enabled": True, "today": d, "runs": runs, "tasks": tasks, "tags": ai_tasks.TAGS, "cert": ai_tasks.CERT,
                              "entry_day": entry_day, "entry_present": entry_present, "marketplace": platform, "coverage": source_state,
                              "status_t": ai_tasks.STATUS_T, "can_edit": auth.can(role, "editor")})
@@ -138,8 +142,8 @@ def tasks_rebuild(shop_id: int, u=Depends(current_user), c=Depends(conn), *, req
         c.commit()
         return {'message': 'Возвращаю состояние прежнего запроса, без повторной постановки.',
                 'run_id': previous['id'], 'status': previous['status'], 'created': False, 'replayed': True}
-    
-    
+                                                                             
+                                                                              
     if ai_tasks.retry_needs_review(ai_tasks.latest_attempt(c, shop_id)):
         c.rollback()
         raise HTTPException(409, 'Предыдущий разбор прерван или остановлен из-за памяти. Сначала нужно выяснить причину; повтор не выполнен.')

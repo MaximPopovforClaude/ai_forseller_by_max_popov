@@ -101,23 +101,23 @@ class TaxRegressions(unittest.TestCase):
                    returns_for_pay=-300, returns_cost=-100)
         for regime, rate, expected in [('ОСНО', .25, [375, 300, 150]),
                                        (pnl_real.IP, .13, [435, 348, 174])]:
-            with self.subTest(regime=regime), patch.object(nm_day, 'iter_cached', return_value=[row]),\
-                 patch.object(real_week, 'weekly_deliveries', return_value=[]),\
+            with self.subTest(regime=regime), patch.object(nm_day, 'iter_cached', return_value=[row]), \
+                 patch.object(real_week, 'weekly_deliveries', return_value=[]), \
                  patch.object(buyout, 'needed', return_value=True), patch.object(buyout, 'for_nms', return_value=1):
                 result = dash5.compute(TaxDB([tax(regime, rate)]), 1, row['day'], custom={'day': (row['day'], row['day'])})
             self.assertEqual([result['values']['day'][n] for n in [35, 63, 83]], expected)
 
     def test_reference_dashboard_usn_formulas_are_preserved(self):
-        
-        
+                                                                                       
+                                                                                                        
         row = dict(day=date(2026, 10, 5), orders=1, orders_sum=1200, orders_sum_spp=1000,
                    commission_offer_orders=120, logistics_orders=50, cost_orders=400, ads_upd=30,
                    storage=10, acceptance_sum=5, vat_orders=100, vat_deduct_orders=40,
                    buyouts=1, buyouts_sum_before_spp=1200, buyouts_sum=1000, commission=100,
                    cost=400, logistics=50, acquiring=20, vat_buyouts=100, vat_deduct_buyouts=40)
         tx = tax('УСН доходы-расходы', .15, .2); tx['vat_deduct_wb'] = .2
-        with patch.object(nm_day, 'iter_cached', return_value=[row]),\
-             patch.object(real_week, 'weekly_deliveries', return_value=[]),\
+        with patch.object(nm_day, 'iter_cached', return_value=[row]), \
+             patch.object(real_week, 'weekly_deliveries', return_value=[]), \
              patch.object(buyout, 'needed', return_value=True), patch.object(buyout, 'for_nms', return_value=1):
             values = dash5.compute(TaxDB([tx]), 1, row['day'], custom={'day': (row['day'], row['day'])})['values']['day']
         order_base = 1200 - 120 - 50 - 400 - 30 - 10 - 5 - 100
@@ -182,7 +182,7 @@ class TaxRegressions(unittest.TestCase):
 
     def test_fin_sku_hidden_month_and_sku_keep_same_tax_after_ui_filter(self):
         groups = [sale(2, 2_400_000, "2026-01-05"), sale(1, 1_000_000), sale(2, 500_000)]
-        
+                                                                                   
         tree = ast.parse((Path(__file__).resolve().parents[1] / 'stometric/tabs/basic.py').read_text())
         view = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'fin_sku')
         scope = {'__package__': 'stometric.tabs'}
@@ -236,7 +236,7 @@ class TaxRegressions(unittest.TestCase):
                 self.assertAlmostEqual(result["total"][field], sum(r[field] for r in result[collection].values()))
 
     def test_cold_context_is_queued_not_computed_in_http(self):
-        with patch.object(tabcache, "version", return_value="a|b|c|d|e"), patch.object(pnl_alt, "_load", return_value=None),\
+        with patch.object(tabcache, "version", return_value="a|b|c|d|e"), patch.object(pnl_alt, "_load", return_value=None), \
              patch.object(pnl_alt._POOL, "submit") as submit, patch.object(pnl_alt, "month_store") as direct:
             pnl_alt._BUSY.discard(987654)
             with self.assertRaises(pnl_alt.Pending):
@@ -282,7 +282,7 @@ class OzonRegressions(unittest.TestCase):
         self.assertIn('NULL::jsonb AS raw', db.transaction_query)
         self.assertIn("raw->'services' services", db.transaction_query)
         self.assertEqual(result['svc_total'], -30)
-        
+                                                                                
         with patch.object(ozv2, 'transaction_parts', wraps=ozdash.transaction_parts) as allocate:
             selected = self.report(db, [1])
         allocate.assert_called_once()
@@ -327,9 +327,9 @@ class OzonRegressions(unittest.TestCase):
             first = self.report(db, [1])
         self.assertEqual(allocate.call_count, 1)
         self.assertEqual(allocate.call_args.args[0]['skus'], [1])
-        
+                                                                              
         self.assertEqual(first['non_total'], -10)
-        self.assertEqual(first['profit'], 40)  
+        self.assertEqual(first['profit'], 40)                                             
         second, total = self.report(db, [2]), self.report(db)
         self.assertEqual(second['non_total'], -30)
         self.assertEqual(second['item_total'], -20)
@@ -435,7 +435,7 @@ class DirtyRegressions(unittest.TestCase):
         from stometric import ai_tasks, insights
         db = QueueDB(); db.commit = Mock()
         order = []
-        with patch.object(ai_tasks, 'invalidate_outcomes', side_effect=lambda *a: order.append('outcomes')) as invalidate,\
+        with patch.object(ai_tasks, 'invalidate_outcomes', side_effect=lambda *a: order.append('outcomes')) as invalidate, \
              patch.object(insights, 'invalidate_cost', side_effect=lambda *a: order.append('insights')) as invalidate_insights:
             materialize.mark_cost_dirty(db, 1, date(2026, 10, 1))
         invalidate.assert_called_once_with(db, 1, db.dirty['revision'])
@@ -448,7 +448,7 @@ class DirtyRegressions(unittest.TestCase):
             def execute(self, *args): return Rows([{'t': 'unchanged-plan-cells'}])
         shop, month = 989878, date(2026, 10, 1)
         rnp._PLAN.pop((shop, month), None)
-        with patch.object(tabcache, 'version', side_effect=['before-tax-edit', 'after-tax-edit']),\
+        with patch.object(tabcache, 'version', side_effect=['before-tax-edit', 'after-tax-edit']), \
              patch.object(rnp, '_plan', side_effect=[{'profit': 500}, {'profit': 375}]) as calc:
             self.assertEqual(rnp.plan(PlanDB(), shop, month, {}, 1), {'profit': 500})
             self.assertEqual(rnp.plan(PlanDB(), shop, month, {}, 1), {'profit': 375})
@@ -463,9 +463,9 @@ class DirtyRegressions(unittest.TestCase):
             return original(sql, params)
         db.execute = execute
         materialize.mark_cost_dirty(db, 1, date(2026, 10, 31))
-        with patch.object(materialize, 'today_msk', return_value=date(2026, 10, 31)),\
-             patch.object(materialize, '_first_day', return_value=date(2025, 1, 1)),\
-             patch.object(materialize, 'build_nm_day', return_value=10) as nm,\
+        with patch.object(materialize, 'today_msk', return_value=date(2026, 10, 31)), \
+             patch.object(materialize, '_first_day', return_value=date(2025, 1, 1)), \
+             patch.object(materialize, 'build_nm_day', return_value=10) as nm, \
              patch.object(materialize, 'build_real_week', return_value=5):
             materialize.after_collect(db, 1, {'realization'})
         self.assertEqual(nm.call_args.args[2], date(2026, 10, 31) - timedelta(days=materialize.RECENT_DAYS))
@@ -497,7 +497,7 @@ class DirtyRegressions(unittest.TestCase):
         class CacheDB:
             def execute(self, *args):
                 return Rows([dict(ver=ver, result={'profit': 'old formula'})])
-        with patch.object(materialize, 'ensure_cost_ready'), patch.object(tabcache, 'version', return_value=ver),\
+        with patch.object(materialize, 'ensure_cost_ready'), patch.object(tabcache, 'version', return_value=ver), \
              patch.object(tabcache, 'compute_store', return_value={'profit': 'new formula'}) as compute:
             result = tabcache.get(CacheDB(), 898989, 'rnp_api', {}, lambda c: None)
         self.assertEqual(result['profit'], 'new formula')
@@ -515,8 +515,8 @@ class DirtyRegressions(unittest.TestCase):
     def test_collector_clears_only_after_both_aggregates(self):
         db = QueueDB()
         materialize.mark_cost_dirty(db, 1, date(2000, 1, 1))
-        with patch.object(materialize, '_first_day', return_value=date(2025, 1, 1)),\
-             patch.object(materialize, 'build_nm_day', return_value=10) as nm,\
+        with patch.object(materialize, '_first_day', return_value=date(2025, 1, 1)), \
+             patch.object(materialize, 'build_nm_day', return_value=10) as nm, \
              patch.object(materialize, 'build_real_week', return_value=5):
             self.assertEqual(materialize.after_collect(db, 1, set()), {'nm_day': 10, 'real_week': 5})
             self.assertEqual(nm.call_args.args[2], date(2025, 1, 1))
@@ -525,8 +525,8 @@ class DirtyRegressions(unittest.TestCase):
     def test_failure_keeps_durable_request(self):
         db = QueueDB()
         materialize.mark_cost_dirty(db, 1, date(2026, 10, 1))
-        with patch.object(materialize, '_first_day', return_value=date(2025, 1, 1)),\
-             patch.object(materialize, 'build_nm_day', return_value=10),\
+        with patch.object(materialize, '_first_day', return_value=date(2025, 1, 1)), \
+             patch.object(materialize, 'build_nm_day', return_value=10), \
              patch.object(materialize, 'build_real_week', side_effect=RuntimeError('retry next cycle')):
             with self.assertRaises(RuntimeError): materialize.after_collect(db, 1, set())
         self.assertIsNotNone(db.dirty)
@@ -537,8 +537,8 @@ class DirtyRegressions(unittest.TestCase):
         def rebuild(*args):
             materialize.mark_cost_dirty(db, 1, date(2026, 9, 1))
             return 10
-        with patch.object(materialize, '_first_day', return_value=date(2025, 1, 1)),\
-             patch.object(materialize, 'build_nm_day', side_effect=rebuild),\
+        with patch.object(materialize, '_first_day', return_value=date(2025, 1, 1)), \
+             patch.object(materialize, 'build_nm_day', side_effect=rebuild), \
              patch.object(materialize, 'build_real_week', return_value=5):
             materialize.after_collect(db, 1, set())
         self.assertEqual(db.dirty['from'], '2026-09-01')
@@ -576,7 +576,7 @@ class DirtyRegressions(unittest.TestCase):
         self.assertEqual(db.dirty['from'], '2026-09-01')
 
     def test_original_cost_setter_enqueues_without_http_rebuild(self):
-        
+                                                                                                 
         tree = ast.parse((Path(__file__).resolve().parents[1] / 'stometric/web.py').read_text())
         fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'set_cost')
         fn.decorator_list = []; fn.args.defaults = []

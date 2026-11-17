@@ -79,7 +79,7 @@ def _cell(col: dict, row: dict, v):
 
 def build(res: dict, fields: list[str] | None = None, title: str = "") -> bytes:
     cols = [c for c in res.get("columns") or [] if c.get("field")]
-    if fields:                                   
+    if fields:                                                                                                    
         by = {c["field"]: c for c in cols}
         cols = [by[f] for f in fields if f in by] or cols
     rows = res.get("rows") or []
@@ -95,7 +95,7 @@ def build(res: dict, fields: list[str] | None = None, title: str = "") -> bytes:
         for j, g in enumerate(groups, 1):
             if g and (j == 1 or groups[j - 2] != g):
                 literal_cell(ws, 1, j, g).font = BOLD
-        i = 0                                    
+        i = 0                                                                                
         while i < len(groups):
             k = i
             while k + 1 < len(groups) and groups[k + 1] == groups[i]:
@@ -119,7 +119,7 @@ def build(res: dict, fields: list[str] | None = None, title: str = "") -> bytes:
                     ws.cell(r, j).font = BOLD
                 continue
             x = literal_cell(ws, r, j, val)
-            if c.get("type") == "image" and str(val).startswith("http"):    
+            if c.get("type") == "image" and str(val).startswith("http"):                    
                 x.value, x.hyperlink, x.font = "фото", str(val), Font(color="2563EB", underline="single")
             if fmt:
                 x.number_format = fmt
@@ -136,7 +136,7 @@ def build(res: dict, fields: list[str] | None = None, title: str = "") -> bytes:
     if total:
         put(r, total, bold=True)
 
-    for j, c in enumerate(cols, 1):            
+    for j, c in enumerate(cols, 1):                                                   
         t = c.get("type") or "text"
         lens = [len(str(c.get("title") or ""))] + [len(str(x.get(c["field"]) or "")) for x in rows[:200] if isinstance(x, dict)]
         w = 60 if t == "label" else min(50, max(10, max(lens) + 2)) if t in ("text", "edit_text") else min(22, max(11, max(lens[1:] or [0]) + 4))

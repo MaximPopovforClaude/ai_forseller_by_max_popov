@@ -10,11 +10,11 @@ from . import config
 from .wb_probe import PING, verify
 
 MASTER = "AIS_MASTER_KEY"
-
+                                                                       
 SCOPES = {1: "Контент", 2: "Аналитика", 3: "Цены и скидки", 4: "Маркетплейс", 5: "Статистика", 6: "Продвижение",
           7: "Вопросы и отзывы", 9: "Чат с покупателями", 10: "Поставки", 11: "Возвраты покупателями", 12: "Документы",
           13: "Финансы", 16: "Пользователи", 30: "Только чтение"}
-NEED = ["Контент", "Аналитика", "Цены и скидки", "Статистика", "Продвижение", "Финансы"]   
+NEED = ["Контент", "Аналитика", "Цены и скидки", "Статистика", "Продвижение", "Финансы"]                               
 
 
 def _fernet() -> Fernet:
@@ -34,7 +34,7 @@ def info(token: str) -> dict:
     token = token.strip()
     try:
         p = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
-    except Exception:  
+    except Exception:                
         return {"error": "Это не похоже на ключ API Wildberries (Личный кабинет → Настройки → Доступ к API)"}
     s = int(p.get("s") or 0)
     scopes = [n for b, n in SCOPES.items() if s >> b & 1]
