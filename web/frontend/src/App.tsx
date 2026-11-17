@@ -917,7 +917,7 @@ export default function App() {
         {tab === "home" && data?.home && <Home data={data} hideChg={hideChg} />}
         {shop && data?.custom === "actions" && data.key === tab && <ActionsBoard enableCharts={true} shop={shop} nm={nm} only={staffOnly}
           shops={me.shops.filter((x) => x.workspace_id === wsId).map((x) => ({ id: x.id, title: x.title || x.name }))} />}
-        {shop && data?.custom === "query_heatmap" && data.key === tab && <QueryHeatmap key={`${shop}:${effectiveNm}`} shop={shop} nm={effectiveNm} demo={false} />}
+        {shop && data?.custom === "query_heatmap" && data.key === tab && <QueryHeatmap key={`${shop}:${effectiveNm}`} shop={shop} nm={effectiveNm} />}
         {shop && data?.custom === "jam_deep" && data.key === tab && <JamDeep key={`${shop}:${data.jam_deep?.nm_id}:${data.jam_deep?.from}:${data.jam_deep?.to}`} shop={shop} data={data} />}
         {shop && data?.custom === "prices" && data.key === tab && <PriceLab shop={shop} />}
         {shop && data?.custom === "competitors" && data.key === tab && <Competitors shop={shop} />}

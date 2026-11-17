@@ -4,7 +4,6 @@ import { Logo } from "./Logo";
 
 export type Page = "tab" | "account" | "calendar" | "members" | "billing" | "referral" | "admin" | "about" | "service_news" | "reviews" | "questions" | "actions" | "cards" | "seo" | "visual" | "ads" | "total" | "kb" | "ai" | "compare" | "balance";
 
-// Also applies to the frozen demo's saved tab registry.
 export const navigationGroup = (t: Tab): Tab => ({ ...t, group: t.key === "rnp" ? "Магазин" : t.group === "Version2" ? "Управление" : t.group });
 
 const ROLE: Record<string, string> = { owner: "Владелец", admin: "Админ", editor: "Редактор", viewer: "Просмотр" };

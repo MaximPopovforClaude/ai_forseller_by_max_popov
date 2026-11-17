@@ -46,7 +46,7 @@ async function choose(f={name:'offer.xlsx',size:42}){const target={files:[f],val
  await choose();await act(()=>posts.at(-1).reject(new TypeError('Failed to fetch')));
  assert.ok(box.textContent.includes('Результат загрузки неизвестен'));assert.equal(posts.length,5);
  await choose();await act(()=>posts.at(-1).resolve(reply({ok:true,rows:0,message:'Учебный расчёт акции.'})));
- assert.ok(box.textContent.includes('Учебный расчёт'));assert.ok(!box.textContent.includes('undefined товаров'));
+ assert.ok(box.textContent.includes('не подтвердил результат'));assert.ok(!box.textContent.includes('Учебный расчёт'));assert.ok(!box.textContent.includes('undefined товаров'));
  // Completing a previous shop's POST cannot overwrite the new shop's form/data.
  await choose();const pending=posts.at(-1);await render(8);await act(()=>gets.at(-1).resolve(data('Магазин 8')));await title('Новая акция');
  const getCount=gets.length;await act(()=>pending.resolve(reply({ok:true,id:9,items:2})));
@@ -73,5 +73,5 @@ async function choose(f={name:'offer.xlsx',size:42}){const target={files:[f],val
  await render(12);await act(()=>gets.at(-1).resolve({...withCalendar,can_edit:false,collection:{...withCalendar.collection,status:'disabled'}}));
  assert.ok(box.textContent.includes('для магазина выключен'));assert.equal(nodes().find(n=>n.tagName==='BUTTON'&&n.textContent==='Подставить название'),undefined);
  assert.deepEqual(warnings,[]);
- console.log('Promo: visible title validation, file selection, success, format/empty/HTTP/network errors, demo notice, shop races and viewer permissions OK');
+ console.log('Promo: visible title validation, file selection, success, format/empty/HTTP/network errors, unconfirmed reply, shop races and viewer permissions OK');
 }finally{flushSync(()=>root.unmount());console.error=error}})().catch(e=>{console.error(e);process.exitCode=1});

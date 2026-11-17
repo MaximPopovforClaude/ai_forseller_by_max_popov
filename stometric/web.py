@@ -58,6 +58,10 @@ async def sec_headers(request: Request, call_next):
 @app.middleware("http")
 async def mcp_guard(request: Request, call_next):
     """Запрос к API с токеном подключения нейросети (mcp_…): права подключения (mcp.check), лимит, журнал. Cookie при этом не смотрим."""
+    path = request.url.path
+    if path in ("/demo", "/api/demo") or path.startswith(("/demo/", "/api/demo/")):
+        return JSONResponse({"detail": "Not Found"}, 404,
+                            headers={**SEC_HEADERS, "Cache-Control": "no-store"})
     h = request.headers.get("authorization") or ""
     if not request.url.path.startswith("/api/") or not h.lower().startswith("bearer "):
         return await call_next(request)

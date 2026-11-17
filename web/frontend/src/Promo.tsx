@@ -87,11 +87,6 @@ export function Promo({ shop, nm = "", only = null }: { shop: number; nm?: strin
           : `Сервер не подтвердил загрузку (HTTP ${r.status}). Обновите таблицу перед повторной отправкой.`;
         throw new Error(typeof j?.detail === "string" ? j.detail : fallback);
       }
-      if (j?.ok && typeof j.message === "string") {
-        // The frozen demo returns an explicit educational notice, not an import.
-        if (stamp === context.current) setMsg(j.message);
-        return;
-      }
       if (!j?.ok || !Number.isInteger(j.items) || j.items < 1)
         throw new Error("Сервер не подтвердил результат загрузки. Обновите таблицу перед повторной отправкой.");
       if (stamp === context.current) { setMsg(`Акция «${uploadTitle}» добавлена: ${j.items} товаров`); setTitle(""); await load(stamp); }

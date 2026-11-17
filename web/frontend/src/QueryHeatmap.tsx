@@ -4,7 +4,7 @@ import { http } from './api';
 type Result = { status: string; months: string[]; rows: {query:string;values:Record<string,number|null>}[]; updated_at?:string; completed?:number; queries:string[]; limit:number };
 const messages:Record<string,string> = {empty:'Данные ещё не загружены.',queued:'Ожидает очереди Wildbox.',running:'Загружаем историю. Уже сохранённые месяцы доступны.',ready:'История сохранена.',no_key:'Подключите Wildbox в настройках аккаунта.',failed:'Загрузка остановлена из-за ошибки источника. Доступная история сохранена.',interrupted:'Загрузка прервалась. Доступная история сохранена.'};
 
-export function QueryHeatmap({shop,nm,demo=false}:{shop:number;nm:string;demo?:boolean}) {
+export function QueryHeatmap({shop,nm}:{shop:number;nm:string}) {
   const ids=[...new Set(nm.split(',').map(s=>Number(s.trim())).filter(x=>x>0))];
   const selected=ids.length===1?ids[0]:null;
   const [data,setData]=useState<Result|null>(null),[error,setError]=useState(''),[rev,setRev]=useState(0),[busy,setBusy]=useState(false);
@@ -12,14 +12,13 @@ export function QueryHeatmap({shop,nm,demo=false}:{shop:number;nm:string;demo?:b
   useEffect(()=>{
     let live=true,timer:ReturnType<typeof setTimeout>;
     setData(null);setError('');setBusy(false);
-    if(!selected||demo)return;
+    if(!selected)return;
     const read=()=>http.get<Result>(`/api/shops/${shop}/query_heatmap/${selected}`).then(r=>{
       if(!live)return;setData(r);
       if(['queued','running'].includes(r.status))timer=setTimeout(read,4000);
     }).catch(e=>{if(live)setError(e.message)});
     read();return()=>{live=false;clearTimeout(timer)};
-  },[shop,selected,rev,demo]);
-  if(demo)return <div className="hint">Тепловая карта использует историю Wildbox. В замороженном демо этого источника нет.</div>;
+  },[shop,selected,rev]);
   if(!selected)return <div className="hint">Выберите один товар в верхнем фильтре, чтобы увидеть его поисковые запросы по месяцам.</div>;
   const rows=data?.rows.filter(r=>r.query.toLowerCase().includes(q.toLowerCase()))||[];
   const max=Math.max(1,...(data?.rows||[]).flatMap(r=>Object.values(r.values).map(v=>v??0)));
